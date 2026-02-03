@@ -90,3 +90,10 @@ sqlite3 ~/.local/share/radar/memory.db "SELECT id, content, created_at FROM memo
 ```
 
 Memory is stored with embeddings for semantic search (cosine similarity).
+
+## Testing Tools
+
+Test tool functions directly (bypasses LLM):
+```bash
+python -c "from radar.tools.recall import recall; print(recall('query'))"
+```
