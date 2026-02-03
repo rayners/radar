@@ -73,12 +73,14 @@ def get_tool_names() -> list[str]:
 # Auto-import all tool modules to register them
 from radar.tools import (
     exec,
+    github,
     list_directory,
     notify,
     pdf_extract,
     read_file,
     recall,
     remember,
+    weather,
     write_file,
 )
 

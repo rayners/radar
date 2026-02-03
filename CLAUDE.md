@@ -228,6 +228,59 @@ sqlite3 ~/.local/share/radar/memory.db "SELECT id, content, created_at FROM memo
 
 Memory is stored with embeddings for semantic search (cosine similarity).
 
+## Weather Tool
+
+Get current weather and forecast using the free Open-Meteo API (no API key required).
+
+```bash
+# Ask for weather (will prompt for location if not saved)
+radar ask "What's the weather?"
+
+# Provide a location
+radar ask "What's the weather in Seattle?"
+
+# After providing a location, it's saved for future use
+radar ask "Weather forecast?"  # Uses saved location
+```
+
+Features:
+- Automatic location geocoding
+- Current conditions + 3-day forecast
+- Saves location preference in semantic memory
+- No API key required
+
+## GitHub Tool
+
+Query GitHub PRs, issues, notifications, and CI status using the `gh` CLI.
+
+**Prerequisites:** Install and authenticate the [GitHub CLI](https://cli.github.com/).
+
+```bash
+# List PRs requesting your review or assigned to you
+radar ask "Show my open PRs"
+radar ask "What PRs need my review?"
+
+# List issues
+radar ask "Show issues assigned to me"
+
+# Filter by organization
+radar ask "Show PRs in the anthropics org"  # Saves org preference
+
+# Check notifications
+radar ask "GitHub notifications"
+
+# Check CI status
+radar ask "What's the CI status?"
+```
+
+Operations:
+- `prs` - List PRs (review-requested, assigned)
+- `issues` - List issues (assigned, mentioned)
+- `notifications` - Unread GitHub notifications
+- `status` - PR status and recent CI runs
+
+Organization preference is saved in semantic memory for future queries.
+
 ## Testing Tools
 
 Test tool functions directly (bypasses LLM):
