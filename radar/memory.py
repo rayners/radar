@@ -1,75 +1,35 @@
-"""SQLite-based conversation memory."""
+"""JSONL-based conversation memory.
+
+Each conversation is stored as a separate .jsonl file in:
+    ~/.local/share/radar/conversations/{uuid}.jsonl
+
+Each line in the file is a JSON object representing a message.
+"""
 
 import json
-import sqlite3
 import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 
-def _get_db_path() -> Path:
-    """Get the database file path."""
-    db_dir = Path.home() / ".local" / "share" / "radar"
-    db_dir.mkdir(parents=True, exist_ok=True)
-    return db_dir / "conversations.db"
+def _get_conversations_dir() -> Path:
+    """Get the conversations directory path."""
+    conv_dir = Path.home() / ".local" / "share" / "radar" / "conversations"
+    conv_dir.mkdir(parents=True, exist_ok=True)
+    return conv_dir
 
 
-def _get_connection() -> sqlite3.Connection:
-    """Get a database connection with row factory."""
-    conn = sqlite3.connect(_get_db_path())
-    conn.row_factory = sqlite3.Row
-    return conn
-
-
-def init_db() -> None:
-    """Initialize the database schema."""
-    conn = _get_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS conversations (
-            id TEXT PRIMARY KEY,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            conversation_id TEXT NOT NULL,
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            role TEXT NOT NULL,
-            content TEXT,
-            tool_calls TEXT,
-            tool_call_id TEXT,
-            FOREIGN KEY (conversation_id) REFERENCES conversations(id)
-        )
-    """)
-
-    cursor.execute("""
-        CREATE INDEX IF NOT EXISTS idx_messages_conversation
-        ON messages(conversation_id, timestamp)
-    """)
-
-    conn.commit()
-    conn.close()
+def _get_conversation_path(conversation_id: str) -> Path:
+    """Get the path to a conversation's JSONL file."""
+    return _get_conversations_dir() / f"{conversation_id}.jsonl"
 
 
 def create_conversation() -> str:
     """Create a new conversation and return its ID."""
-    init_db()
-    conn = _get_connection()
-    cursor = conn.cursor()
-
     conversation_id = str(uuid.uuid4())
-    cursor.execute(
-        "INSERT INTO conversations (id) VALUES (?)",
-        (conversation_id,),
-    )
-
-    conn.commit()
-    conn.close()
+    conv_path = _get_conversation_path(conversation_id)
+    conv_path.touch()
     return conversation_id
 
 
@@ -82,25 +42,24 @@ def add_message(
 ) -> int:
     """Add a message to a conversation.
 
-    Returns the message ID.
+    Returns the line number (1-indexed) of the added message.
     """
-    conn = _get_connection()
-    cursor = conn.cursor()
+    conv_path = _get_conversation_path(conversation_id)
 
-    tool_calls_json = json.dumps(tool_calls) if tool_calls else None
+    message = {
+        "timestamp": datetime.now().isoformat(),
+        "role": role,
+        "content": content,
+        "tool_calls": tool_calls,
+        "tool_call_id": tool_call_id,
+    }
 
-    cursor.execute(
-        """
-        INSERT INTO messages (conversation_id, role, content, tool_calls, tool_call_id)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (conversation_id, role, content, tool_calls_json, tool_call_id),
-    )
+    with open(conv_path, "a") as f:
+        f.write(json.dumps(message) + "\n")
 
-    message_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
-    return message_id
+    # Return line number (count lines in file)
+    with open(conv_path) as f:
+        return sum(1 for _ in f)
 
 
 def get_messages(conversation_id: str, limit: int | None = None) -> list[dict[str, Any]]:
@@ -113,47 +72,23 @@ def get_messages(conversation_id: str, limit: int | None = None) -> list[dict[st
     Returns:
         List of message dicts with role, content, tool_calls, etc.
     """
-    conn = _get_connection()
-    cursor = conn.cursor()
+    conv_path = _get_conversation_path(conversation_id)
 
-    if limit:
-        cursor.execute(
-            """
-            SELECT * FROM (
-                SELECT * FROM messages
-                WHERE conversation_id = ?
-                ORDER BY timestamp DESC
-                LIMIT ?
-            ) ORDER BY timestamp ASC
-            """,
-            (conversation_id, limit),
-        )
-    else:
-        cursor.execute(
-            """
-            SELECT * FROM messages
-            WHERE conversation_id = ?
-            ORDER BY timestamp ASC
-            """,
-            (conversation_id,),
-        )
-
-    rows = cursor.fetchall()
-    conn.close()
+    if not conv_path.exists():
+        return []
 
     messages = []
-    for row in rows:
-        msg = {
-            "id": row["id"],
-            "role": row["role"],
-            "content": row["content"],
-            "timestamp": row["timestamp"],
-        }
-        if row["tool_calls"]:
-            msg["tool_calls"] = json.loads(row["tool_calls"])
-        if row["tool_call_id"]:
-            msg["tool_call_id"] = row["tool_call_id"]
-        messages.append(msg)
+    with open(conv_path) as f:
+        for line_num, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            msg = json.loads(line)
+            msg["id"] = line_num
+            messages.append(msg)
+
+    if limit and len(messages) > limit:
+        messages = messages[-limit:]
 
     return messages
 
@@ -163,34 +98,41 @@ def get_recent_conversations(limit: int = 5) -> list[dict[str, Any]]:
 
     Returns list of dicts with id, created_at, preview.
     """
-    init_db()
-    conn = _get_connection()
-    cursor = conn.cursor()
+    conv_dir = _get_conversations_dir()
 
-    cursor.execute(
-        """
-        SELECT c.id, c.created_at,
-               (SELECT content FROM messages
-                WHERE conversation_id = c.id AND role = 'user'
-                ORDER BY timestamp ASC LIMIT 1) as preview
-        FROM conversations c
-        ORDER BY c.created_at DESC
-        LIMIT ?
-        """,
-        (limit,),
-    )
+    # Get all .jsonl files sorted by modification time (most recent first)
+    conv_files = sorted(
+        conv_dir.glob("*.jsonl"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )[:limit]
 
-    rows = cursor.fetchall()
-    conn.close()
+    conversations = []
+    for conv_path in conv_files:
+        conversation_id = conv_path.stem
+        preview = ""
+        created_at = None
 
-    return [
-        {
-            "id": row["id"],
-            "created_at": row["created_at"],
-            "preview": (row["preview"] or "")[:100],
-        }
-        for row in rows
-    ]
+        # Read first few lines to get created_at and first user message
+        with open(conv_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                msg = json.loads(line)
+                if created_at is None:
+                    created_at = msg.get("timestamp")
+                if msg.get("role") == "user" and msg.get("content"):
+                    preview = msg["content"][:100]
+                    break
+
+        conversations.append({
+            "id": conversation_id,
+            "created_at": created_at,
+            "preview": preview,
+        })
+
+    return conversations
 
 
 def messages_to_api_format(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
