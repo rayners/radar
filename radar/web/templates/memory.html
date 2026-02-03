@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Memory - Radar{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-lg">
+    <h2 class="text-phosphor" style="font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.1em;">
+        STORED MEMORIES
+    </h2>
+    <button class="btn btn--ghost"
+            hx-get="/memory/add"
+            hx-target="#memory-modal"
+            hx-swap="innerHTML">
+        + Add Memory
+    </button>
+</div>
+
+<!-- Search -->
+<div class="card mb-lg">
+    <div class="card__body" style="padding: var(--space-md);">
+        <form hx-get="/api/memory/search"
+              hx-target="#memory-list"
+              hx-swap="innerHTML"
+              hx-trigger="keyup changed delay:300ms from:input">
+            <div class="flex gap-md">
+                <input type="text"
+                       name="q"
+                       class="input"
+                       placeholder="Search memories..."
+                       autocomplete="off">
+                <select name="category" class="input" style="width: 180px;">
+                    <option value="">All Categories</option>
+                    <option value="user_preference">Preferences</option>
+                    <option value="learned_fact">Facts</option>
+                    <option value="task_state">Tasks</option>
+                    <option value="personality_note">Personality</option>
+                </select>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Memory List -->
+<div class="fact-list" id="memory-list">
+    {% for fact in facts | default([]) %}
+    <div class="fact" id="fact-{{ fact.id }}">
+        <span class="fact__category">{{ fact.category }}</span>
+        <div class="fact__content">
+            <div class="fact__key">{{ fact.key }}</div>
+            <div class="fact__value">{{ fact.value }}</div>
+            <div class="fact__meta">
+                Added {{ fact.created_at }} · Source: {{ fact.source | default('manual') }}
+            </div>
+        </div>
+        <div class="fact__actions">
+            <button class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;"
+                    hx-delete="/api/memory/{{ fact.id }}"
+                    hx-target="#fact-{{ fact.id }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Forget this memory?">
+                Forget
+            </button>
+        </div>
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="card__body text-muted" style="text-align: center; padding: var(--space-xl);">
+            <p>No memories stored yet.</p>
+            <p style="margin-top: var(--space-sm);">
+                Radar will remember things when you use the <code style="color: var(--amber);">remember</code> tool,
+                or you can add them manually.
+            </p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modal container -->
+<div id="memory-modal"></div>
+{% endblock %}

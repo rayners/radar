@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Logs - Radar{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card__header">
+        <span class="card__title">System Logs</span>
+        <div class="flex gap-md items-center">
+            <select class="input" style="width: auto; padding: 4px 8px; font-size: 0.8rem;"
+                    hx-get="/api/logs"
+                    hx-target="#log-content"
+                    hx-swap="innerHTML"
+                    name="level">
+                <option value="all">All Levels</option>
+                <option value="error">Errors Only</option>
+                <option value="warn">Warnings+</option>
+                <option value="info">Info+</option>
+            </select>
+            <label class="flex items-center gap-sm text-muted" style="font-size: 0.8rem;">
+                <input type="checkbox"
+                       id="auto-scroll"
+                       checked
+                       style="accent-color: var(--phosphor-bright);">
+                Auto-scroll
+            </label>
+            <button class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;"
+                    hx-get="/api/logs"
+                    hx-target="#log-content"
+                    hx-swap="innerHTML">
+                Refresh
+            </button>
+        </div>
+    </div>
+    <div class="log-viewer" id="log-content"
+         hx-get="/api/logs/stream"
+         hx-trigger="every 5s"
+         hx-swap="beforeend">
+        {% for line in logs | default([]) %}
+        <div class="log-viewer__line">
+            <span class="log-viewer__timestamp">{{ line.timestamp }}</span>
+            <span class="log-viewer__level log-viewer__level--{{ line.level }}">{{ line.level }}</span>
+            <span class="log-viewer__message">{{ line.message }}</span>
+        </div>
+        {% else %}
+        <div class="log-viewer__line">
+            <span class="log-viewer__timestamp">--:--:--</span>
+            <span class="log-viewer__level log-viewer__level--info">info</span>
+            <span class="log-viewer__message text-muted">Waiting for log entries...</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Quick Stats -->
+<div class="dashboard-grid mt-lg" style="grid-template-columns: repeat(4, 1fr);">
+    <div class="card">
+        <div class="stat">
+            <div class="stat__value">{{ error_count | default('0') }}</div>
+            <div class="stat__label">Errors (24h)</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="stat">
+            <div class="stat__value">{{ warn_count | default('2') }}</div>
+            <div class="stat__label">Warnings (24h)</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="stat">
+            <div class="stat__value">{{ api_calls | default('156') }}</div>
+            <div class="stat__label">API Calls (24h)</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="stat">
+            <div class="stat__value">{{ uptime | default('3d 14h') }}</div>
+            <div class="stat__label">Uptime</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto-scroll functionality
+const logViewer = document.getElementById('log-content');
+const autoScrollCheckbox = document.getElementById('auto-scroll');
+
+// Observe new log entries
+const observer = new MutationObserver(() => {
+    if (autoScrollCheckbox.checked) {
+        logViewer.scrollTop = logViewer.scrollHeight;
+    }
+});
+
+observer.observe(logViewer, { childList: true });
+</script>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}History - Radar{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card__header">
+        <span class="card__title">Conversation History</span>
+        <div class="flex gap-md">
+            <select class="input" style="width: auto; padding: 4px 8px; font-size: 0.8rem;"
+                    hx-get="/api/history"
+                    hx-target="#history-table"
+                    hx-swap="innerHTML"
+                    name="filter">
+                <option value="all">All</option>
+                <option value="chat">Interactive</option>
+                <option value="heartbeat">Heartbeats</option>
+            </select>
+        </div>
+    </div>
+    <div class="card__body" style="padding: 0;">
+        <table class="table" id="history-table">
+            <thead>
+                <tr>
+                    <th style="width: 180px;">Time</th>
+                    <th style="width: 100px;">Type</th>
+                    <th>Summary</th>
+                    <th style="width: 80px;">Tools</th>
+                    <th style="width: 100px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for conv in conversations | default([]) %}
+                <tr>
+                    <td>
+                        <span style="font-variant-numeric: tabular-nums;">{{ conv.timestamp }}</span>
+                    </td>
+                    <td>
+                        <span class="activity-log__type activity-log__type--{{ conv.type }}">
+                            {{ conv.type }}
+                        </span>
+                    </td>
+                    <td>{{ conv.summary | truncate(80) }}</td>
+                    <td style="text-align: center;">{{ conv.tool_count }}</td>
+                    <td>
+                        <a href="/chat?continue={{ conv.id }}" class="btn btn--ghost" style="padding: 2px 8px; font-size: 0.7rem;">
+                            Continue
+                        </a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-muted" style="text-align: center; padding: var(--space-xl);">
+                        No conversations yet
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if has_more %}
+    <div class="card__footer" style="text-align: center;">
+        <button class="btn btn--ghost"
+                hx-get="/api/history?offset={{ offset }}"
+                hx-target="#history-table tbody"
+                hx-swap="beforeend">
+            Load More
+        </button>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

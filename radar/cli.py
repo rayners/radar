@@ -1,6 +1,9 @@
 """CLI interface for Radar."""
 
+import os
+import signal
 import sys
+from pathlib import Path
 
 import click
 from rich.console import Console
@@ -12,6 +15,30 @@ from radar.config import get_config
 from radar.memory import get_recent_conversations
 
 console = Console()
+
+
+def _get_pid_file() -> Path:
+    """Get the path to the PID file."""
+    data_dir = Path.home() / ".local" / "share" / "radar"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir / "radar.pid"
+
+
+def _is_daemon_running() -> tuple[bool, int | None]:
+    """Check if daemon is running, returns (running, pid)."""
+    pid_file = _get_pid_file()
+    if not pid_file.exists():
+        return False, None
+
+    try:
+        pid = int(pid_file.read_text().strip())
+        # Check if process exists
+        os.kill(pid, 0)
+        return True, pid
+    except (ValueError, ProcessLookupError, PermissionError):
+        # PID file is stale
+        pid_file.unlink(missing_ok=True)
+        return False, None
 
 
 @click.group()
@@ -158,6 +185,123 @@ def history(limit: int):
         console.print(f"[bold]{conv['id'][:8]}[/bold] [{conv['created_at']}]")
         console.print(f"  {preview}")
         console.print()
+
+
+@cli.command()
+@click.option("--host", "-h", default=None, help="Host to bind to (default: from config or 127.0.0.1)")
+@click.option("--port", "-p", default=None, type=int, help="Port to bind to (default: from config or 8420)")
+def start(host: str | None, port: int | None):
+    """Start Radar daemon (scheduler + web server)."""
+    from radar.scheduler import start_scheduler
+    from radar.watchers import start_watchers
+    from radar.web.routes import run_server
+
+    config = get_config()
+
+    # Use CLI args if provided, otherwise fall back to config
+    host = host or config.web.host
+    port = port or config.web.port
+
+    running, pid = _is_daemon_running()
+    if running:
+        console.print(f"[yellow]Radar daemon already running (PID {pid})[/yellow]")
+        raise SystemExit(1)
+
+    # Write PID file
+    pid_file = _get_pid_file()
+    pid_file.write_text(str(os.getpid()))
+
+    console.print(Panel.fit(
+        f"[bold blue]Radar[/bold blue] - Starting Daemon\n"
+        f"[dim]Web UI: http://{host}:{port}[/dim]",
+        border_style="blue",
+    ))
+
+    try:
+        # Start scheduler
+        config = get_config()
+        console.print(f"[dim]Starting scheduler (heartbeat every {config.heartbeat.interval_minutes} min)[/dim]")
+        start_scheduler()
+
+        # Start file watchers
+        if config.watch_paths:
+            console.print(f"[dim]Starting file watchers ({len(config.watch_paths)} paths)[/dim]")
+            start_watchers(config.watch_paths)
+
+        # Run web server (blocking)
+        console.print(f"[green]Daemon started[/green]\n")
+        run_server(host=host, port=port)
+    except KeyboardInterrupt:
+        console.print("\n[dim]Shutting down...[/dim]")
+    finally:
+        from radar.scheduler import stop_scheduler
+        from radar.watchers import stop_watchers
+        stop_scheduler()
+        stop_watchers()
+        pid_file.unlink(missing_ok=True)
+
+
+@cli.command()
+def stop():
+    """Stop Radar daemon."""
+    running, pid = _is_daemon_running()
+    if not running:
+        console.print("[yellow]Radar daemon is not running[/yellow]")
+        raise SystemExit(1)
+
+    console.print(f"[dim]Stopping daemon (PID {pid})...[/dim]")
+    try:
+        os.kill(pid, signal.SIGTERM)
+        console.print("[green]Daemon stopped[/green]")
+    except ProcessLookupError:
+        console.print("[yellow]Process not found, removing stale PID file[/yellow]")
+    finally:
+        _get_pid_file().unlink(missing_ok=True)
+
+
+@cli.command()
+def status():
+    """Show daemon status."""
+    from radar.scheduler import get_status
+
+    running, pid = _is_daemon_running()
+
+    console.print(Panel.fit("[bold]Radar Status[/bold]", border_style="blue"))
+    console.print()
+
+    if running:
+        console.print(f"[green]Daemon running[/green] (PID {pid})")
+    else:
+        console.print("[yellow]Daemon not running[/yellow]")
+        return
+
+    # Get scheduler status
+    try:
+        sched_status = get_status()
+        console.print()
+        console.print("[bold]Scheduler:[/bold]")
+        console.print(f"  Running: {sched_status['running']}")
+        console.print(f"  Last heartbeat: {sched_status['last_heartbeat'] or 'Never'}")
+        console.print(f"  Next heartbeat: {sched_status['next_heartbeat'] or 'N/A'}")
+        console.print(f"  Pending events: {sched_status['pending_events']}")
+        console.print(f"  Quiet hours: {'Yes' if sched_status['quiet_hours'] else 'No'}")
+    except Exception as e:
+        console.print(f"[dim]Could not get scheduler status: {e}[/dim]")
+
+
+@cli.command()
+def heartbeat():
+    """Trigger a manual heartbeat."""
+    from radar.scheduler import trigger_heartbeat
+
+    running, _ = _is_daemon_running()
+    if not running:
+        console.print("[yellow]Daemon not running. Starting one-shot heartbeat...[/yellow]")
+
+    with console.status("[bold blue]Running heartbeat...", spinner="dots"):
+        result = trigger_heartbeat()
+
+    console.print(f"[green]{result}[/green]")
 
 
 if __name__ == "__main__":

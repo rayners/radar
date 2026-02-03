@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Chat - Radar{% endblock %}
+
+{% block content %}
+<div class="card card--elevated chat">
+    <div class="card__header">
+        <span class="card__title">Chat with Radar</span>
+        <div class="flex gap-md items-center">
+            {% if conversation_id %}
+            <span class="text-muted" style="font-size: 0.8rem;">
+                Session: {{ conversation_id[:8] }}...
+            </span>
+            {% endif %}
+            <a href="/chat" class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;">
+                New Chat
+            </a>
+        </div>
+    </div>
+
+    <div class="chat__messages" id="messages">
+        {% for msg in messages | default([]) %}
+        <div class="message message--{{ msg.role }}">
+            <div class="message__role">{{ msg.role }}</div>
+            <div class="message__content">{{ msg.content }}</div>
+
+            {% if msg.tool_calls %}
+            <div class="message__tool-calls">
+                {% for tool in msg.tool_calls %}
+                <div class="tool-call">
+                    <div class="tool-call__header">
+                        <span class="tool-call__name">{{ tool.name }}</span>
+                        <span class="tool-call__status">✓ executed</span>
+                    </div>
+                    <div class="tool-call__body">
+                        {% if tool.args %}
+                        <div class="tool-call__args">
+                            <div class="tool-call__label">Arguments</div>
+                            <pre class="tool-call__code">{{ tool.args | tojson(indent=2) }}</pre>
+                        </div>
+                        {% endif %}
+                        {% if tool.result %}
+                        <div class="tool-call__result">
+                            <div class="tool-call__label">Result</div>
+                            <pre class="tool-call__code">{{ tool.result | truncate(500) }}</pre>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="text-muted" style="text-align: center; padding: var(--space-2xl);">
+            <p style="font-size: 1.1rem;">Ready to assist.</p>
+            <p style="margin-top: var(--space-sm);">Type a message below to start a conversation.</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="chat__input-area">
+        <form hx-post="/api/chat"
+              hx-target="#messages"
+              hx-swap="beforeend"
+              hx-indicator="#chat-indicator"
+              hx-on::after-request="this.reset(); document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;">
+            {% if conversation_id %}
+            <input type="hidden" name="conversation_id" value="{{ conversation_id }}">
+            {% endif %}
+            <div class="flex gap-md">
+                <textarea name="message"
+                          class="input"
+                          placeholder="Type your message... (Shift+Enter for newline)"
+                          rows="2"
+                          onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); this.form.requestSubmit(); }"></textarea>
+                <button type="submit" class="btn btn--primary" style="align-self: flex-end;">
+                    <span class="htmx-indicator" id="chat-indicator">...</span>
+                    <span>Send</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Auto-scroll to bottom on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const messages = document.getElementById('messages');
+    messages.scrollTop = messages.scrollHeight;
+});
+</script>
+{% endblock %}

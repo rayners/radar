@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Radar{% endblock %}</title>
+    <link rel="stylesheet" href="/static/css/radar.css?v=2">
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <div class="layout">
+        <header class="layout__header">
+            <div class="header__brand">
+                <div class="header__logo">
+                    <div class="radar-icon"></div>
+                </div>
+                <h1 class="header__title">Radar</h1>
+            </div>
+            <button class="mobile-menu-toggle" onclick="toggleMobileMenu()" aria-label="Toggle menu">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+            <div class="header__status">
+                <div class="status-indicator">
+                    <span class="status-indicator__dot{% if heartbeat_status == 'warn' %} status-indicator__dot--warn{% elif heartbeat_status == 'error' %} status-indicator__dot--error{% elif heartbeat_status == 'idle' %} status-indicator__dot--idle{% endif %}"></span>
+                    <span>{{ heartbeat_label | default('System Active') }}</span>
+                </div>
+                <div class="status-indicator">
+                    <span class="text-muted">Model:</span>
+                    <span>{{ model | default('llama3.2') }}</span>
+                </div>
+            </div>
+        </header>
+
+        <nav class="layout__sidebar">
+            <ul class="nav">
+                <li class="nav__item{% if active_page == 'dashboard' %} nav__item--active{% endif %}">
+                    <a href="/" class="nav__link">
+                        <svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="3" width="7" height="7"></rect>
+                            <rect x="14" y="14" width="7" height="7"></rect>
+                            <rect x="3" y="14" width="7" height="7"></rect>
+                        </svg>
+                        Dashboard
+                    </a>
+                </li>
+                <li class="nav__item{% if active_page == 'chat' %} nav__item--active{% endif %}">
+                    <a href="/chat" class="nav__link">
+                        <svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        Chat
+                    </a>
+                </li>
+                <li class="nav__item{% if active_page == 'history' %} nav__item--active{% endif %}">
+                    <a href="/history" class="nav__link">
+                        <svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12 6 12 12 16 14"></polyline>
+                        </svg>
+                        History
+                    </a>
+                </li>
+
+                <div class="nav__section">System</div>
+
+                <li class="nav__item{% if active_page == 'memory' %} nav__item--active{% endif %}">
+                    <a href="/memory" class="nav__link">
+                        <svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"></path>
+                            <circle cx="12" cy="12" r="3"></circle>
+                        </svg>
+                        Memory
+                    </a>
+                </li>
+                <li class="nav__item{% if active_page == 'tasks' %} nav__item--active{% endif %}">
+                    <a href="/tasks" class="nav__link">
+                        <svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 11l3 3L22 4"></path>
+                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                        </svg>
+                        Tasks
+                    </a>
+                </li>
+                <li class="nav__item{% if active_page == 'config' %} nav__item--active{% endif %}">
+                    <a href="/config" class="nav__link">
+                        <svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                        </svg>
+                        Config
+                    </a>
+                </li>
+                <li class="nav__item{% if active_page == 'logs' %} nav__item--active{% endif %}">
+                    <a href="/logs" class="nav__link">
+                        <svg class="nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14 2 14 8 20 8"></polyline>
+                            <line x1="16" y1="13" x2="8" y2="13"></line>
+                            <line x1="16" y1="17" x2="8" y2="17"></line>
+                            <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
+                        Logs
+                    </a>
+                </li>
+            </ul>
+        </nav>
+
+        <main class="layout__main">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <script>
+        function toggleMobileMenu() {
+            const sidebar = document.querySelector('.layout__sidebar');
+            sidebar.classList.toggle('is-open');
+        }
+        // Close menu when clicking a nav link on mobile
+        document.querySelectorAll('.nav__link').forEach(link => {
+            link.addEventListener('click', () => {
+                const sidebar = document.querySelector('.layout__sidebar');
+                sidebar.classList.remove('is-open');
+            });
+        });
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

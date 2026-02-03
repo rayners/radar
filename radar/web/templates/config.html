@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration - Radar{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card__header">
+        <span class="card__title">Configuration</span>
+        <span class="text-muted" style="font-size: 0.75rem;">
+            {{ config_path | default('radar.yaml') }}
+        </span>
+    </div>
+    <div class="card__body">
+        <form hx-post="/api/config"
+              hx-swap="none"
+              hx-on::after-request="alert('Configuration saved!')">
+
+            <!-- Ollama Section -->
+            <div class="config-section">
+                <div class="config-section__title">Ollama</div>
+
+                <div class="config-field">
+                    <label class="config-field__label">Base URL</label>
+                    <div>
+                        <input type="text"
+                               name="ollama.base_url"
+                               class="input"
+                               value="{{ config.ollama.base_url | default('http://localhost:11434') }}">
+                        <div class="config-field__help">
+                            Ollama API endpoint. Use localhost or remote host.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="config-field">
+                    <label class="config-field__label">Model</label>
+                    <div>
+                        <input type="text"
+                               name="ollama.model"
+                               class="input"
+                               value="{{ config.ollama.model | default('llama3.2') }}">
+                        <div class="config-field__help">
+                            Model name for chat. Must support tool calling.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Notifications Section -->
+            <div class="config-section">
+                <div class="config-section__title">Notifications</div>
+
+                <div class="config-field">
+                    <label class="config-field__label">ntfy URL</label>
+                    <div>
+                        <input type="text"
+                               name="notifications.url"
+                               class="input"
+                               value="{{ config.notifications.url | default('https://ntfy.sh') }}">
+                        <div class="config-field__help">
+                            ntfy.sh server URL or self-hosted instance.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="config-field">
+                    <label class="config-field__label">Topic</label>
+                    <div>
+                        <input type="text"
+                               name="notifications.topic"
+                               class="input"
+                               value="{{ config.notifications.topic | default('') }}"
+                               placeholder="your-topic-here">
+                        <div class="config-field__help">
+                            Your ntfy topic name. Required for notifications to work.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tools Section -->
+            <div class="config-section">
+                <div class="config-section__title">Tools</div>
+
+                <div class="config-field">
+                    <label class="config-field__label">Max File Size</label>
+                    <div>
+                        <input type="number"
+                               name="tools.max_file_size"
+                               class="input"
+                               value="{{ config.tools.max_file_size | default(102400) }}">
+                        <div class="config-field__help">
+                            Maximum file size for read_file tool (bytes).
+                        </div>
+                    </div>
+                </div>
+
+                <div class="config-field">
+                    <label class="config-field__label">Exec Timeout</label>
+                    <div>
+                        <input type="number"
+                               name="tools.exec_timeout"
+                               class="input"
+                               value="{{ config.tools.exec_timeout | default(30) }}">
+                        <div class="config-field__help">
+                            Timeout for exec tool (seconds).
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agent Section -->
+            <div class="config-section">
+                <div class="config-section__title">Agent</div>
+
+                <div class="config-field">
+                    <label class="config-field__label">Max Tool Iterations</label>
+                    <div>
+                        <input type="number"
+                               name="max_tool_iterations"
+                               class="input"
+                               value="{{ config.max_tool_iterations | default(10) }}">
+                        <div class="config-field__help">
+                            Maximum tool call rounds before stopping.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-md mt-lg">
+                <button type="submit" class="btn btn--primary">Save Configuration</button>
+                <button type="button" class="btn btn--ghost"
+                        hx-get="/api/config/test"
+                        hx-target="#config-test-result"
+                        hx-swap="innerHTML">
+                    Test Connection
+                </button>
+            </div>
+
+            <div id="config-test-result" class="mt-md"></div>
+        </form>
+    </div>
+</div>
+
+<!-- Current Config (Read-only view) -->
+<div class="card mt-lg">
+    <div class="card__header">
+        <span class="card__title">Current Config (YAML)</span>
+    </div>
+    <div class="code-block">
+        <div class="code-block__content">
+            <pre>{{ config_yaml | default('# Configuration not loaded') }}</pre>
+        </div>
+    </div>
+</div>
+{% endblock %}

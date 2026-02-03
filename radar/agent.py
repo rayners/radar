@@ -26,11 +26,24 @@ Current time: {current_time}"""
 
 
 def _build_system_prompt() -> str:
-    """Build the system prompt with current time."""
+    """Build the system prompt with current time and personality notes."""
     config = get_config()
     template = config.system_prompt or DEFAULT_SYSTEM_PROMPT
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    return template.format(current_time=current_time)
+    prompt = template.format(current_time=current_time)
+
+    # Inject personality notes from semantic memory
+    try:
+        from radar.semantic import search_memories
+        notes = search_memories("personality preferences style user likes", limit=5)
+        if notes:
+            prompt += "\n\nThings to remember about the user:\n"
+            for note in notes:
+                prompt += f"- {note['content']}\n"
+    except Exception:
+        pass  # Memory not available or empty
+
+    return prompt
 
 
 def run(

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Tasks - Radar{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-lg">
+    <h2 class="text-phosphor" style="font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.1em;">
+        SCHEDULED TASKS
+    </h2>
+    <button class="btn btn--ghost"
+            hx-get="/tasks/add"
+            hx-target="#task-modal"
+            hx-swap="innerHTML">
+        + Add Task
+    </button>
+</div>
+
+<div class="card">
+    <div class="card__body" style="padding: 0;">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th style="width: 60px;">Status</th>
+                    <th>Task</th>
+                    <th style="width: 180px;">Schedule</th>
+                    <th style="width: 150px;">Last Run</th>
+                    <th style="width: 150px;">Next Run</th>
+                    <th style="width: 100px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for task in tasks | default([]) %}
+                <tr id="task-{{ task.id }}">
+                    <td style="text-align: center;">
+                        {% if task.enabled %}
+                        <span class="status-indicator__dot"></span>
+                        {% else %}
+                        <span class="status-indicator__dot status-indicator__dot--idle"></span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="font-weight: 500;">{{ task.name }}</div>
+                        <div class="text-muted" style="font-size: 0.8rem;">{{ task.description }}</div>
+                    </td>
+                    <td>
+                        <code style="color: var(--amber); font-size: 0.85rem;">{{ task.schedule }}</code>
+                    </td>
+                    <td class="text-muted">{{ task.last_run | default('Never') }}</td>
+                    <td>{{ task.next_run | default('—') }}</td>
+                    <td>
+                        <div class="flex gap-sm">
+                            <button class="btn btn--ghost" style="padding: 2px 6px; font-size: 0.7rem;"
+                                    hx-post="/api/tasks/{{ task.id }}/run"
+                                    hx-swap="none"
+                                    title="Run now">
+                                ▶
+                            </button>
+                            <button class="btn btn--ghost" style="padding: 2px 6px; font-size: 0.7rem;"
+                                    hx-delete="/api/tasks/{{ task.id }}"
+                                    hx-target="#task-{{ task.id }}"
+                                    hx-swap="outerHTML"
+                                    hx-confirm="Delete this task?"
+                                    title="Delete">
+                                ✕
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-muted" style="text-align: center; padding: var(--space-xl);">
+                        <p>No scheduled tasks yet.</p>
+                        <p style="margin-top: var(--space-sm); font-size: 0.85rem;">
+                            Tasks can run on a schedule (cron) or be triggered by events.
+                        </p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Heartbeat Section -->
+<div class="card mt-lg">
+    <div class="card__header">
+        <span class="card__title">Heartbeat Configuration</span>
+    </div>
+    <div class="card__body">
+        <div class="config-field">
+            <label class="config-field__label">Interval</label>
+            <div class="flex gap-md items-center">
+                <input type="number"
+                       name="heartbeat_interval"
+                       class="input"
+                       style="width: 100px;"
+                       value="{{ heartbeat_interval | default(15) }}">
+                <span class="text-muted">minutes</span>
+            </div>
+        </div>
+        <div class="config-field">
+            <label class="config-field__label">Quiet Hours</label>
+            <div class="flex gap-md items-center">
+                <input type="time"
+                       name="quiet_start"
+                       class="input"
+                       style="width: 120px;"
+                       value="{{ quiet_start | default('23:00') }}">
+                <span class="text-muted">to</span>
+                <input type="time"
+                       name="quiet_end"
+                       class="input"
+                       style="width: 120px;"
+                       value="{{ quiet_end | default('07:00') }}">
+            </div>
+        </div>
+        <div class="mt-md">
+            <button class="btn btn--ghost"
+                    hx-post="/api/heartbeat/trigger"
+                    hx-swap="none">
+                Trigger Heartbeat Now
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal container -->
+<div id="task-modal"></div>
+{% endblock %}
