@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "radar"
 version = "0.1.0"
-description = "A local AI assistant with native Ollama tool calling"
+description = "A local-only AI assistant with native Ollama tool calling"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.11"

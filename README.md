@@ -1,8 +1,10 @@
 # Radar
 
-A lightweight, local-first AI assistant with native Ollama tool calling.
+A lightweight, local-only AI assistant with native Ollama tool calling.
 
-Radar is a personal AI assistant that runs locally, backed by Ollama. It focuses on what matters: reliable native tool calling, persistent conversation memory, and practical automation tasks. No cloud dependencies, no bloated frameworks.
+Inspired by [OpenClaw.ai](https://openclaw.ai), Radar is a personal AI assistant that runs entirely on your own hardware, backed by Ollama. It focuses on what matters: reliable native tool calling, persistent conversation memory, and practical automation tasks.
+
+**Local-only by design.** Your conversations, memories, and data never leave your machine. No cloud APIs, no telemetry, no external dependencies beyond Ollama itself. The only network calls are to your own Ollama instance (local or on your LAN) and optional self-hosted services you configure (ntfy, CalDAV, etc.).
 
 ## Features
 

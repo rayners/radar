@@ -1,6 +1,10 @@
 # Radar
 
-Local-first AI assistant with native Ollama tool calling. Currently at Phase 2 (Daemon + Web Dashboard).
+Local-only AI assistant with native Ollama tool calling. Inspired by [OpenClaw.ai](https://openclaw.ai).
+
+**Local-only by design** - all data stays on your machine. No cloud APIs, no telemetry.
+
+Currently at Phase 2 (Daemon + Web Dashboard).
 
 ## Development
 
