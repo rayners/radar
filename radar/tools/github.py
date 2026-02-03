@@ -83,56 +83,58 @@ def _format_relative_time(iso_time: str) -> str:
 
 
 def _list_prs(org: str | None, repo: str | None) -> str:
-    """List PRs assigned to user or requesting review."""
+    """List PRs authored by, assigned to, or requesting review from user."""
     lines = ["**Pull Requests**", ""]
 
-    # Get PRs requesting review
-    args = ["pr", "list", "--search", "review-requested:@me", "--json", "number,title,repository,createdAt,url", "--limit", "10"]
+    # For repo-specific queries, use gh pr list; for global, use gh search prs
     if repo:
-        args = ["pr", "list", "--repo", repo, "--search", "review-requested:@me", "--json", "number,title,createdAt,url", "--limit", "10"]
+        # Repo-specific: use gh pr list
+        for label, search in [
+            ("Review Requested", "review-requested:@me"),
+            ("Assigned", "assignee:@me"),
+            ("Authored", "author:@me"),
+        ]:
+            args = ["pr", "list", "--repo", repo, "--search", search, "--json", "number,title,createdAt,url", "--limit", "10"]
+            output, success = _run_gh(args)
+            if success:
+                try:
+                    prs = json.loads(output)
+                    if prs:
+                        lines.append(f"**{label}:**")
+                        for pr in prs:
+                            num = pr.get("number")
+                            title = pr.get("title", "")
+                            created = _format_relative_time(pr.get("createdAt", ""))
+                            lines.append(f"- #{num} {title} ({repo}) - opened {created}")
+                        lines.append("")
+                except json.JSONDecodeError:
+                    pass
+    else:
+        # Global search: use gh search prs
+        for label, flag in [
+            ("Review Requested", "--review-requested=@me"),
+            ("Assigned", "--assignee=@me"),
+            ("Authored", "--author=@me"),
+        ]:
+            args = ["search", "prs", flag, "--state=open", "--json", "number,title,repository,createdAt", "--limit", "10"]
+            output, success = _run_gh(args)
+            if success:
+                try:
+                    prs = json.loads(output)
+                    if org:
+                        prs = [pr for pr in prs if org.lower() in pr.get("repository", {}).get("nameWithOwner", "").lower()]
 
-    output, success = _run_gh(args)
-    if success:
-        try:
-            prs = json.loads(output)
-            if org:
-                prs = [pr for pr in prs if org.lower() in pr.get("repository", {}).get("nameWithOwner", "").lower()]
-
-            if prs:
-                lines.append("**Review Requested:**")
-                for pr in prs:
-                    num = pr.get("number")
-                    title = pr.get("title", "")
-                    repo_name = pr.get("repository", {}).get("nameWithOwner", repo or "")
-                    created = _format_relative_time(pr.get("createdAt", ""))
-                    lines.append(f"- #{num} {title} ({repo_name}) - opened {created}")
-                lines.append("")
-        except json.JSONDecodeError:
-            pass
-
-    # Get assigned PRs
-    args = ["pr", "list", "--search", "assignee:@me", "--json", "number,title,repository,createdAt,url", "--limit", "10"]
-    if repo:
-        args = ["pr", "list", "--repo", repo, "--search", "assignee:@me", "--json", "number,title,createdAt,url", "--limit", "10"]
-
-    output, success = _run_gh(args)
-    if success:
-        try:
-            prs = json.loads(output)
-            if org:
-                prs = [pr for pr in prs if org.lower() in pr.get("repository", {}).get("nameWithOwner", "").lower()]
-
-            if prs:
-                lines.append("**Assigned:**")
-                for pr in prs:
-                    num = pr.get("number")
-                    title = pr.get("title", "")
-                    repo_name = pr.get("repository", {}).get("nameWithOwner", repo or "")
-                    created = _format_relative_time(pr.get("createdAt", ""))
-                    lines.append(f"- #{num} {title} ({repo_name}) - opened {created}")
-                lines.append("")
-        except json.JSONDecodeError:
-            pass
+                    if prs:
+                        lines.append(f"**{label}:**")
+                        for pr in prs:
+                            num = pr.get("number")
+                            title = pr.get("title", "")
+                            repo_name = pr.get("repository", {}).get("nameWithOwner", "")
+                            created = _format_relative_time(pr.get("createdAt", ""))
+                            lines.append(f"- #{num} {title} ({repo_name}) - opened {created}")
+                        lines.append("")
+                except json.JSONDecodeError:
+                    pass
 
     if len(lines) == 2:  # Only header
         lines.append("No PRs found.")
@@ -144,53 +146,52 @@ def _list_issues(org: str | None, repo: str | None) -> str:
     """List issues assigned to user or mentioning them."""
     lines = ["**Issues**", ""]
 
-    # Get assigned issues
-    args = ["issue", "list", "--search", "assignee:@me", "--json", "number,title,repository,createdAt,url", "--limit", "10"]
     if repo:
-        args = ["issue", "list", "--repo", repo, "--search", "assignee:@me", "--json", "number,title,createdAt,url", "--limit", "10"]
+        # Repo-specific: use gh issue list
+        for label, search in [
+            ("Assigned", "assignee:@me"),
+            ("Mentioned", "mentions:@me"),
+        ]:
+            args = ["issue", "list", "--repo", repo, "--search", search, "--json", "number,title,createdAt,url", "--limit", "10"]
+            output, success = _run_gh(args)
+            if success:
+                try:
+                    issues = json.loads(output)
+                    if issues:
+                        lines.append(f"**{label}:**")
+                        for issue in issues:
+                            num = issue.get("number")
+                            title = issue.get("title", "")
+                            created = _format_relative_time(issue.get("createdAt", ""))
+                            lines.append(f"- #{num} {title} ({repo}) - opened {created}")
+                        lines.append("")
+                except json.JSONDecodeError:
+                    pass
+    else:
+        # Global search: use gh search issues
+        for label, flag in [
+            ("Assigned", "--assignee=@me"),
+            ("Mentioned", "--mentions=@me"),
+        ]:
+            args = ["search", "issues", flag, "--state=open", "--json", "number,title,repository,createdAt", "--limit", "10"]
+            output, success = _run_gh(args)
+            if success:
+                try:
+                    issues = json.loads(output)
+                    if org:
+                        issues = [issue for issue in issues if org.lower() in issue.get("repository", {}).get("nameWithOwner", "").lower()]
 
-    output, success = _run_gh(args)
-    if success:
-        try:
-            issues = json.loads(output)
-            if org:
-                issues = [issue for issue in issues if org.lower() in issue.get("repository", {}).get("nameWithOwner", "").lower()]
-
-            if issues:
-                lines.append("**Assigned:**")
-                for issue in issues:
-                    num = issue.get("number")
-                    title = issue.get("title", "")
-                    repo_name = issue.get("repository", {}).get("nameWithOwner", repo or "")
-                    created = _format_relative_time(issue.get("createdAt", ""))
-                    lines.append(f"- #{num} {title} ({repo_name}) - opened {created}")
-                lines.append("")
-        except json.JSONDecodeError:
-            pass
-
-    # Get mentioned issues
-    args = ["issue", "list", "--search", "mentions:@me", "--json", "number,title,repository,createdAt,url", "--limit", "10"]
-    if repo:
-        args = ["issue", "list", "--repo", repo, "--search", "mentions:@me", "--json", "number,title,createdAt,url", "--limit", "10"]
-
-    output, success = _run_gh(args)
-    if success:
-        try:
-            issues = json.loads(output)
-            if org:
-                issues = [issue for issue in issues if org.lower() in issue.get("repository", {}).get("nameWithOwner", "").lower()]
-
-            if issues:
-                lines.append("**Mentioned:**")
-                for issue in issues:
-                    num = issue.get("number")
-                    title = issue.get("title", "")
-                    repo_name = issue.get("repository", {}).get("nameWithOwner", repo or "")
-                    created = _format_relative_time(issue.get("createdAt", ""))
-                    lines.append(f"- #{num} {title} ({repo_name}) - opened {created}")
-                lines.append("")
-        except json.JSONDecodeError:
-            pass
+                    if issues:
+                        lines.append(f"**{label}:**")
+                        for issue in issues:
+                            num = issue.get("number")
+                            title = issue.get("title", "")
+                            repo_name = issue.get("repository", {}).get("nameWithOwner", "")
+                            created = _format_relative_time(issue.get("createdAt", ""))
+                            lines.append(f"- #{num} {title} ({repo_name}) - opened {created}")
+                        lines.append("")
+                except json.JSONDecodeError:
+                    pass
 
     if len(lines) == 2:  # Only header
         lines.append("No issues found.")
