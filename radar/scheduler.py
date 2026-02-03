@@ -39,6 +39,31 @@ def _is_quiet_hours() -> bool:
         return start <= now <= end
 
 
+def _build_heartbeat_message(events: list[dict[str, Any]]) -> str:
+    """Build the heartbeat message from queued events."""
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    if not events:
+        return f"Heartbeat at {current_time}. No new events."
+
+    lines = [f"Heartbeat at {current_time}. Events since last check:"]
+
+    for e in events:
+        data = e["data"]
+        desc = data.get("description", e["type"])
+        path = data.get("path", "")
+        action = data.get("action")
+
+        if action:
+            lines.append(f"- {desc}")
+            lines.append(f"  File: {path}")
+            lines.append(f"  Action: {action}")
+        else:
+            lines.append(f"- {desc}: {path}")
+
+    return "\n".join(lines)
+
+
 def _heartbeat_tick() -> None:
     """Execute a heartbeat tick."""
     global _last_heartbeat, _event_queue
@@ -51,15 +76,7 @@ def _heartbeat_tick() -> None:
     _event_queue.clear()
 
     # Build heartbeat message
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    if events:
-        event_summary = "; ".join(
-            f"{e['type']}: {e['data'].get('description', 'event')}"
-            for e in events
-        )
-        message = f"Heartbeat at {current_time}. Events since last check: {event_summary}"
-    else:
-        message = f"Heartbeat at {current_time}. No new events."
+    message = _build_heartbeat_message(events)
 
     # Run agent with heartbeat message
     try:

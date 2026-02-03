@@ -151,9 +151,11 @@ watch_paths:
   - path: ~/Downloads
     patterns: ["*.pdf", "*.epub"]
     description: "Downloads"
+    action: "Summarize this document and send key points via ntfy"
   - path: ~/Documents/notes
     patterns: ["*.md"]
     recursive: true
+    action: "Extract any TODOs and remind me about them"
 ```
 
-Events are collected and reported at each heartbeat interval.
+The `action` field tells the agent what to do when files matching the pattern are detected. Events without actions are just reported. Events are collected and processed at each heartbeat interval.

@@ -19,12 +19,13 @@ class RadarEventHandler(FileSystemEventHandler):
         """Initialize handler with watch configuration.
 
         Args:
-            watch_config: Dict with path, patterns (optional), description (optional)
+            watch_config: Dict with path, patterns (optional), description (optional), action (optional)
         """
         super().__init__()
         self.watch_config = watch_config
         self.patterns = watch_config.get("patterns", ["*"])
         self.description = watch_config.get("description", watch_config.get("path", ""))
+        self.action = watch_config.get("action")
 
     def _matches_pattern(self, path: str) -> bool:
         """Check if path matches any configured pattern."""
@@ -40,10 +41,14 @@ class RadarEventHandler(FileSystemEventHandler):
         if not self._matches_pattern(event.src_path):
             return
 
-        add_event(event_type, {
+        event_data = {
             "path": event.src_path,
             "description": f"{event_type} in {self.description}: {Path(event.src_path).name}",
-        })
+        }
+        if self.action:
+            event_data["action"] = self.action
+
+        add_event(event_type, event_data)
 
     def on_created(self, event: FileSystemEvent) -> None:
         """Handle file creation."""
