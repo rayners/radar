@@ -199,8 +199,33 @@ def start(host: str | None, port: int | None):
     config = get_config()
 
     # Use CLI args if provided, otherwise fall back to config
-    host = host or config.web.host
-    port = port or config.web.port
+    # Also update the config so middleware can check the actual host
+    if host:
+        config.web.host = host
+    else:
+        host = config.web.host
+
+    if port:
+        config.web.port = port
+    else:
+        port = config.web.port
+
+    # Security warning for non-localhost binding
+    is_localhost = host in ("127.0.0.1", "localhost", "::1")
+    if not is_localhost:
+        if not config.web.auth_token:
+            console.print(Panel.fit(
+                "[bold red]Security Warning[/bold red]\n\n"
+                f"Binding to [bold]{host}[/bold] exposes the web UI to the network.\n"
+                "No auth_token is configured - access will be blocked.\n\n"
+                "Add to radar.yaml:\n"
+                "[dim]web:\n"
+                "  auth_token: \"your-secret-token\"[/dim]\n\n"
+                "Or set: [dim]RADAR_WEB_AUTH_TOKEN=your-token[/dim]",
+                border_style="red",
+            ))
+        else:
+            console.print(f"[yellow]Note: Web UI exposed on {host} (auth required)[/yellow]")
 
     running, pid = _is_daemon_running()
     if running:

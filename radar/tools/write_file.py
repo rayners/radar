@@ -2,12 +2,13 @@
 
 from pathlib import Path
 
+from radar.security import check_path_security
 from radar.tools import tool
 
 
 @tool(
     name="write_file",
-    description="Write content to a file. Creates the file if it doesn't exist, overwrites if it does.",
+    description="Write content to a file. Creates the file if it doesn't exist, overwrites if it does. Some sensitive paths (like ~/.ssh, ~/.bashrc) are blocked for security.",
     parameters={
         "path": {
             "type": "string",
@@ -20,7 +21,12 @@ from radar.tools import tool
     },
 )
 def write_file(path: str, content: str) -> str:
-    """Write content to a file."""
+    """Write content to a file with security checks."""
+    # Security check
+    is_safe, reason = check_path_security(path, "write")
+    if not is_safe:
+        return f"Error: {reason}"
+
     file_path = Path(path).expanduser().resolve()
 
     try:

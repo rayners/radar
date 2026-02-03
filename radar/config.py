@@ -30,6 +30,11 @@ class ToolsConfig:
 
     max_file_size: int = 102400  # 100KB
     exec_timeout: int = 30
+    # Exec security mode: "safe_only", "block_dangerous", "allow_all"
+    # - safe_only: Only allow known safe commands (ls, cat, etc.)
+    # - block_dangerous: Block known dangerous patterns, allow others (default)
+    # - allow_all: No restrictions (dangerous!)
+    exec_mode: str = "block_dangerous"
 
 
 @dataclass
@@ -47,6 +52,9 @@ class WebConfig:
 
     host: str = "127.0.0.1"
     port: int = 8420
+    # Auth token required when binding to non-localhost
+    # Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+    auth_token: str = ""
 
 
 @dataclass
@@ -84,6 +92,7 @@ class Config:
             tools=ToolsConfig(
                 max_file_size=tools_data.get("max_file_size", ToolsConfig.max_file_size),
                 exec_timeout=tools_data.get("exec_timeout", ToolsConfig.exec_timeout),
+                exec_mode=tools_data.get("exec_mode", ToolsConfig.exec_mode),
             ),
             heartbeat=HeartbeatConfig(
                 interval_minutes=heartbeat_data.get("interval_minutes", HeartbeatConfig.interval_minutes),
@@ -93,6 +102,7 @@ class Config:
             web=WebConfig(
                 host=web_data.get("host", WebConfig.host),
                 port=web_data.get("port", WebConfig.port),
+                auth_token=web_data.get("auth_token", WebConfig.auth_token),
             ),
             system_prompt=data.get("system_prompt", ""),
             max_tool_iterations=data.get("max_tool_iterations", 10),
@@ -117,6 +127,8 @@ def _apply_env_overrides(config: Config) -> Config:
         config.web.host = web_host
     if web_port := os.environ.get("RADAR_WEB_PORT"):
         config.web.port = int(web_port)
+    if web_auth := os.environ.get("RADAR_WEB_AUTH_TOKEN"):
+        config.web.auth_token = web_auth
     return config
 
 
