@@ -43,6 +43,7 @@ RADAR_OLLAMA_URL="http://host:11434" radar ask "test"
 - `radar/tools/` - Tool modules registered via `@tool` decorator
 - `radar/scheduler.py` - APScheduler heartbeat with quiet hours + event queue
 - `radar/watchers.py` - File system monitoring with watchdog
+- `radar/security.py` - Path blocklists and command safety checks
 - `radar/web/` - FastAPI + HTMX web dashboard (mobile responsive)
 
 ## Code Conventions
@@ -50,7 +51,7 @@ RADAR_OLLAMA_URL="http://host:11434" radar ask "test"
 - Tools are registered with the `@tool` decorator in `radar/tools/`
 - Tools return strings (results displayed to user)
 - Config: YAML in `radar.yaml` or `~/.config/radar/radar.yaml`
-- Environment variables override config: `RADAR_OLLAMA_URL`, `RADAR_OLLAMA_MODEL`, `RADAR_NTFY_TOPIC`, `RADAR_EMBEDDING_MODEL`, `RADAR_WEB_HOST`, `RADAR_WEB_PORT`
+- Environment variables override config: `RADAR_OLLAMA_URL`, `RADAR_OLLAMA_MODEL`, `RADAR_NTFY_TOPIC`, `RADAR_EMBEDDING_MODEL`, `RADAR_WEB_HOST`, `RADAR_WEB_PORT`, `RADAR_WEB_AUTH_TOKEN`
 
 ## Key Design Decisions
 
@@ -163,3 +164,44 @@ watch_paths:
 ```
 
 The `action` field tells the agent what to do when files matching the pattern are detected. Events without actions are just reported. Events are collected and processed at each heartbeat interval.
+
+## Security
+
+See `docs/security.md` for full security assessment.
+
+### Path Blocklist
+
+File tools block access to sensitive paths:
+- **Blocked for read/write**: `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.config/gcloud`, `~/.password-store`
+- **Blocked for write only**: `~/.bashrc`, `~/.zshrc`, `~/.profile`, `~/.config/autostart`
+
+### Exec Safety
+
+The `exec` tool blocks dangerous command patterns by default:
+- Destructive: `rm -rf`, `mkfs`, `dd if=`
+- Network: `curl`, `wget`, `nc`
+- Privilege: `sudo`, `su`, `chmod 777`
+- Persistence: `crontab`, `systemctl enable`
+
+Configure in `radar.yaml`:
+```yaml
+tools:
+  exec_mode: "block_dangerous"  # safe_only | block_dangerous | allow_all
+```
+
+### Web UI Authentication
+
+Required when binding to non-localhost:
+
+```yaml
+web:
+  host: "0.0.0.0"
+  auth_token: "your-secret-token"  # Required for non-localhost
+```
+
+Or via environment: `RADAR_WEB_AUTH_TOKEN=your-token`
+
+Generate a token:
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
