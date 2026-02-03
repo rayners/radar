@@ -37,7 +37,8 @@ subprocess.run(command, shell=True, ...)
 **Impact**: Full system compromise - data theft, ransomware, persistence.
 
 **Mitigations**:
-- [ ] Command allowlist (only permit specific commands)
+- [x] Dangerous command blocklist (rm -rf, curl, sudo, etc.) - `radar/security.py`
+- [x] Configurable exec_mode: safe_only, block_dangerous, allow_all
 - [ ] Confirmation prompts for all exec calls
 - [ ] Sandbox execution (firejail, bubblewrap, Docker)
 - [ ] Remove `shell=True`, use explicit command arrays
@@ -62,7 +63,8 @@ file_path.write_text(content)
 **Impact**: Persistence, privilege escalation, backdoor installation.
 
 **Mitigations**:
-- [ ] Path blocklist (no writes to dotfiles, ssh, config dirs)
+- [x] Path blocklist for sensitive dirs (.ssh, .gnupg, .aws, etc.) - `radar/security.py`
+- [x] Write blocklist for shell configs (.bashrc, .profile, etc.)
 - [ ] Path allowlist (only write to specific directories)
 - [ ] Confirmation for writes outside allowed paths
 
@@ -82,7 +84,7 @@ file_path.write_text(content)
 **Impact**: Credential theft, identity compromise.
 
 **Mitigations**:
-- [ ] Blocklist sensitive paths
+- [x] Blocklist sensitive paths (.ssh, .gnupg, .aws, etc.) - `radar/security.py`
 - [ ] Warn when reading from sensitive directories
 - [ ] Require confirmation for dotfiles
 
@@ -133,9 +135,10 @@ The web UI has no authentication. Anyone who can reach the port can:
 **Impact**: Full access to all Radar capabilities, data exposure.
 
 **Mitigations**:
-- [ ] Add authentication (API token, password)
-- [ ] Warn user when binding to non-localhost
-- [ ] Default to localhost only
+- [x] Add authentication (auth_token in config or env var)
+- [x] Warn user when binding to non-localhost without token
+- [x] Default to localhost only
+- [x] Login page with cookie-based sessions
 - [ ] Add `--no-auth` flag for explicit opt-out
 
 ### 6. File Watcher Action Injection
@@ -234,9 +237,9 @@ ollama:
 ## Recommendations by Priority
 
 ### Immediate (Before Public Use)
-1. Add tool confirmation modes (especially for `exec`)
-2. Blocklist sensitive file paths for read/write
-3. Add web UI authentication when binding to non-localhost
+1. ~~Add tool confirmation modes (especially for `exec`)~~ - Partial: dangerous command blocking implemented
+2. ~~Blocklist sensitive file paths for read/write~~ - Done: `radar/security.py`
+3. ~~Add web UI authentication when binding to non-localhost~~ - Done: token-based auth
 
 ### Short Term
 4. Implement audit logging of all tool calls
