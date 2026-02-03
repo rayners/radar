@@ -1,0 +1,29 @@
+# Radar Configuration
+# Copy this file to ~/.config/radar/radar.yaml for global config
+# or keep in project directory for project-specific config
+
+ollama:
+  # Ollama API base URL
+  base_url: "http://big-think.internal:11434"
+  # Model to use for chat
+  model: "llama3.2"
+
+notifications:
+  # ntfy.sh server URL
+  url: "https://ntfy.sh"
+  # Your ntfy topic (required for notifications to work)
+  topic: ""
+
+tools:
+  # Maximum file size for read_file tool (bytes)
+  max_file_size: 102400
+  # Timeout for exec tool (seconds)
+  exec_timeout: 30
+
+# Maximum number of tool call iterations before stopping
+max_tool_iterations: 10
+
+# Custom system prompt (optional)
+# Use {current_time} placeholder for current timestamp
+# system_prompt: |
+#   You are a helpful assistant...
