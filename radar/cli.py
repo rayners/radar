@@ -1,5 +1,7 @@
 """CLI interface for Radar."""
 
+import sys
+
 import click
 from rich.console import Console
 from rich.markdown import Markdown
@@ -48,50 +50,67 @@ def chat(continue_id: str | None):
     from radar.agent import run
 
     conversation_id = continue_id
+    is_interactive = sys.stdin.isatty()
 
-    console.print(
-        Panel.fit(
-            "[bold blue]Radar[/bold blue] - Interactive Chat\n"
-            "[dim]Type 'exit' or 'quit' to end, 'clear' to start new conversation[/dim]",
-            border_style="blue",
+    if is_interactive:
+        console.print(
+            Panel.fit(
+                "[bold blue]Radar[/bold blue] - Interactive Chat\n"
+                "[dim]Type 'exit' or 'quit' to end, 'clear' to start new conversation[/dim]",
+                border_style="blue",
+            )
         )
-    )
 
-    if conversation_id:
-        console.print(f"[dim]Continuing conversation: {conversation_id[:8]}...[/dim]\n")
-    else:
-        console.print()
+        if conversation_id:
+            console.print(f"[dim]Continuing conversation: {conversation_id[:8]}...[/dim]\n")
+        else:
+            console.print()
 
     while True:
         try:
-            user_input = console.input("[bold green]You:[/bold green] ").strip()
+            if is_interactive:
+                user_input = console.input("[bold green]You:[/bold green] ").strip()
+            else:
+                line = sys.stdin.readline()
+                if not line:  # EOF reached
+                    break
+                user_input = line.strip()
         except (KeyboardInterrupt, EOFError):
-            console.print("\n[dim]Goodbye![/dim]")
+            if is_interactive:
+                console.print("\n[dim]Goodbye![/dim]")
             break
 
         if not user_input:
             continue
 
         if user_input.lower() in ("exit", "quit"):
-            console.print("[dim]Goodbye![/dim]")
+            if is_interactive:
+                console.print("[dim]Goodbye![/dim]")
             break
 
         if user_input.lower() == "clear":
             conversation_id = None
-            console.print("[dim]Starting new conversation[/dim]\n")
+            if is_interactive:
+                console.print("[dim]Starting new conversation[/dim]\n")
             continue
 
         try:
-            with console.status("[bold blue]Thinking...", spinner="dots"):
+            if is_interactive:
+                with console.status("[bold blue]Thinking...", spinner="dots"):
+                    response, conversation_id = run(user_input, conversation_id)
+            else:
                 response, conversation_id = run(user_input, conversation_id)
 
-            console.print()
+            if is_interactive:
+                console.print()
             if response:
-                console.print("[bold blue]Radar:[/bold blue]")
+                if is_interactive:
+                    console.print("[bold blue]Radar:[/bold blue]")
                 console.print(Markdown(response))
             else:
                 console.print("[yellow]No response received[/yellow]")
-            console.print()
+            if is_interactive:
+                console.print()
 
         except RuntimeError as e:
             console.print(f"\n[red]Error: {e}[/red]\n")

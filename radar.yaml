@@ -6,7 +6,7 @@ ollama:
   # Ollama API base URL
   base_url: "http://big-think.internal:11434"
   # Model to use for chat
-  model: "llama3.2"
+  model: "qwen3:latest"
 
 notifications:
   # ntfy.sh server URL

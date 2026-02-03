@@ -13,7 +13,7 @@ class OllamaConfig:
     """Ollama API configuration."""
 
     base_url: str = "http://localhost:11434"
-    model: str = "llama3.2"
+    model: str = "qwen3:latest"
 
 
 @dataclass
@@ -41,6 +41,7 @@ class Config:
     tools: ToolsConfig = field(default_factory=ToolsConfig)
     system_prompt: str = ""
     max_tool_iterations: int = 10
+    embedding_model: str = "nomic-embed-text"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Config":
@@ -64,6 +65,7 @@ class Config:
             ),
             system_prompt=data.get("system_prompt", ""),
             max_tool_iterations=data.get("max_tool_iterations", 10),
+            embedding_model=data.get("embedding_model", "nomic-embed-text"),
         )
 
 
@@ -77,6 +79,8 @@ def _apply_env_overrides(config: Config) -> Config:
         config.notifications.url = ntfy_url
     if ntfy_topic := os.environ.get("RADAR_NTFY_TOPIC"):
         config.notifications.topic = ntfy_topic
+    if embedding_model := os.environ.get("RADAR_EMBEDDING_MODEL"):
+        config.embedding_model = embedding_model
     return config
 
 
