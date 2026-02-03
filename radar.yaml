@@ -23,6 +23,13 @@ tools:
 # Maximum number of tool call iterations before stopping
 max_tool_iterations: 10
 
+# File watchers - monitor directories for changes
+# watch_paths:
+#   - path: ~/Downloads
+#     patterns: ["*.pdf"]
+#     description: "Downloads"
+#     action: "Summarize this PDF and notify me via ntfy"
+
 # Custom system prompt (optional)
 # Use {current_time} placeholder for current timestamp
 # system_prompt: |
