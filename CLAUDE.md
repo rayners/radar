@@ -1,6 +1,6 @@
 # Radar
 
-Local-first AI assistant with native Ollama tool calling. Currently at Phase 2 (Semantic Memory).
+Local-first AI assistant with native Ollama tool calling. Currently at Phase 2 (Daemon + Web Dashboard).
 
 ## Development
 
@@ -18,6 +18,13 @@ radar chat               # Interactive chat
 radar config             # Show configuration
 radar history            # View conversation history
 
+# Daemon mode
+radar start              # Start daemon (scheduler + web UI)
+radar start -h 0.0.0.0   # Listen on all interfaces (remote access)
+radar stop               # Stop daemon
+radar status             # Show daemon/scheduler status
+radar heartbeat          # Trigger manual heartbeat
+
 # Testing with specific Ollama host
 RADAR_OLLAMA_URL="http://host:11434" radar ask "test"
 ```
@@ -30,13 +37,16 @@ RADAR_OLLAMA_URL="http://host:11434" radar ask "test"
 - `radar/semantic.py` - Embedding client + SQLite semantic memory storage
 - `radar/config.py` - YAML config with env var overrides
 - `radar/tools/` - Tool modules registered via `@tool` decorator
+- `radar/scheduler.py` - APScheduler heartbeat with quiet hours + event queue
+- `radar/watchers.py` - File system monitoring with watchdog
+- `radar/web/` - FastAPI + HTMX web dashboard (mobile responsive)
 
 ## Code Conventions
 
 - Tools are registered with the `@tool` decorator in `radar/tools/`
 - Tools return strings (results displayed to user)
 - Config: YAML in `radar.yaml` or `~/.config/radar/radar.yaml`
-- Environment variables override config: `RADAR_OLLAMA_URL`, `RADAR_OLLAMA_MODEL`, `RADAR_NTFY_TOPIC`, `RADAR_EMBEDDING_MODEL`
+- Environment variables override config: `RADAR_OLLAMA_URL`, `RADAR_OLLAMA_MODEL`, `RADAR_NTFY_TOPIC`, `RADAR_EMBEDDING_MODEL`, `RADAR_WEB_HOST`, `RADAR_WEB_PORT`
 
 ## Key Design Decisions
 
@@ -97,3 +107,53 @@ Test tool functions directly (bypasses LLM):
 ```bash
 python -c "from radar.tools.recall import recall; print(recall('query'))"
 ```
+
+## Daemon Mode
+
+The daemon runs the scheduler and web server together:
+
+```bash
+radar start                    # Default: localhost:8420
+radar start -h 0.0.0.0 -p 9000 # Custom host/port
+radar stop                     # Stop daemon
+radar status                   # Check if running
+```
+
+PID file: `~/.local/share/radar/radar.pid`
+
+Configuration in `radar.yaml`:
+```yaml
+web:
+  host: "0.0.0.0"    # Listen on all interfaces
+  port: 8420
+
+heartbeat:
+  interval_minutes: 15
+  quiet_hours_start: "23:00"
+  quiet_hours_end: "07:00"
+```
+
+## Web Dashboard
+
+FastAPI + HTMX dashboard at `http://localhost:8420` when daemon is running.
+
+Pages: Dashboard, Chat, History, Memory, Tasks, Config, Logs
+
+Mobile responsive with hamburger menu for sidebar navigation.
+
+## File Watchers
+
+Monitor directories and queue events for heartbeat processing:
+
+```yaml
+# radar.yaml
+watch_paths:
+  - path: ~/Downloads
+    patterns: ["*.pdf", "*.epub"]
+    description: "Downloads"
+  - path: ~/Documents/notes
+    patterns: ["*.md"]
+    recursive: true
+```
+
+Events are collected and reported at each heartbeat interval.
