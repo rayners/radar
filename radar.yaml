@@ -4,7 +4,7 @@
 
 ollama:
   # Ollama API base URL
-  base_url: "http://big-think.internal:11434"
+  base_url: "http://localhost:11434"
   # Model to use for chat
   model: "qwen3:latest"
 
