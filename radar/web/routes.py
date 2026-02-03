@@ -234,6 +234,46 @@ async def logs(request: Request):
     return templates.TemplateResponse("logs.html", context)
 
 
+@app.get("/personalities", response_class=HTMLResponse)
+async def personalities(request: Request):
+    """Personalities management page."""
+    from radar.agent import get_personalities_dir, DEFAULT_PERSONALITY, load_personality
+    from radar.config import load_config
+
+    context = get_common_context(request, "personalities")
+    config = load_config()
+
+    # Ensure default exists
+    personalities_dir = get_personalities_dir()
+    default_file = personalities_dir / "default.md"
+    if not default_file.exists():
+        default_file.write_text(DEFAULT_PERSONALITY)
+
+    # List all personality files
+    personality_files = sorted(personalities_dir.glob("*.md"))
+    personalities_list = []
+    for pfile in personality_files:
+        name = pfile.stem
+        content = pfile.read_text()
+        # Get description (first non-empty, non-heading line)
+        description = ""
+        for line in content.split("\n"):
+            line = line.strip()
+            if line and not line.startswith("#"):
+                description = line[:100]
+                break
+        personalities_list.append({
+            "name": name,
+            "description": description,
+            "is_active": name == config.personality,
+        })
+
+    context["personalities"] = personalities_list
+    context["active_personality"] = config.personality
+
+    return templates.TemplateResponse("personalities.html", context)
+
+
 # ===== API Routes =====
 
 
@@ -344,6 +384,188 @@ async def api_config_test():
                     )
     except Exception as e:
         return HTMLResponse(f'<div class="text-error">✗ Connection failed: {e}</div>')
+
+
+# ===== Personality API Routes =====
+
+
+@app.get("/api/personalities")
+async def api_personalities_list():
+    """List all personalities."""
+    from radar.agent import get_personalities_dir, DEFAULT_PERSONALITY
+    from radar.config import load_config
+
+    config = load_config()
+    personalities_dir = get_personalities_dir()
+
+    # Ensure default exists
+    default_file = personalities_dir / "default.md"
+    if not default_file.exists():
+        default_file.write_text(DEFAULT_PERSONALITY)
+
+    personality_files = sorted(personalities_dir.glob("*.md"))
+    result = []
+    for pfile in personality_files:
+        name = pfile.stem
+        content = pfile.read_text()
+        description = ""
+        for line in content.split("\n"):
+            line = line.strip()
+            if line and not line.startswith("#"):
+                description = line[:100]
+                break
+        result.append({
+            "name": name,
+            "description": description,
+            "is_active": name == config.personality,
+        })
+
+    return {"personalities": result, "active": config.personality}
+
+
+@app.get("/api/personalities/{name}")
+async def api_personality_get(name: str):
+    """Get a personality's content."""
+    from radar.agent import get_personalities_dir, load_personality
+
+    content = load_personality(name)
+    return {"name": name, "content": content}
+
+
+@app.put("/api/personalities/{name}")
+async def api_personality_update(name: str, request: Request):
+    """Update a personality's content."""
+    from html import escape
+    from radar.agent import get_personalities_dir
+
+    form = await request.form()
+    content = form.get("content", "")
+
+    personalities_dir = get_personalities_dir()
+    personality_file = personalities_dir / f"{name}.md"
+
+    personality_file.write_text(content)
+
+    return HTMLResponse(
+        f'<div class="text-phosphor">✓ Personality "{escape(name)}" saved</div>'
+    )
+
+
+@app.post("/api/personalities")
+async def api_personality_create(request: Request):
+    """Create a new personality."""
+    from html import escape
+    from radar.agent import get_personalities_dir, DEFAULT_PERSONALITY
+
+    form = await request.form()
+    name = form.get("name", "").strip()
+
+    if not name:
+        return HTMLResponse(
+            '<div class="text-error">Name is required</div>',
+            status_code=400,
+        )
+
+    # Sanitize name (alphanumeric, dash, underscore only)
+    import re
+    if not re.match(r'^[a-zA-Z0-9_-]+$', name):
+        return HTMLResponse(
+            '<div class="text-error">Invalid name. Use only letters, numbers, dash, underscore.</div>',
+            status_code=400,
+        )
+
+    personalities_dir = get_personalities_dir()
+    personality_file = personalities_dir / f"{name}.md"
+
+    if personality_file.exists():
+        return HTMLResponse(
+            f'<div class="text-error">Personality "{escape(name)}" already exists</div>',
+            status_code=400,
+        )
+
+    # Create from template
+    content = DEFAULT_PERSONALITY.replace("# Default", f"# {name.title()}")
+    content = content.replace("A practical, local-first AI assistant.", f"A custom personality: {name}")
+    personality_file.write_text(content)
+
+    # Return redirect response
+    return RedirectResponse(url=f"/personalities?created={name}", status_code=303)
+
+
+@app.delete("/api/personalities/{name}")
+async def api_personality_delete(name: str):
+    """Delete a personality."""
+    from html import escape
+    from radar.agent import get_personalities_dir
+    from radar.config import load_config
+
+    if name == "default":
+        return HTMLResponse(
+            '<div class="text-error">Cannot delete default personality</div>',
+            status_code=400,
+        )
+
+    config = load_config()
+    if name == config.personality:
+        return HTMLResponse(
+            '<div class="text-error">Cannot delete active personality</div>',
+            status_code=400,
+        )
+
+    personalities_dir = get_personalities_dir()
+    personality_file = personalities_dir / f"{name}.md"
+
+    if not personality_file.exists():
+        return HTMLResponse(
+            f'<div class="text-error">Personality "{escape(name)}" not found</div>',
+            status_code=404,
+        )
+
+    personality_file.unlink()
+
+    # Return empty response for HTMX to remove the element
+    return HTMLResponse("")
+
+
+@app.post("/api/personalities/{name}/activate")
+async def api_personality_activate(name: str):
+    """Set a personality as active."""
+    import yaml
+    from html import escape
+    from radar.agent import get_personalities_dir
+    from radar.config import get_config_path, reload_config
+
+    personalities_dir = get_personalities_dir()
+    personality_file = personalities_dir / f"{name}.md"
+
+    if not personality_file.exists():
+        return HTMLResponse(
+            f'<div class="text-error">Personality "{escape(name)}" not found</div>',
+            status_code=404,
+        )
+
+    # Update config file
+    config_path = get_config_path()
+    if config_path:
+        with open(config_path) as f:
+            config_data = yaml.safe_load(f) or {}
+
+        config_data["personality"] = name
+
+        with open(config_path, "w") as f:
+            yaml.dump(config_data, f, default_flow_style=False)
+
+        # Reload config
+        reload_config()
+
+        return HTMLResponse(
+            f'<div class="text-phosphor">✓ Activated: {escape(name)}</div>'
+        )
+    else:
+        return HTMLResponse(
+            '<div class="text-error">No config file found. Set RADAR_PERSONALITY env var.</div>',
+            status_code=400,
+        )
 
 
 def run_server(host: str = "127.0.0.1", port: int = 8420):

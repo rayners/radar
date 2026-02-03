@@ -150,6 +150,7 @@ Embedding settings:
 Other:
 - `RADAR_NTFY_URL`, `RADAR_NTFY_TOPIC` - Notification settings
 - `RADAR_WEB_HOST`, `RADAR_WEB_PORT`, `RADAR_WEB_AUTH_TOKEN` - Web server settings
+- `RADAR_PERSONALITY` - Active personality name or path
 
 Deprecated (still work, but emit warnings):
 - `RADAR_OLLAMA_URL` - Use `RADAR_LLM_BASE_URL` instead
@@ -263,7 +264,7 @@ heartbeat:
 
 FastAPI + HTMX dashboard at `http://localhost:8420` when daemon is running.
 
-Pages: Dashboard, Chat, History, Memory, Tasks, Config, Logs
+Pages: Dashboard, Chat, History, Memory, Personalities, Tasks, Config, Logs
 
 Mobile responsive with hamburger menu for sidebar navigation.
 
@@ -285,6 +286,70 @@ watch_paths:
 ```
 
 The `action` field tells the agent what to do when files matching the pattern are detected. Events without actions are just reported. Events are collected and processed at each heartbeat interval.
+
+## Personalities
+
+Personality files customize Radar's behavior. Stored as markdown files in `~/.local/share/radar/personalities/`.
+
+### File Structure
+
+```
+~/.local/share/radar/personalities/
+  default.md           # Default personality (created if missing)
+  creative.md          # User-created personalities
+  technical.md
+```
+
+### Personality File Format
+
+```markdown
+# Personality Name
+
+Brief description of this personality style.
+
+## Instructions
+
+You are a helpful assistant with these characteristics:
+- Be concise and practical
+- Use technical language when appropriate
+
+## Context
+
+Additional context or knowledge to include.
+
+Current time: {current_time}
+```
+
+The `{current_time}` placeholder is replaced with the current timestamp.
+
+### Configuration
+
+```yaml
+# radar.yaml
+personality: default    # Name of personality file (without .md)
+# OR
+personality: ~/my-custom-personality.md  # Explicit path
+```
+
+Environment variable: `RADAR_PERSONALITY=creative`
+
+### CLI Commands
+
+```bash
+radar personality list           # List available personalities
+radar personality show [name]    # Display a personality
+radar personality edit [name]    # Open in $EDITOR
+radar personality create <name>  # Create new from template
+radar personality use <name>     # Set active personality
+
+# Per-command override
+radar ask -P creative "Tell me a joke"
+radar chat -P technical
+```
+
+### Web UI
+
+Navigate to `/personalities` to manage personalities via the web dashboard.
 
 ## Security
 

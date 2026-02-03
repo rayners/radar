@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Personalities - Radar{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-lg">
+    <h2 class="text-phosphor" style="font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.1em;">
+        PERSONALITIES
+    </h2>
+    <button class="btn btn--ghost"
+            onclick="showCreateModal()">
+        + New Personality
+    </button>
+</div>
+
+<!-- Active personality indicator -->
+<div class="card mb-lg">
+    <div class="card__body" style="padding: var(--space-md);">
+        <div class="flex justify-between items-center">
+            <div>
+                <span class="text-muted">Active:</span>
+                <span class="text-phosphor" style="font-weight: 600;">{{ active_personality }}</span>
+            </div>
+            <div id="activation-status"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Personality List -->
+<div class="personality-list" id="personality-list">
+    {% for p in personalities | default([]) %}
+    <div class="card mb-md" id="personality-{{ p.name }}">
+        <div class="card__header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+                {% if p.is_active %}
+                <span class="status-indicator__dot" style="width: 8px; height: 8px;"></span>
+                {% endif %}
+                <span class="card__title">{{ p.name }}</span>
+            </div>
+            <div style="display: flex; gap: var(--space-sm);">
+                {% if not p.is_active %}
+                <button class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;"
+                        hx-post="/api/personalities/{{ p.name }}/activate"
+                        hx-target="#activation-status"
+                        hx-swap="innerHTML"
+                        onclick="setTimeout(() => location.reload(), 500)">
+                    Activate
+                </button>
+                {% endif %}
+                <button class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;"
+                        onclick="editPersonality('{{ p.name }}')">
+                    Edit
+                </button>
+                {% if p.name != 'default' and not p.is_active %}
+                <button class="btn btn--ghost text-error" style="padding: 4px 8px; font-size: 0.7rem;"
+                        hx-delete="/api/personalities/{{ p.name }}"
+                        hx-target="#personality-{{ p.name }}"
+                        hx-swap="outerHTML"
+                        hx-confirm="Delete personality '{{ p.name }}'?">
+                    Delete
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card__body">
+            <p class="text-muted" style="font-size: 0.85rem;">{{ p.description or 'No description' }}</p>
+        </div>
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="card__body text-muted" style="text-align: center; padding: var(--space-xl);">
+            <p>No personalities found.</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Create Modal -->
+<div id="create-modal" class="modal" style="display: none;">
+    <div class="modal__backdrop" onclick="hideCreateModal()"></div>
+    <div class="modal__content card" style="max-width: 400px; margin: 20vh auto;">
+        <div class="card__header">
+            <span class="card__title">Create Personality</span>
+        </div>
+        <div class="card__body">
+            <form method="POST" action="/api/personalities">
+                <label class="config-field__label">Name</label>
+                <input type="text" name="name" class="input" placeholder="e.g., creative, technical, casual" required
+                       pattern="[a-zA-Z0-9_-]+" title="Letters, numbers, dash, underscore only">
+                <p class="text-muted mt-sm" style="font-size: 0.75rem;">Letters, numbers, dash, underscore only</p>
+                <div style="display: flex; gap: var(--space-sm); margin-top: var(--space-lg);">
+                    <button type="button" class="btn btn--ghost" onclick="hideCreateModal()">Cancel</button>
+                    <button type="submit" class="btn btn--primary">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="edit-modal" class="modal" style="display: none;">
+    <div class="modal__backdrop" onclick="hideEditModal()"></div>
+    <div class="modal__content card" style="max-width: 800px; margin: 10vh auto; max-height: 80vh; display: flex; flex-direction: column;">
+        <div class="card__header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span class="card__title">Edit: <span id="edit-name"></span></span>
+            <button class="btn btn--ghost" onclick="hideEditModal()" style="padding: 4px 8px;">&times;</button>
+        </div>
+        <div class="card__body" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+            <div id="edit-status" style="margin-bottom: var(--space-sm);"></div>
+            <textarea id="edit-content" class="input"
+                      style="flex: 1; min-height: 400px; font-family: var(--font-mono); font-size: 0.85rem; resize: vertical;"></textarea>
+            <div style="display: flex; gap: var(--space-sm); margin-top: var(--space-lg);">
+                <button type="button" class="btn btn--ghost" onclick="hideEditModal()">Cancel</button>
+                <button type="button" class="btn btn--primary" onclick="savePersonality()">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+}
+.modal__backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+}
+.modal__content {
+    position: relative;
+    z-index: 1001;
+}
+</style>
+
+<script>
+let currentEditName = '';
+
+function showCreateModal() {
+    document.getElementById('create-modal').style.display = 'block';
+}
+
+function hideCreateModal() {
+    document.getElementById('create-modal').style.display = 'none';
+}
+
+function hideEditModal() {
+    document.getElementById('edit-modal').style.display = 'none';
+    currentEditName = '';
+}
+
+async function editPersonality(name) {
+    currentEditName = name;
+    document.getElementById('edit-name').textContent = name;
+    document.getElementById('edit-status').textContent = '';
+
+    // Fetch content
+    try {
+        const response = await fetch(`/api/personalities/${encodeURIComponent(name)}`);
+        const data = await response.json();
+        document.getElementById('edit-content').value = data.content;
+        document.getElementById('edit-modal').style.display = 'block';
+    } catch (e) {
+        alert('Failed to load personality: ' + e);
+    }
+}
+
+async function savePersonality() {
+    if (!currentEditName) return;
+
+    const content = document.getElementById('edit-content').value;
+    const formData = new FormData();
+    formData.append('content', content);
+
+    const statusEl = document.getElementById('edit-status');
+
+    try {
+        const response = await fetch(`/api/personalities/${encodeURIComponent(currentEditName)}`, {
+            method: 'PUT',
+            body: formData
+        });
+
+        if (response.ok) {
+            statusEl.textContent = 'Saved successfully';
+            statusEl.className = 'text-phosphor';
+            setTimeout(() => {
+                hideEditModal();
+                location.reload();
+            }, 1000);
+        } else {
+            const text = await response.text();
+            statusEl.textContent = 'Failed to save';
+            statusEl.className = 'text-error';
+        }
+    } catch (e) {
+        statusEl.textContent = 'Failed to save: ' + e;
+        statusEl.className = 'text-error';
+    }
+}
+
+// Close modals on escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        hideCreateModal();
+        hideEditModal();
+    }
+});
+</script>
+{% endblock %}

@@ -116,6 +116,7 @@ class Config:
     system_prompt: str = ""
     max_tool_iterations: int = 10
     watch_paths: list[dict] = field(default_factory=list)
+    personality: str = "default"  # Personality file name or path
 
     # Deprecated: Use llm.base_url, llm.model instead
     # Kept for backward compatibility
@@ -200,6 +201,7 @@ class Config:
             system_prompt=data.get("system_prompt", ""),
             max_tool_iterations=data.get("max_tool_iterations", 10),
             watch_paths=data.get("watch_paths", []),
+            personality=data.get("personality", "default"),
             # Keep deprecated fields for backward compatibility
             ollama=OllamaConfig(
                 base_url=ollama_data.get("base_url", OllamaConfig.base_url),
@@ -262,6 +264,11 @@ def _apply_env_overrides(config: Config) -> Config:
         config.web.port = int(web_port)
     if web_auth := os.environ.get("RADAR_WEB_AUTH_TOKEN"):
         config.web.auth_token = web_auth
+
+    # Personality
+    if personality := os.environ.get("RADAR_PERSONALITY"):
+        config.personality = personality
+
     return config
 
 

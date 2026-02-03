@@ -1,6 +1,7 @@
 """Agent orchestration - context building and LLM interaction."""
 
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from radar.config import get_config
@@ -12,25 +13,82 @@ from radar.memory import (
     messages_to_api_format,
 )
 
-DEFAULT_SYSTEM_PROMPT = """You are Radar, a personal AI assistant running locally on the user's machine.
-You are concise, practical, and proactive. You use tools to take action rather
-than just suggesting what the user could do.
+DEFAULT_PERSONALITY = """# Default
 
-When given a task, execute it using your available tools. If you need multiple
-steps, work through them sequentially. Report results briefly.
+A practical, local-first AI assistant.
 
-If you discover something noteworthy during a task, flag it. If you're unsure
-about a destructive action, ask for confirmation.
+## Instructions
 
-Current time: {current_time}"""
+You are Radar, a personal AI assistant running locally on the user's machine.
+
+Be concise, practical, and proactive. You have access to tools - use them directly rather than suggesting actions.
+
+When given a task, execute it using your available tools. If you need multiple steps, work through them sequentially. Report results briefly.
+
+If you discover something noteworthy during a task, flag it. If you're unsure about a destructive action, ask for confirmation.
+
+Current time: {current_time}
+"""
 
 
-def _build_system_prompt() -> str:
-    """Build the system prompt with current time and personality notes."""
+def get_personalities_dir() -> Path:
+    """Get the personalities directory, creating if needed."""
+    dir_path = Path.home() / ".local" / "share" / "radar" / "personalities"
+    dir_path.mkdir(parents=True, exist_ok=True)
+    return dir_path
+
+
+def _ensure_default_personality() -> None:
+    """Create default personality file if it doesn't exist."""
+    default = get_personalities_dir() / "default.md"
+    if not default.exists():
+        default.write_text(DEFAULT_PERSONALITY)
+
+
+def load_personality(name_or_path: str) -> str:
+    """Load personality content from file.
+
+    Args:
+        name_or_path: Either a personality name (looked up in personalities dir)
+                      or an explicit path to a personality file.
+
+    Returns:
+        The personality content as a string.
+    """
+    # Ensure default exists
+    _ensure_default_personality()
+
+    # Check if it's an explicit path
+    path = Path(name_or_path).expanduser()
+    if path.exists() and path.is_file():
+        return path.read_text()
+
+    # Otherwise look in personalities directory
+    personality_file = get_personalities_dir() / f"{name_or_path}.md"
+    if personality_file.exists():
+        return personality_file.read_text()
+
+    # Fall back to default
+    return DEFAULT_PERSONALITY
+
+
+def _build_system_prompt(personality_override: str | None = None) -> str:
+    """Build the system prompt with current time and personality notes.
+
+    Args:
+        personality_override: Optional personality name/path to use instead of config.
+    """
     config = get_config()
-    template = config.system_prompt or DEFAULT_SYSTEM_PROMPT
+
+    # Use override if provided, otherwise use config
+    personality_name = personality_override or config.personality
+
+    # Load personality file (falls back to DEFAULT_PERSONALITY if not found)
+    template = load_personality(personality_name)
+
+    # Format with current time
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    prompt = template.format(current_time=current_time)
+    prompt = template.replace("{current_time}", current_time)
 
     # Inject personality notes from semantic memory
     try:
@@ -49,12 +107,14 @@ def _build_system_prompt() -> str:
 def run(
     user_message: str,
     conversation_id: str | None = None,
+    personality: str | None = None,
 ) -> tuple[str, str]:
     """Run the agent with a user message.
 
     Args:
         user_message: The user's input
         conversation_id: Optional existing conversation ID
+        personality: Optional personality name/path override
 
     Returns:
         Tuple of (assistant response text, conversation_id)
@@ -67,7 +127,7 @@ def run(
     add_message(conversation_id, "user", user_message)
 
     # Build messages for API
-    system_message = {"role": "system", "content": _build_system_prompt()}
+    system_message = {"role": "system", "content": _build_system_prompt(personality)}
 
     # Load conversation history
     stored_messages = get_messages(conversation_id)
@@ -91,16 +151,17 @@ def run(
     return response_text, conversation_id
 
 
-def ask(user_message: str) -> str:
+def ask(user_message: str, personality: str | None = None) -> str:
     """One-shot question without persistent conversation.
 
     Args:
         user_message: The user's question
+        personality: Optional personality name/path override
 
     Returns:
         Assistant response text
     """
-    system_message = {"role": "system", "content": _build_system_prompt()}
+    system_message = {"role": "system", "content": _build_system_prompt(personality)}
     user_msg = {"role": "user", "content": user_message}
 
     final_message, _ = chat([system_message, user_msg])

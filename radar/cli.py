@@ -50,7 +50,8 @@ def cli():
 
 @cli.command()
 @click.argument("question", nargs=-1, required=True)
-def ask(question: tuple[str, ...]):
+@click.option("--personality", "-P", help="Use a specific personality for this request")
+def ask(question: tuple[str, ...], personality: str | None):
     """Ask a one-shot question and get a response."""
     from radar.agent import ask as agent_ask
 
@@ -58,7 +59,7 @@ def ask(question: tuple[str, ...]):
 
     try:
         with console.status("[bold blue]Thinking...", spinner="dots"):
-            response = agent_ask(user_input)
+            response = agent_ask(user_input, personality=personality)
 
         if response:
             console.print(Markdown(response))
@@ -72,7 +73,8 @@ def ask(question: tuple[str, ...]):
 
 @cli.command()
 @click.option("--continue", "-c", "continue_id", help="Continue a previous conversation by ID")
-def chat(continue_id: str | None):
+@click.option("--personality", "-P", help="Use a specific personality for this session")
+def chat(continue_id: str | None, personality: str | None):
     """Start an interactive chat session."""
     from radar.agent import run
 
@@ -124,9 +126,9 @@ def chat(continue_id: str | None):
         try:
             if is_interactive:
                 with console.status("[bold blue]Thinking...", spinner="dots"):
-                    response, conversation_id = run(user_input, conversation_id)
+                    response, conversation_id = run(user_input, conversation_id, personality=personality)
             else:
-                response, conversation_id = run(user_input, conversation_id)
+                response, conversation_id = run(user_input, conversation_id, personality=personality)
 
             if is_interactive:
                 console.print()
@@ -336,6 +338,168 @@ def heartbeat():
         result = trigger_heartbeat()
 
     console.print(f"[green]{result}[/green]")
+
+
+# ===== Personality Commands =====
+
+
+@cli.group()
+def personality():
+    """Manage personality files."""
+    pass
+
+
+@personality.command("list")
+def personality_list():
+    """List available personalities."""
+    from radar.agent import get_personalities_dir, DEFAULT_PERSONALITY
+
+    # Ensure default exists
+    personalities_dir = get_personalities_dir()
+    default_file = personalities_dir / "default.md"
+    if not default_file.exists():
+        default_file.write_text(DEFAULT_PERSONALITY)
+
+    # Get current active personality
+    cfg = get_config()
+    active = cfg.personality
+
+    console.print(Panel.fit("[bold]Available Personalities[/bold]", border_style="blue"))
+    console.print()
+
+    # List all .md files in personalities directory
+    personality_files = sorted(personalities_dir.glob("*.md"))
+
+    if not personality_files:
+        console.print("[dim]No personalities found[/dim]")
+        return
+
+    for pfile in personality_files:
+        name = pfile.stem
+        is_active = name == active or str(pfile) == active
+        marker = "[green]* [/green]" if is_active else "  "
+        # Get first non-empty, non-heading line as description
+        content = pfile.read_text()
+        description = ""
+        for line in content.split("\n"):
+            line = line.strip()
+            if line and not line.startswith("#"):
+                description = line[:60]
+                if len(line) > 60:
+                    description += "..."
+                break
+        console.print(f"{marker}[bold]{name}[/bold]")
+        if description:
+            console.print(f"    [dim]{description}[/dim]")
+
+
+@personality.command("show")
+@click.argument("name", default="")
+def personality_show(name: str):
+    """Display a personality file."""
+    from radar.agent import get_personalities_dir, load_personality
+
+    cfg = get_config()
+    name = name or cfg.personality
+
+    content = load_personality(name)
+    console.print(Panel.fit(f"[bold]Personality: {name}[/bold]", border_style="blue"))
+    console.print()
+    console.print(Markdown(content))
+
+
+@personality.command("edit")
+@click.argument("name", default="")
+def personality_edit(name: str):
+    """Open a personality file in $EDITOR."""
+    import subprocess
+
+    from radar.agent import get_personalities_dir, DEFAULT_PERSONALITY
+
+    cfg = get_config()
+    name = name or cfg.personality
+
+    personalities_dir = get_personalities_dir()
+    personality_file = personalities_dir / f"{name}.md"
+
+    # Create if it doesn't exist
+    if not personality_file.exists():
+        if name == "default":
+            personality_file.write_text(DEFAULT_PERSONALITY)
+        else:
+            console.print(f"[yellow]Personality '{name}' does not exist. Creating from template...[/yellow]")
+            personality_file.write_text(DEFAULT_PERSONALITY.replace("# Default", f"# {name.title()}"))
+
+    # Get editor
+    editor = os.environ.get("EDITOR", "nano")
+
+    console.print(f"[dim]Opening {personality_file} in {editor}...[/dim]")
+    subprocess.run([editor, str(personality_file)])
+
+
+@personality.command("create")
+@click.argument("name")
+def personality_create(name: str):
+    """Create a new personality from template."""
+    from radar.agent import get_personalities_dir, DEFAULT_PERSONALITY
+
+    personalities_dir = get_personalities_dir()
+    personality_file = personalities_dir / f"{name}.md"
+
+    if personality_file.exists():
+        console.print(f"[red]Personality '{name}' already exists[/red]")
+        raise SystemExit(1)
+
+    # Create from template with customized name
+    content = DEFAULT_PERSONALITY.replace("# Default", f"# {name.title()}")
+    content = content.replace("A practical, local-first AI assistant.", f"A custom personality for {name}.")
+    personality_file.write_text(content)
+
+    console.print(f"[green]Created personality: {name}[/green]")
+    console.print(f"[dim]File: {personality_file}[/dim]")
+    console.print()
+    console.print("Edit with: [bold]radar personality edit {name}[/bold]")
+    console.print("Use with:  [bold]radar personality use {name}[/bold]")
+
+
+@personality.command("use")
+@click.argument("name")
+def personality_use(name: str):
+    """Set the active personality."""
+    from radar.agent import get_personalities_dir, load_personality
+    from radar.config import get_config_path
+
+    # Verify personality exists
+    personalities_dir = get_personalities_dir()
+    personality_file = personalities_dir / f"{name}.md"
+    path = Path(name).expanduser()
+
+    if not personality_file.exists() and not path.exists():
+        console.print(f"[red]Personality '{name}' not found[/red]")
+        console.print()
+        console.print("Available personalities:")
+        for pfile in sorted(personalities_dir.glob("*.md")):
+            console.print(f"  - {pfile.stem}")
+        raise SystemExit(1)
+
+    # Update config file
+    config_path = get_config_path()
+    if config_path:
+        import yaml
+
+        with open(config_path) as f:
+            config_data = yaml.safe_load(f) or {}
+
+        config_data["personality"] = name
+
+        with open(config_path, "w") as f:
+            yaml.dump(config_data, f, default_flow_style=False)
+
+        console.print(f"[green]Active personality set to: {name}[/green]")
+        console.print(f"[dim]Updated: {config_path}[/dim]")
+    else:
+        console.print(f"[yellow]No config file found. Set via environment:[/yellow]")
+        console.print(f"  export RADAR_PERSONALITY={name}")
 
 
 if __name__ == "__main__":
