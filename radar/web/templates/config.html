@@ -15,19 +15,32 @@
               hx-swap="none"
               hx-on::after-request="alert('Configuration saved!')">
 
-            <!-- Ollama Section -->
+            <!-- LLM Section -->
             <div class="config-section">
-                <div class="config-section__title">Ollama</div>
+                <div class="config-section__title">LLM</div>
+
+                <div class="config-field">
+                    <label class="config-field__label">Provider</label>
+                    <div>
+                        <select name="llm.provider" class="input">
+                            <option value="ollama" {{ 'selected' if config.llm.provider == 'ollama' else '' }}>ollama</option>
+                            <option value="openai" {{ 'selected' if config.llm.provider == 'openai' else '' }}>openai</option>
+                        </select>
+                        <div class="config-field__help">
+                            "ollama" for Ollama API, "openai" for OpenAI-compatible APIs (LiteLLM, OpenAI, etc.)
+                        </div>
+                    </div>
+                </div>
 
                 <div class="config-field">
                     <label class="config-field__label">Base URL</label>
                     <div>
                         <input type="text"
-                               name="ollama.base_url"
+                               name="llm.base_url"
                                class="input"
-                               value="{{ config.ollama.base_url | default('http://localhost:11434') }}">
+                               value="{{ config.llm.base_url | default('http://localhost:11434') }}">
                         <div class="config-field__help">
-                            Ollama API endpoint. Use localhost or remote host.
+                            API endpoint. Ollama: http://localhost:11434, OpenAI: https://api.openai.com/v1
                         </div>
                     </div>
                 </div>
@@ -36,11 +49,44 @@
                     <label class="config-field__label">Model</label>
                     <div>
                         <input type="text"
-                               name="ollama.model"
+                               name="llm.model"
                                class="input"
-                               value="{{ config.ollama.model | default('llama3.2') }}">
+                               value="{{ config.llm.model | default('qwen3:latest') }}">
                         <div class="config-field__help">
                             Model name for chat. Must support tool calling.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Embedding Section -->
+            <div class="config-section">
+                <div class="config-section__title">Embeddings</div>
+
+                <div class="config-field">
+                    <label class="config-field__label">Provider</label>
+                    <div>
+                        <select name="embedding.provider" class="input">
+                            <option value="ollama" {{ 'selected' if config.embedding.provider == 'ollama' else '' }}>ollama</option>
+                            <option value="openai" {{ 'selected' if config.embedding.provider == 'openai' else '' }}>openai</option>
+                            <option value="local" {{ 'selected' if config.embedding.provider == 'local' else '' }}>local</option>
+                            <option value="none" {{ 'selected' if config.embedding.provider == 'none' else '' }}>none (disabled)</option>
+                        </select>
+                        <div class="config-field__help">
+                            Embedding provider. "local" uses sentence-transformers (no API needed).
+                        </div>
+                    </div>
+                </div>
+
+                <div class="config-field">
+                    <label class="config-field__label">Model</label>
+                    <div>
+                        <input type="text"
+                               name="embedding.model"
+                               class="input"
+                               value="{{ config.embedding.model | default('nomic-embed-text') }}">
+                        <div class="config-field__help">
+                            Embedding model name. Ollama: nomic-embed-text, OpenAI: text-embedding-3-small, Local: all-MiniLM-L6-v2
                         </div>
                     </div>
                 </div>

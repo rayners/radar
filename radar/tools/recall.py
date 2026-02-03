@@ -1,6 +1,6 @@
 """Recall tool for searching semantic memory."""
 
-from radar.semantic import search_memories
+from radar.semantic import is_embedding_available, search_memories
 from radar.tools import tool
 
 
@@ -21,6 +21,9 @@ from radar.tools import tool
 )
 def recall(query: str, limit: int = 5) -> str:
     """Search semantic memory for relevant facts."""
+    if not is_embedding_available():
+        return "Semantic memory is disabled (no embedding provider configured)"
+
     try:
         memories = search_memories(query, limit)
         if not memories:

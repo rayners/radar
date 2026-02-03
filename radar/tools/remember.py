@@ -1,6 +1,6 @@
 """Remember tool for storing facts in semantic memory."""
 
-from radar.semantic import store_memory
+from radar.semantic import is_embedding_available, store_memory
 from radar.tools import tool
 
 
@@ -16,6 +16,9 @@ from radar.tools import tool
 )
 def remember(content: str) -> str:
     """Store a fact in semantic memory."""
+    if not is_embedding_available():
+        return "Semantic memory is disabled (no embedding provider configured)"
+
     try:
         memory_id = store_memory(content, source="user")
         return f"Remembered: {content}"

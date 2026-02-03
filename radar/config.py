@@ -1,6 +1,7 @@
 """Configuration management for Radar."""
 
 import os
+import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -9,8 +10,53 @@ import yaml
 
 
 @dataclass
+class LLMConfig:
+    """LLM provider configuration."""
+
+    # Provider: "ollama" or "openai" (OpenAI-compatible API)
+    provider: str = "ollama"
+
+    # Model name
+    # Ollama: "qwen3:latest", "llama3.2"
+    # OpenAI: "gpt-4o", "claude-3-5-sonnet" (via LiteLLM proxy)
+    model: str = "qwen3:latest"
+
+    # Base URL for API
+    # Ollama: "http://localhost:11434"
+    # OpenAI/LiteLLM proxy: "http://litellm.internal:4000" or "https://api.openai.com/v1"
+    base_url: str = "http://localhost:11434"
+
+    # API key (use env var RADAR_API_KEY, not config file)
+    api_key: str = ""
+
+
+@dataclass
+class EmbeddingConfig:
+    """Embedding provider configuration."""
+
+    # Provider: "ollama", "openai", "local", or "none"
+    # - ollama: Use Ollama's /api/embed endpoint
+    # - openai: Use OpenAI-compatible embedding API
+    # - local: Use sentence-transformers locally
+    # - none: Disable semantic memory features
+    provider: str = "ollama"
+
+    # Model name
+    # Ollama: "nomic-embed-text"
+    # OpenAI: "text-embedding-3-small"
+    # Local: "all-MiniLM-L6-v2"
+    model: str = "nomic-embed-text"
+
+    # Base URL (defaults to LLM base_url if not set)
+    base_url: str = ""
+
+    # API key (defaults to LLM api_key if not set)
+    api_key: str = ""
+
+
+@dataclass
 class OllamaConfig:
-    """Ollama API configuration."""
+    """Ollama API configuration (deprecated, use LLMConfig)."""
 
     base_url: str = "http://localhost:11434"
     model: str = "qwen3:latest"
@@ -61,29 +107,76 @@ class WebConfig:
 class Config:
     """Main configuration container."""
 
-    ollama: OllamaConfig = field(default_factory=OllamaConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
+    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     notifications: NotifyConfig = field(default_factory=NotifyConfig)
     tools: ToolsConfig = field(default_factory=ToolsConfig)
     heartbeat: HeartbeatConfig = field(default_factory=HeartbeatConfig)
     web: WebConfig = field(default_factory=WebConfig)
     system_prompt: str = ""
     max_tool_iterations: int = 10
-    embedding_model: str = "nomic-embed-text"
     watch_paths: list[dict] = field(default_factory=list)
+
+    # Deprecated: Use llm.base_url, llm.model instead
+    # Kept for backward compatibility
+    ollama: OllamaConfig = field(default_factory=OllamaConfig)
+    embedding_model: str = "nomic-embed-text"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Config":
         """Create Config from dictionary."""
+        llm_data = data.get("llm", {})
+        embedding_data = data.get("embedding", {})
         ollama_data = data.get("ollama", {})
         notify_data = data.get("notifications", {})
         tools_data = data.get("tools", {})
         heartbeat_data = data.get("heartbeat", {})
         web_data = data.get("web", {})
 
+        # Backward compatibility: if 'ollama' section exists but not 'llm', migrate
+        if ollama_data and not llm_data:
+            warnings.warn(
+                "Config 'ollama' section is deprecated. Use 'llm' with provider='ollama' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            llm_data = {
+                "provider": "ollama",
+                "base_url": ollama_data.get("base_url", LLMConfig.base_url),
+                "model": ollama_data.get("model", LLMConfig.model),
+            }
+
+        # Backward compatibility: if 'embedding_model' exists but not 'embedding', migrate
+        old_embedding_model = data.get("embedding_model")
+        if old_embedding_model and not embedding_data:
+            warnings.warn(
+                "Config 'embedding_model' is deprecated. Use 'embedding.model' instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            embedding_data = {"model": old_embedding_model}
+
+        # Security warning: API key in config file
+        if llm_data.get("api_key") or embedding_data.get("api_key"):
+            warnings.warn(
+                "API key found in config file. For security, use RADAR_API_KEY "
+                "environment variable instead to avoid committing secrets.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         return cls(
-            ollama=OllamaConfig(
-                base_url=ollama_data.get("base_url", OllamaConfig.base_url),
-                model=ollama_data.get("model", OllamaConfig.model),
+            llm=LLMConfig(
+                provider=llm_data.get("provider", LLMConfig.provider),
+                model=llm_data.get("model", LLMConfig.model),
+                base_url=llm_data.get("base_url", LLMConfig.base_url),
+                api_key=llm_data.get("api_key", LLMConfig.api_key),
+            ),
+            embedding=EmbeddingConfig(
+                provider=embedding_data.get("provider", EmbeddingConfig.provider),
+                model=embedding_data.get("model", EmbeddingConfig.model),
+                base_url=embedding_data.get("base_url", EmbeddingConfig.base_url),
+                api_key=embedding_data.get("api_key", EmbeddingConfig.api_key),
             ),
             notifications=NotifyConfig(
                 url=notify_data.get("url", NotifyConfig.url),
@@ -106,23 +199,63 @@ class Config:
             ),
             system_prompt=data.get("system_prompt", ""),
             max_tool_iterations=data.get("max_tool_iterations", 10),
-            embedding_model=data.get("embedding_model", "nomic-embed-text"),
             watch_paths=data.get("watch_paths", []),
+            # Keep deprecated fields for backward compatibility
+            ollama=OllamaConfig(
+                base_url=ollama_data.get("base_url", OllamaConfig.base_url),
+                model=ollama_data.get("model", OllamaConfig.model),
+            ),
+            embedding_model=data.get("embedding_model", "nomic-embed-text"),
         )
 
 
 def _apply_env_overrides(config: Config) -> Config:
     """Apply environment variable overrides."""
+    # New LLM config env vars
+    if api_key := os.environ.get("RADAR_API_KEY"):
+        config.llm.api_key = api_key
+    if llm_provider := os.environ.get("RADAR_LLM_PROVIDER"):
+        config.llm.provider = llm_provider
+    if base_url := os.environ.get("RADAR_LLM_BASE_URL"):
+        config.llm.base_url = base_url
+    if model := os.environ.get("RADAR_LLM_MODEL"):
+        config.llm.model = model
+
+    # New embedding config env vars
+    if emb_provider := os.environ.get("RADAR_EMBEDDING_PROVIDER"):
+        config.embedding.provider = emb_provider
+    if emb_model := os.environ.get("RADAR_EMBEDDING_MODEL"):
+        config.embedding.model = emb_model
+    if emb_base_url := os.environ.get("RADAR_EMBEDDING_BASE_URL"):
+        config.embedding.base_url = emb_base_url
+    if emb_api_key := os.environ.get("RADAR_EMBEDDING_API_KEY"):
+        config.embedding.api_key = emb_api_key
+
+    # Backward compatibility: old Ollama env vars (deprecated)
     if url := os.environ.get("RADAR_OLLAMA_URL"):
+        warnings.warn(
+            "RADAR_OLLAMA_URL is deprecated. Use RADAR_LLM_BASE_URL instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        config.llm.base_url = url
         config.ollama.base_url = url
-    if model := os.environ.get("RADAR_OLLAMA_MODEL"):
-        config.ollama.model = model
+    if ollama_model := os.environ.get("RADAR_OLLAMA_MODEL"):
+        warnings.warn(
+            "RADAR_OLLAMA_MODEL is deprecated. Use RADAR_LLM_MODEL instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        config.llm.model = ollama_model
+        config.ollama.model = ollama_model
+
+    # Notification env vars
     if ntfy_url := os.environ.get("RADAR_NTFY_URL"):
         config.notifications.url = ntfy_url
     if ntfy_topic := os.environ.get("RADAR_NTFY_TOPIC"):
         config.notifications.topic = ntfy_topic
-    if embedding_model := os.environ.get("RADAR_EMBEDDING_MODEL"):
-        config.embedding_model = embedding_model
+
+    # Web server env vars
     if web_host := os.environ.get("RADAR_WEB_HOST"):
         config.web.host = web_host
     if web_port := os.environ.get("RADAR_WEB_PORT"):

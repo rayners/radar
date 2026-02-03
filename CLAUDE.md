@@ -2,7 +2,7 @@
 
 Local-only AI assistant with native Ollama tool calling. Inspired by [OpenClaw.ai](https://openclaw.ai).
 
-**Local-only by design** - all data stays on your machine. No cloud APIs, no telemetry.
+**Local-first by design** - all data stays on your machine. Supports Ollama (default) and OpenAI-compatible APIs (LiteLLM proxy, OpenAI, etc.).
 
 Currently at Phase 2 (Daemon + Web Dashboard).
 
@@ -29,16 +29,19 @@ radar stop               # Stop daemon
 radar status             # Show daemon/scheduler status
 radar heartbeat          # Trigger manual heartbeat
 
-# Testing with specific Ollama host
-RADAR_OLLAMA_URL="http://host:11434" radar ask "test"
+# Testing with specific LLM endpoint
+RADAR_LLM_BASE_URL="http://host:11434" radar ask "test"
+
+# Using OpenAI-compatible API
+RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API_KEY=sk-... radar ask "test"
 ```
 
 ## Architecture
 
 - `radar/agent.py` - Orchestrates context building + tool call loop
-- `radar/llm.py` - Ollama client (uses `/api/chat` with `stream: false`)
+- `radar/llm.py` - LLM client (Ollama native or OpenAI-compatible APIs)
 - `radar/memory.py` - JSONL conversation storage (one file per conversation)
-- `radar/semantic.py` - Embedding client + SQLite semantic memory storage
+- `radar/semantic.py` - Embedding client (Ollama, OpenAI, or local sentence-transformers)
 - `radar/config.py` - YAML config with env var overrides
 - `radar/tools/` - Tool modules registered via `@tool` decorator
 - `radar/scheduler.py` - APScheduler heartbeat with quiet hours + event queue
@@ -51,7 +54,7 @@ RADAR_OLLAMA_URL="http://host:11434" radar ask "test"
 - Tools are registered with the `@tool` decorator in `radar/tools/`
 - Tools return strings (results displayed to user)
 - Config: YAML in `radar.yaml` or `~/.config/radar/radar.yaml`
-- Environment variables override config: `RADAR_OLLAMA_URL`, `RADAR_OLLAMA_MODEL`, `RADAR_NTFY_TOPIC`, `RADAR_EMBEDDING_MODEL`, `RADAR_WEB_HOST`, `RADAR_WEB_PORT`, `RADAR_WEB_AUTH_TOKEN`
+- Environment variables override config (see Configuration section below)
 
 ## Key Design Decisions
 
@@ -82,9 +85,127 @@ Then import in `radar/tools/__init__.py`.
 
 ## Configuration
 
-Default Ollama: `http://big-think.internal:11434` with model `qwen3:latest`
+### LLM Provider
 
-Models tested working: `qwen3:latest`, `llama3.2` (note: llama3.2 has inconsistent tool calling)
+Supports two providers: `ollama` (default) and `openai` (OpenAI-compatible APIs).
+
+```yaml
+# radar.yaml - Local Ollama (default)
+llm:
+  provider: ollama
+  model: qwen3:latest
+  base_url: http://localhost:11434
+
+# LiteLLM proxy or OpenAI-compatible API
+llm:
+  provider: openai
+  model: gpt-4o  # Or any model your proxy provides
+  base_url: http://litellm.internal:4000  # Or https://api.openai.com/v1
+```
+
+API keys should be set via environment variable (not config file):
+```bash
+export RADAR_API_KEY=your-api-key
+```
+
+### Embedding Provider
+
+Supports: `ollama` (default), `openai`, `local` (sentence-transformers), or `none` (disable).
+
+```yaml
+# Ollama embeddings (default)
+embedding:
+  provider: ollama
+  model: nomic-embed-text
+
+# OpenAI-compatible embeddings
+embedding:
+  provider: openai
+  model: text-embedding-3-small
+
+# Local embeddings (CPU, no API needed)
+embedding:
+  provider: local
+  model: all-MiniLM-L6-v2  # Requires: pip install sentence-transformers
+
+# Disable semantic memory
+embedding:
+  provider: none
+```
+
+### Environment Variables
+
+LLM settings:
+- `RADAR_API_KEY` - API key for OpenAI-compatible providers
+- `RADAR_LLM_PROVIDER` - "ollama" or "openai"
+- `RADAR_LLM_BASE_URL` - API endpoint URL
+- `RADAR_LLM_MODEL` - Model name
+
+Embedding settings:
+- `RADAR_EMBEDDING_PROVIDER` - "ollama", "openai", "local", or "none"
+- `RADAR_EMBEDDING_MODEL` - Embedding model name
+- `RADAR_EMBEDDING_BASE_URL` - Embedding API endpoint (defaults to LLM URL)
+- `RADAR_EMBEDDING_API_KEY` - Embedding API key (defaults to LLM key)
+
+Other:
+- `RADAR_NTFY_URL`, `RADAR_NTFY_TOPIC` - Notification settings
+- `RADAR_WEB_HOST`, `RADAR_WEB_PORT`, `RADAR_WEB_AUTH_TOKEN` - Web server settings
+
+Deprecated (still work, but emit warnings):
+- `RADAR_OLLAMA_URL` - Use `RADAR_LLM_BASE_URL` instead
+- `RADAR_OLLAMA_MODEL` - Use `RADAR_LLM_MODEL` instead
+
+### Config Examples
+
+**Local Ollama (default):**
+```yaml
+llm:
+  provider: ollama
+  model: qwen3:latest
+  base_url: http://localhost:11434
+embedding:
+  provider: ollama
+  model: nomic-embed-text
+```
+
+**LiteLLM Proxy:**
+```yaml
+llm:
+  provider: openai
+  model: gpt-4o
+  base_url: http://litellm.internal:4000
+embedding:
+  provider: none  # If proxy doesn't support embeddings
+```
+Set: `RADAR_API_KEY=your-proxy-key`
+
+**Direct OpenAI:**
+```yaml
+llm:
+  provider: openai
+  model: gpt-4o
+  base_url: https://api.openai.com/v1
+embedding:
+  provider: openai
+  model: text-embedding-3-small
+```
+Set: `RADAR_API_KEY=sk-...`
+
+**OpenAI Chat + Local Embeddings (no Ollama needed):**
+```yaml
+llm:
+  provider: openai
+  model: gpt-4o
+  base_url: https://api.openai.com/v1
+embedding:
+  provider: local
+  model: all-MiniLM-L6-v2
+```
+Requires: `pip install radar[local-embeddings]`
+
+### Models Tested
+
+Ollama: `qwen3:latest`, `llama3.2` (note: llama3.2 has inconsistent tool calling)
 
 Default embedding model: `nomic-embed-text`
 

@@ -9,6 +9,9 @@ import httpx
 
 from radar.config import get_config
 
+# Cache for local embedding model
+_local_model = None
+
 
 def _get_db_path() -> Path:
     """Get the path to the memory database."""
@@ -51,22 +54,51 @@ def _deserialize_embedding(data: bytes) -> list[float]:
     return list(struct.unpack(f"{count}f", data))
 
 
+def is_embedding_available() -> bool:
+    """Check if embedding functionality is available.
+
+    Returns:
+        True if embeddings are configured and available, False otherwise.
+    """
+    config = get_config()
+    return config.embedding.provider != "none"
+
+
 def get_embedding(text: str) -> list[float]:
-    """Get embedding for text from Ollama.
+    """Get embedding for text.
 
     Args:
         text: Text to embed
 
     Returns:
         List of floats representing the embedding
+
+    Raises:
+        RuntimeError: If embedding provider is 'none' or embedding fails
     """
     config = get_config()
-    url = f"{config.ollama.base_url.rstrip('/')}/api/embed"
+    provider = config.embedding.provider
+
+    if provider == "none":
+        raise RuntimeError("Embeddings disabled (provider=none)")
+    elif provider == "openai":
+        return _get_embedding_openai(text, config)
+    elif provider == "local":
+        return _get_embedding_local(text, config)
+    else:  # ollama (default)
+        return _get_embedding_ollama(text, config)
+
+
+def _get_embedding_ollama(text: str, config) -> list[float]:
+    """Get embedding using Ollama's /api/embed endpoint."""
+    # Use embedding base_url if set, otherwise fall back to LLM base_url
+    base_url = config.embedding.base_url or config.llm.base_url
+    url = f"{base_url.rstrip('/')}/api/embed"
 
     response = httpx.post(
         url,
         json={
-            "model": config.embedding_model,
+            "model": config.embedding.model,
             "input": text,
         },
         timeout=60,
@@ -80,6 +112,42 @@ def get_embedding(text: str) -> list[float]:
         raise RuntimeError("No embedding returned from Ollama")
 
     return embeddings[0]
+
+
+def _get_embedding_openai(text: str, config) -> list[float]:
+    """Get embedding using OpenAI-compatible API."""
+    from openai import OpenAI
+
+    # Use embedding-specific settings if provided, otherwise fall back to LLM settings
+    base_url = config.embedding.base_url or config.llm.base_url
+    api_key = config.embedding.api_key or config.llm.api_key or "not-needed"
+
+    client = OpenAI(base_url=base_url, api_key=api_key)
+    response = client.embeddings.create(
+        model=config.embedding.model,
+        input=[text],
+    )
+    return response.data[0].embedding
+
+
+def _get_embedding_local(text: str, config) -> list[float]:
+    """Get embedding using sentence-transformers locally."""
+    global _local_model
+
+    try:
+        from sentence_transformers import SentenceTransformer
+    except ImportError:
+        raise RuntimeError(
+            "sentence-transformers not installed. "
+            "Install with: pip install sentence-transformers"
+        )
+
+    # Cache model instance for reuse
+    if _local_model is None:
+        _local_model = SentenceTransformer(config.embedding.model)
+
+    embedding = _local_model.encode(text)
+    return embedding.tolist()
 
 
 def cosine_similarity(a: list[float], b: list[float]) -> float:
@@ -101,6 +169,9 @@ def store_memory(content: str, source: str | None = None) -> int:
 
     Returns:
         The ID of the stored memory
+
+    Raises:
+        RuntimeError: If embeddings are disabled
     """
     embedding = get_embedding(content)
     embedding_bytes = _serialize_embedding(embedding)
@@ -126,6 +197,9 @@ def search_memories(query: str, limit: int = 5) -> list[dict]:
 
     Returns:
         List of memory dicts with content, created_at, and similarity score
+
+    Raises:
+        RuntimeError: If embeddings are disabled
     """
     query_embedding = get_embedding(query)
 

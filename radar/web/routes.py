@@ -191,7 +191,15 @@ async def config(request: Request):
     config_path = get_config_path()
 
     context["config"] = {
-        "ollama": {"base_url": config.ollama.base_url, "model": config.ollama.model},
+        "llm": {
+            "provider": config.llm.provider,
+            "base_url": config.llm.base_url,
+            "model": config.llm.model,
+        },
+        "embedding": {
+            "provider": config.embedding.provider,
+            "model": config.embedding.model,
+        },
         "notifications": {
             "url": config.notifications.url,
             "topic": config.notifications.topic,
@@ -289,7 +297,7 @@ async def api_chat(request: Request):
 
 @app.get("/api/config/test")
 async def api_config_test():
-    """Test Ollama connection."""
+    """Test LLM connection."""
     import httpx
     from radar.config import load_config
 
@@ -297,22 +305,43 @@ async def api_config_test():
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{config.ollama.base_url}/api/tags", timeout=5.0
-            )
-            if response.status_code == 200:
-                data = response.json()
-                models = [m["name"] for m in data.get("models", [])]
-                model_list = ", ".join(models[:5])
-                if len(models) > 5:
-                    model_list += f" (+{len(models) - 5} more)"
-                return HTMLResponse(
-                    f'<div class="text-phosphor">✓ Connected. Available: {model_list}</div>'
+            if config.llm.provider == "ollama":
+                # Test Ollama API
+                response = await client.get(
+                    f"{config.llm.base_url}/api/tags", timeout=5.0
                 )
+                if response.status_code == 200:
+                    data = response.json()
+                    models = [m["name"] for m in data.get("models", [])]
+                    model_list = ", ".join(models[:5])
+                    if len(models) > 5:
+                        model_list += f" (+{len(models) - 5} more)"
+                    return HTMLResponse(
+                        f'<div class="text-phosphor">✓ Ollama connected. Available: {model_list}</div>'
+                    )
+                else:
+                    return HTMLResponse(
+                        f'<div class="text-error">✗ Ollama error: HTTP {response.status_code}</div>'
+                    )
             else:
-                return HTMLResponse(
-                    f'<div class="text-error">✗ Error: HTTP {response.status_code}</div>'
+                # Test OpenAI-compatible API
+                headers = {}
+                if config.llm.api_key:
+                    headers["Authorization"] = f"Bearer {config.llm.api_key}"
+                response = await client.get(
+                    f"{config.llm.base_url}/models", headers=headers, timeout=5.0
                 )
+                if response.status_code == 200:
+                    data = response.json()
+                    models = [m.get("id", "?") for m in data.get("data", [])][:5]
+                    model_list = ", ".join(models) if models else config.llm.model
+                    return HTMLResponse(
+                        f'<div class="text-phosphor">✓ OpenAI API connected. Models: {model_list}</div>'
+                    )
+                else:
+                    return HTMLResponse(
+                        f'<div class="text-error">✗ API error: HTTP {response.status_code}</div>'
+                    )
     except Exception as e:
         return HTMLResponse(f'<div class="text-error">✗ Connection failed: {e}</div>')
 

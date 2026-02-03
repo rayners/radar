@@ -51,7 +51,7 @@
                 <div class="stat__label">Active Model</div>
             </div>
             <div class="mt-md text-muted" style="font-size: 0.8rem; text-align: center;">
-                {{ ollama_url | default('big-think.internal:11434') }}
+                {{ llm_provider | default('ollama') }} @ {{ llm_url | default('localhost:11434') }}
             </div>
         </div>
     </div>

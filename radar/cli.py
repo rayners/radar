@@ -150,9 +150,18 @@ def config():
 
     console.print(Panel.fit("[bold]Radar Configuration[/bold]", border_style="blue"))
     console.print()
-    console.print("[bold]Ollama:[/bold]")
-    console.print(f"  Base URL: {cfg.ollama.base_url}")
-    console.print(f"  Model: {cfg.ollama.model}")
+    console.print("[bold]LLM:[/bold]")
+    console.print(f"  Provider: {cfg.llm.provider}")
+    console.print(f"  Base URL: {cfg.llm.base_url}")
+    console.print(f"  Model: {cfg.llm.model}")
+    console.print(f"  API Key: {'[dim](set)[/dim]' if cfg.llm.api_key else '[dim](not set)[/dim]'}")
+    console.print()
+    console.print("[bold]Embedding:[/bold]")
+    console.print(f"  Provider: {cfg.embedding.provider}")
+    if cfg.embedding.provider != "none":
+        console.print(f"  Model: {cfg.embedding.model}")
+        if cfg.embedding.base_url:
+            console.print(f"  Base URL: {cfg.embedding.base_url}")
     console.print()
     console.print("[bold]Notifications:[/bold]")
     console.print(f"  URL: {cfg.notifications.url}")

@@ -144,8 +144,9 @@ def get_common_context(request: Request, active_page: str) -> dict:
     return {
         "request": request,
         "active_page": active_page,
-        "model": config.ollama.model,
-        "ollama_url": config.ollama.base_url.replace("http://", ""),
+        "model": config.llm.model,
+        "llm_provider": config.llm.provider,
+        "llm_url": config.llm.base_url.replace("http://", "").replace("https://", ""),
         "ntfy_configured": bool(config.notifications.topic),
         "heartbeat_status": heartbeat_status,
         "heartbeat_label": heartbeat_label,
