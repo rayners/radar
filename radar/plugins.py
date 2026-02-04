@@ -9,7 +9,6 @@ Provides infrastructure for:
 """
 
 import ast
-import hashlib
 import json
 import shutil
 import traceback
@@ -19,6 +18,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 import yaml
+
+from radar.config import get_data_paths
 
 
 # ===== Data Classes =====
@@ -480,8 +481,7 @@ class PluginLoader:
     def __init__(self, plugins_dir: Path | None = None):
         """Initialize with plugins directory."""
         if plugins_dir is None:
-            data_dir = Path.home() / ".local" / "share" / "radar"
-            plugins_dir = data_dir / "plugins"
+            plugins_dir = get_data_paths().plugins
 
         self.plugins_dir = plugins_dir
         self.enabled_dir = plugins_dir / "enabled"

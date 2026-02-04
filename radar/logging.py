@@ -7,19 +7,14 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
+from radar.config import get_data_paths
+
 # Global state
 _log_buffer: deque[dict[str, Any]] = deque(maxlen=1000)
 _buffer_lock = Lock()
 _daemon_start_time: datetime | None = None
 _api_call_count = 0
 _api_call_lock = Lock()
-
-
-def _get_log_file() -> Path:
-    """Get the path to the log file."""
-    data_dir = Path.home() / ".local" / "share" / "radar"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    return data_dir / "radar.log"
 
 
 def setup_logging() -> None:
@@ -53,7 +48,7 @@ def log(level: str, message: str, **extra: Any) -> None:
 
     # Append to file
     try:
-        log_file = _get_log_file()
+        log_file = get_data_paths().log_file
         with open(log_file, "a") as f:
             f.write(json.dumps(entry) + "\n")
     except Exception:
@@ -91,7 +86,7 @@ def get_logs(
     # If buffer is small, also read from file
     if len(entries) < limit:
         try:
-            log_file = _get_log_file()
+            log_file = get_data_paths().log_file
             if log_file.exists():
                 with open(log_file, "r") as f:
                     for line in f:

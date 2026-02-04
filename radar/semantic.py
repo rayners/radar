@@ -7,17 +7,10 @@ from pathlib import Path
 
 import httpx
 
-from radar.config import get_config
+from radar.config import get_config, get_data_paths
 
 # Cache for local embedding model
 _local_model = None
-
-
-def _get_db_path() -> Path:
-    """Get the path to the memory database."""
-    data_dir = Path.home() / ".local" / "share" / "radar"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    return data_dir / "memory.db"
 
 
 def _init_db(conn: sqlite3.Connection) -> None:
@@ -66,7 +59,7 @@ def _init_db(conn: sqlite3.Connection) -> None:
 
 def _get_connection() -> sqlite3.Connection:
     """Get a database connection, initializing if needed."""
-    db_path = _get_db_path()
+    db_path = get_data_paths().db
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     _init_db(conn)

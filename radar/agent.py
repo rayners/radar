@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from radar.config import get_config
+from radar.config import get_config, get_data_paths
 from radar.llm import chat
 from radar.memory import (
     add_message,
@@ -33,9 +33,7 @@ Current time: {current_time}
 
 def get_personalities_dir() -> Path:
     """Get the personalities directory, creating if needed."""
-    dir_path = Path.home() / ".local" / "share" / "radar" / "personalities"
-    dir_path.mkdir(parents=True, exist_ok=True)
-    return dir_path
+    return get_data_paths().personalities
 
 
 def _ensure_default_personality() -> None:

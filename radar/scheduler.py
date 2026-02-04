@@ -5,20 +5,12 @@ from typing import Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from radar.config import get_config
+from radar.config import get_config, get_data_paths
 
 # Global state
 _scheduler: BackgroundScheduler | None = None
 _event_queue: list[dict[str, Any]] = []
 _last_heartbeat: datetime | None = None
-
-
-def _get_data_dir():
-    """Get the radar data directory."""
-    from pathlib import Path
-    data_dir = Path.home() / ".local" / "share" / "radar"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    return data_dir
 
 
 def _is_quiet_hours() -> bool:
@@ -105,7 +97,7 @@ def _heartbeat_tick() -> None:
 
 def _get_heartbeat_conversation_id() -> str:
     """Get or create a persistent heartbeat conversation ID."""
-    heartbeat_file = _get_data_dir() / "heartbeat_conversation"
+    heartbeat_file = get_data_paths().base / "heartbeat_conversation"
     if heartbeat_file.exists():
         return heartbeat_file.read_text().strip()
     else:

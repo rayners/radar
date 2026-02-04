@@ -9,6 +9,104 @@ from typing import Any
 import yaml
 
 
+# ===== Data Paths =====
+
+
+class DataPaths:
+    """Centralized data path management.
+
+    All radar data files are stored under a single base directory.
+    Priority: RADAR_DATA_DIR env var > config file data_dir > default (~/.local/share/radar)
+    """
+
+    _base_dir: Path | None = None
+
+    @property
+    def base(self) -> Path:
+        """Get the base data directory, creating if needed."""
+        if self._base_dir is None:
+            self._base_dir = self._resolve_base_dir()
+        self._base_dir.mkdir(parents=True, exist_ok=True)
+        return self._base_dir
+
+    def _resolve_base_dir(self) -> Path:
+        """Resolve the base directory from env var, config, or default."""
+        # Priority 1: Environment variable
+        if env_dir := os.environ.get("RADAR_DATA_DIR"):
+            return Path(env_dir).expanduser()
+        # Priority 2/3: Config file value or default (handled by caller)
+        # This is the default; config override happens via set_base_dir()
+        return Path.home() / ".local" / "share" / "radar"
+
+    def set_base_dir(self, path: str) -> None:
+        """Set base directory from config file value."""
+        if path:
+            self._base_dir = Path(path).expanduser()
+
+    def reset(self) -> None:
+        """Reset cached base directory (for testing)."""
+        self._base_dir = None
+
+    @property
+    def conversations(self) -> Path:
+        """Get conversations directory."""
+        path = self.base / "conversations"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @property
+    def db(self) -> Path:
+        """Get memory database path."""
+        return self.base / "memory.db"
+
+    @property
+    def personalities(self) -> Path:
+        """Get personalities directory."""
+        path = self.base / "personalities"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @property
+    def plugins(self) -> Path:
+        """Get plugins directory."""
+        path = self.base / "plugins"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @property
+    def log_file(self) -> Path:
+        """Get log file path."""
+        return self.base / "radar.log"
+
+    @property
+    def pid_file(self) -> Path:
+        """Get PID file path."""
+        return self.base / "radar.pid"
+
+
+# Global paths instance
+_paths: DataPaths | None = None
+
+
+def get_data_paths() -> DataPaths:
+    """Get the global data paths instance."""
+    global _paths
+    if _paths is None:
+        _paths = DataPaths()
+    return _paths
+
+
+def reset_data_paths() -> None:
+    """Reset the global data paths instance (for testing)."""
+    global _paths
+    if _paths is not None:
+        _paths.reset()
+    _paths = None
+
+
+# ===== Config Dataclasses =====
+
+
 @dataclass
 class LLMConfig:
     """LLM provider configuration."""
@@ -166,6 +264,7 @@ class Config:
     max_tool_iterations: int = 10
     watch_paths: list[dict] = field(default_factory=list)
     personality: str = "default"  # Personality file name or path
+    data_dir: str = ""  # Custom data directory path (prefer RADAR_DATA_DIR env var)
 
     # Deprecated: Use llm.base_url, llm.model instead
     # Kept for backward compatibility
@@ -274,6 +373,7 @@ class Config:
             max_tool_iterations=data.get("max_tool_iterations", 10),
             watch_paths=data.get("watch_paths", []),
             personality=data.get("personality", "default"),
+            data_dir=data.get("data_dir", ""),
             # Keep deprecated fields for backward compatibility
             ollama=OllamaConfig(
                 base_url=ollama_data.get("base_url", OllamaConfig.base_url),
@@ -341,6 +441,12 @@ def _apply_env_overrides(config: Config) -> Config:
     if personality := os.environ.get("RADAR_PERSONALITY"):
         config.personality = personality
 
+    # Data directory (env var takes precedence - handled in DataPaths)
+    # We still store in config for introspection, but DataPaths._resolve_base_dir()
+    # checks the env var first
+    if data_dir := os.environ.get("RADAR_DATA_DIR"):
+        config.data_dir = data_dir
+
     # Web search env vars
     if search_provider := os.environ.get("RADAR_SEARCH_PROVIDER"):
         config.search.provider = search_provider
@@ -372,10 +478,18 @@ def load_config() -> Config:
         with open(config_path) as f:
             data = yaml.safe_load(f) or {}
         config = Config.from_dict(data)
-        return _apply_env_overrides(config)
+        config = _apply_env_overrides(config)
+    else:
+        # Return defaults if no config file found
+        config = _apply_env_overrides(Config())
 
-    # Return defaults if no config file found
-    return _apply_env_overrides(Config())
+    # Initialize data paths with config file value (env var takes precedence in DataPaths)
+    paths = get_data_paths()
+    if config.data_dir and not os.environ.get("RADAR_DATA_DIR"):
+        # Only use config file value if env var is not set
+        paths.set_base_dir(config.data_dir)
+
+    return config
 
 
 # Global config instance

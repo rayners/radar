@@ -1,7 +1,7 @@
 """JSONL-based conversation memory.
 
 Each conversation is stored as a separate .jsonl file in:
-    ~/.local/share/radar/conversations/{uuid}.jsonl
+    $RADAR_DATA_DIR/conversations/{uuid}.jsonl (default: ~/.local/share/radar/conversations/)
 
 Each line in the file is a JSON object representing a message.
 """
@@ -12,17 +12,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-
-def _get_conversations_dir() -> Path:
-    """Get the conversations directory path."""
-    conv_dir = Path.home() / ".local" / "share" / "radar" / "conversations"
-    conv_dir.mkdir(parents=True, exist_ok=True)
-    return conv_dir
+from radar.config import get_data_paths
 
 
 def _get_conversation_path(conversation_id: str) -> Path:
     """Get the path to a conversation's JSONL file."""
-    return _get_conversations_dir() / f"{conversation_id}.jsonl"
+    return get_data_paths().conversations / f"{conversation_id}.jsonl"
 
 
 def create_conversation() -> str:
@@ -98,7 +93,7 @@ def get_recent_conversations(limit: int = 5) -> list[dict[str, Any]]:
 
     Returns list of dicts with id, created_at, preview.
     """
-    conv_dir = _get_conversations_dir()
+    conv_dir = get_data_paths().conversations
 
     # Get all .jsonl files sorted by modification time (most recent first)
     conv_files = sorted(

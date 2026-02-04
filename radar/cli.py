@@ -11,22 +11,15 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 
 from radar import __version__
-from radar.config import get_config
+from radar.config import get_config, get_data_paths
 from radar.memory import get_recent_conversations
 
 console = Console()
 
 
-def _get_pid_file() -> Path:
-    """Get the path to the PID file."""
-    data_dir = Path.home() / ".local" / "share" / "radar"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    return data_dir / "radar.pid"
-
-
 def _is_daemon_running() -> tuple[bool, int | None]:
     """Check if daemon is running, returns (running, pid)."""
-    pid_file = _get_pid_file()
+    pid_file = get_data_paths().pid_file
     if not pid_file.exists():
         return False, None
 
@@ -244,7 +237,7 @@ def start(host: str | None, port: int | None):
         raise SystemExit(1)
 
     # Write PID file
-    pid_file = _get_pid_file()
+    pid_file = get_data_paths().pid_file
     pid_file.write_text(str(os.getpid()))
 
     console.print(Panel.fit(
@@ -296,7 +289,7 @@ def stop():
     except ProcessLookupError:
         console.print("[yellow]Process not found, removing stale PID file[/yellow]")
     finally:
-        _get_pid_file().unlink(missing_ok=True)
+        get_data_paths().pid_file.unlink(missing_ok=True)
 
 
 @cli.command()

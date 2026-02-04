@@ -159,6 +159,7 @@ Other:
 - `RADAR_NTFY_URL`, `RADAR_NTFY_TOPIC` - Notification settings
 - `RADAR_WEB_HOST`, `RADAR_WEB_PORT`, `RADAR_WEB_AUTH_TOKEN` - Web server settings
 - `RADAR_PERSONALITY` - Active personality name or path
+- `RADAR_DATA_DIR` - Custom data directory (default: `~/.local/share/radar`)
 
 Deprecated (still work, but emit warnings):
 - `RADAR_OLLAMA_URL` - Use `RADAR_LLM_BASE_URL` instead
