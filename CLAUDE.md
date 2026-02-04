@@ -84,6 +84,13 @@ def my_tool(arg: str) -> str:
 
 Then import in `radar/tools/__init__.py`.
 
+## Adding New Config Sections
+
+1. Add `@dataclass` class in `radar/config.py`
+2. Add field to `Config` class with `field(default_factory=...)`
+3. Parse in `Config.from_dict()` - extract data and construct instance
+4. Add env var overrides in `_apply_env_overrides()`
+
 ## Configuration
 
 ### LLM Provider
@@ -281,6 +288,49 @@ Operations:
 - `status` - PR status and recent CI runs
 
 Organization preference is saved in semantic memory for future queries.
+
+## Web Search Tool
+
+Search the web for current information. Supports multiple providers.
+
+```bash
+# Basic search
+radar ask "Search for Python 3.13 release notes"
+
+# Search with time filter
+radar ask "Search for AI news from this week"
+```
+
+### Providers
+
+| Provider | API Key | Notes |
+|----------|---------|-------|
+| DuckDuckGo | None | Default, no setup needed |
+| Brave Search | Required | 2,000 free/month, most reliable |
+| SearXNG | None | Self-hosted option |
+
+### Configuration
+
+```yaml
+# DuckDuckGo (default, no config needed)
+search:
+  provider: duckduckgo
+
+# Brave Search (recommended for reliability)
+search:
+  provider: brave
+# Set: RADAR_BRAVE_API_KEY=your-key
+
+# Self-hosted SearXNG
+search:
+  provider: searxng
+  searxng_url: http://localhost:8080
+```
+
+Environment variables:
+- `RADAR_SEARCH_PROVIDER` - "duckduckgo", "brave", or "searxng"
+- `RADAR_BRAVE_API_KEY` - Brave Search API key
+- `RADAR_SEARXNG_URL` - SearXNG instance URL
 
 ## Testing Tools
 

@@ -134,6 +134,22 @@ class PersonalityEvolutionConfig:
 
 
 @dataclass
+class WebSearchConfig:
+    """Web search configuration."""
+
+    # Provider: "duckduckgo" (default), "brave", or "searxng"
+    provider: str = "duckduckgo"
+    # Brave Search API key (use RADAR_BRAVE_API_KEY env var)
+    brave_api_key: str = ""
+    # SearXNG instance URL (use RADAR_SEARXNG_URL env var)
+    searxng_url: str = ""
+    # Maximum results to return
+    max_results: int = 10
+    # Safe search level (not used by all providers)
+    safe_search: str = "moderate"
+
+
+@dataclass
 class Config:
     """Main configuration container."""
 
@@ -145,6 +161,7 @@ class Config:
     web: WebConfig = field(default_factory=WebConfig)
     plugins: PluginsConfig = field(default_factory=PluginsConfig)
     personality_evolution: PersonalityEvolutionConfig = field(default_factory=PersonalityEvolutionConfig)
+    search: WebSearchConfig = field(default_factory=WebSearchConfig)
     system_prompt: str = ""
     max_tool_iterations: int = 10
     watch_paths: list[dict] = field(default_factory=list)
@@ -167,6 +184,7 @@ class Config:
         web_data = data.get("web", {})
         plugins_data = data.get("plugins", {})
         personality_evolution_data = data.get("personality_evolution", {})
+        search_data = data.get("search", {})
 
         # Backward compatibility: if 'ollama' section exists but not 'llm', migrate
         if ollama_data and not llm_data:
@@ -245,6 +263,13 @@ class Config:
                 auto_approve_suggestions=personality_evolution_data.get("auto_approve_suggestions", PersonalityEvolutionConfig.auto_approve_suggestions),
                 min_feedback_for_analysis=personality_evolution_data.get("min_feedback_for_analysis", PersonalityEvolutionConfig.min_feedback_for_analysis),
             ),
+            search=WebSearchConfig(
+                provider=search_data.get("provider", WebSearchConfig.provider),
+                brave_api_key=search_data.get("brave_api_key", WebSearchConfig.brave_api_key),
+                searxng_url=search_data.get("searxng_url", WebSearchConfig.searxng_url),
+                max_results=search_data.get("max_results", WebSearchConfig.max_results),
+                safe_search=search_data.get("safe_search", WebSearchConfig.safe_search),
+            ),
             system_prompt=data.get("system_prompt", ""),
             max_tool_iterations=data.get("max_tool_iterations", 10),
             watch_paths=data.get("watch_paths", []),
@@ -315,6 +340,14 @@ def _apply_env_overrides(config: Config) -> Config:
     # Personality
     if personality := os.environ.get("RADAR_PERSONALITY"):
         config.personality = personality
+
+    # Web search env vars
+    if search_provider := os.environ.get("RADAR_SEARCH_PROVIDER"):
+        config.search.provider = search_provider
+    if brave_api_key := os.environ.get("RADAR_BRAVE_API_KEY"):
+        config.search.brave_api_key = brave_api_key
+    if searxng_url := os.environ.get("RADAR_SEARXNG_URL"):
+        config.search.searxng_url = searxng_url
 
     return config
 
