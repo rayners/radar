@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Plugins - Radar{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-lg">
+    <h2 class="text-phosphor" style="font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.1em;">
+        PLUGINS
+    </h2>
+    <div class="flex gap-sm">
+        {% if pending_count > 0 %}
+        <a href="/plugins/review" class="btn btn--ghost" style="color: var(--amber);">
+            {{ pending_count }} Pending Review
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Status cards -->
+<div class="grid gap-md mb-lg" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+    <div class="card">
+        <div class="card__body" style="padding: var(--space-md); text-align: center;">
+            <div class="text-phosphor" style="font-size: 1.5rem; font-weight: 600;">{{ plugins | length }}</div>
+            <div class="text-muted" style="font-size: 0.75rem;">Total Plugins</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__body" style="padding: var(--space-md); text-align: center;">
+            <div class="text-phosphor" style="font-size: 1.5rem; font-weight: 600;">{{ enabled_count }}</div>
+            <div class="text-muted" style="font-size: 0.75rem;">Enabled</div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__body" style="padding: var(--space-md); text-align: center;">
+            <div style="font-size: 1.5rem; font-weight: 600; color: var(--amber);">{{ pending_count }}</div>
+            <div class="text-muted" style="font-size: 0.75rem;">Pending Review</div>
+        </div>
+    </div>
+</div>
+
+<!-- Config info -->
+<div class="card mb-lg">
+    <div class="card__body" style="padding: var(--space-md);">
+        <div class="flex justify-between items-center">
+            <div>
+                <span class="text-muted">LLM Tool Generation:</span>
+                {% if allow_llm_generated %}
+                <span class="text-phosphor">Enabled</span>
+                {% else %}
+                <span class="text-error">Disabled</span>
+                {% endif %}
+            </div>
+            <div>
+                <span class="text-muted">Auto-approve:</span>
+                {% if auto_approve %}
+                <span style="color: var(--amber);">Yes (caution)</span>
+                {% elif auto_approve_if_tests_pass %}
+                <span class="text-phosphor">If tests pass</span>
+                {% else %}
+                <span class="text-muted">Manual review required</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Plugin List -->
+<div class="plugin-list" id="plugin-list">
+    {% for p in plugins | default([]) %}
+    <div class="card mb-md" id="plugin-{{ p.name }}">
+        <div class="card__header" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+                {% if p.enabled %}
+                <span class="status-indicator__dot" style="width: 8px; height: 8px;"></span>
+                {% else %}
+                <span class="status-indicator__dot status-indicator__dot--idle" style="width: 8px; height: 8px;"></span>
+                {% endif %}
+                <span class="card__title">{{ p.name }}</span>
+                <span class="text-muted" style="font-size: 0.75rem;">v{{ p.version }}</span>
+                {% if p.author == 'llm-generated' %}
+                <span style="font-size: 0.65rem; padding: 2px 6px; background: var(--surface-2); border-radius: 4px; color: var(--amber);">
+                    LLM
+                </span>
+                {% endif %}
+            </div>
+            <div style="display: flex; gap: var(--space-sm);">
+                <a href="/plugins/{{ p.name }}" class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;">
+                    Details
+                </a>
+                {% if p.enabled %}
+                <button class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;"
+                        hx-post="/api/plugins/{{ p.name }}/disable"
+                        hx-target="#plugin-{{ p.name }}"
+                        hx-swap="outerHTML">
+                    Disable
+                </button>
+                {% else %}
+                <button class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;"
+                        hx-post="/api/plugins/{{ p.name }}/enable"
+                        hx-target="#plugin-{{ p.name }}"
+                        hx-swap="outerHTML">
+                    Enable
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card__body">
+            <p class="text-muted" style="font-size: 0.85rem;">{{ p.description or 'No description' }}</p>
+            <div style="margin-top: var(--space-sm); font-size: 0.75rem;">
+                <span class="text-muted">Trust:</span>
+                <span style="color: {{ 'var(--phosphor)' if p.trust_level == 'trusted' else 'var(--amber)' }};">
+                    {{ p.trust_level }}
+                </span>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card">
+        <div class="card__body text-muted" style="text-align: center; padding: var(--space-xl);">
+            <p>No plugins installed yet.</p>
+            <p style="margin-top: var(--space-sm);">
+                Use the <code style="color: var(--amber);">create_tool</code> tool to create new plugins,
+                or install plugins manually.
+            </p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

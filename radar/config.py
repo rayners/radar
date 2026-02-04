@@ -104,6 +104,24 @@ class WebConfig:
 
 
 @dataclass
+class PluginsConfig:
+    """Plugin system configuration."""
+
+    # Maximum debug/fix attempts before giving up
+    max_debug_attempts: int = 5
+    # Timeout for running plugin tests
+    test_timeout_seconds: int = 10
+    # Maximum code size for generated plugins
+    max_code_size_bytes: int = 10000
+    # Allow LLM to generate new tools
+    allow_llm_generated: bool = True
+    # Auto-approve all plugins (dangerous - default False)
+    auto_approve: bool = False
+    # Auto-approve if all tests pass (opt-in for power users)
+    auto_approve_if_tests_pass: bool = False
+
+
+@dataclass
 class Config:
     """Main configuration container."""
 
@@ -113,6 +131,7 @@ class Config:
     tools: ToolsConfig = field(default_factory=ToolsConfig)
     heartbeat: HeartbeatConfig = field(default_factory=HeartbeatConfig)
     web: WebConfig = field(default_factory=WebConfig)
+    plugins: PluginsConfig = field(default_factory=PluginsConfig)
     system_prompt: str = ""
     max_tool_iterations: int = 10
     watch_paths: list[dict] = field(default_factory=list)
@@ -133,6 +152,7 @@ class Config:
         tools_data = data.get("tools", {})
         heartbeat_data = data.get("heartbeat", {})
         web_data = data.get("web", {})
+        plugins_data = data.get("plugins", {})
 
         # Backward compatibility: if 'ollama' section exists but not 'llm', migrate
         if ollama_data and not llm_data:
@@ -197,6 +217,14 @@ class Config:
                 host=web_data.get("host", WebConfig.host),
                 port=web_data.get("port", WebConfig.port),
                 auth_token=web_data.get("auth_token", WebConfig.auth_token),
+            ),
+            plugins=PluginsConfig(
+                max_debug_attempts=plugins_data.get("max_debug_attempts", PluginsConfig.max_debug_attempts),
+                test_timeout_seconds=plugins_data.get("test_timeout_seconds", PluginsConfig.test_timeout_seconds),
+                max_code_size_bytes=plugins_data.get("max_code_size_bytes", PluginsConfig.max_code_size_bytes),
+                allow_llm_generated=plugins_data.get("allow_llm_generated", PluginsConfig.allow_llm_generated),
+                auto_approve=plugins_data.get("auto_approve", PluginsConfig.auto_approve),
+                auto_approve_if_tests_pass=plugins_data.get("auto_approve_if_tests_pass", PluginsConfig.auto_approve_if_tests_pass),
             ),
             system_prompt=data.get("system_prompt", ""),
             max_tool_iterations=data.get("max_tool_iterations", 10),

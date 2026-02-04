@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block title %}{{ plugin.name }} - Plugins - Radar{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-lg">
+    <div class="flex items-center gap-md">
+        <a href="/plugins" class="btn btn--ghost" style="padding: 4px 8px;">&larr;</a>
+        <h2 class="text-phosphor" style="font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.1em;">
+            {{ plugin.name | upper }}
+        </h2>
+        {% if plugin.enabled %}
+        <span class="status-indicator__dot" style="width: 10px; height: 10px;"></span>
+        {% else %}
+        <span class="status-indicator__dot status-indicator__dot--idle" style="width: 10px; height: 10px;"></span>
+        {% endif %}
+    </div>
+    <div class="flex gap-sm">
+        {% if plugin.enabled %}
+        <button class="btn btn--ghost"
+                hx-post="/api/plugins/{{ plugin.name }}/disable"
+                hx-swap="none"
+                onclick="setTimeout(() => location.reload(), 500)">
+            Disable
+        </button>
+        {% else %}
+        <button class="btn btn--ghost"
+                hx-post="/api/plugins/{{ plugin.name }}/enable"
+                hx-swap="none"
+                onclick="setTimeout(() => location.reload(), 500)">
+            Enable
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Plugin info -->
+<div class="card mb-lg">
+    <div class="card__header">
+        <span class="card__title">Details</span>
+    </div>
+    <div class="card__body">
+        <div class="grid gap-md" style="grid-template-columns: auto 1fr;">
+            <span class="text-muted">Description:</span>
+            <span>{{ plugin.description or 'No description' }}</span>
+
+            <span class="text-muted">Version:</span>
+            <span>{{ plugin.version }}</span>
+
+            <span class="text-muted">Author:</span>
+            <span>{{ plugin.author }}</span>
+
+            <span class="text-muted">Trust Level:</span>
+            <span style="color: {{ 'var(--phosphor)' if plugin.trust_level == 'trusted' else 'var(--amber)' }};">
+                {{ plugin.trust_level }}
+            </span>
+
+            <span class="text-muted">Status:</span>
+            <span class="{{ 'text-phosphor' if plugin.enabled else 'text-muted' }}">
+                {{ 'Enabled' if plugin.enabled else 'Disabled' }}
+            </span>
+
+            {% if plugin.created_at %}
+            <span class="text-muted">Created:</span>
+            <span>{{ plugin.created_at }}</span>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Code -->
+<div class="card mb-lg">
+    <div class="card__header" style="display: flex; justify-content: space-between; align-items: center;">
+        <span class="card__title">Code</span>
+        <button class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;"
+                onclick="toggleCodeEdit()">
+            Edit
+        </button>
+    </div>
+    <div class="card__body">
+        <div id="code-view">
+            <pre style="background: var(--surface-1); padding: var(--space-md); border-radius: 4px; overflow-x: auto; font-size: 0.8rem; max-height: 400px; overflow-y: auto;"><code>{{ code }}</code></pre>
+        </div>
+        <div id="code-edit" style="display: none;">
+            <textarea id="code-textarea" class="input"
+                      style="font-family: var(--font-mono); font-size: 0.8rem; min-height: 400px; resize: vertical;">{{ code }}</textarea>
+            <div id="code-edit-status" style="margin-top: var(--space-sm);"></div>
+            <div style="display: flex; gap: var(--space-sm); margin-top: var(--space-md);">
+                <button class="btn btn--ghost" onclick="toggleCodeEdit()">Cancel</button>
+                <button class="btn btn--primary" onclick="saveCode()">Save & Test</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Versions -->
+{% if versions %}
+<div class="card mb-lg">
+    <div class="card__header">
+        <span class="card__title">Version History</span>
+    </div>
+    <div class="card__body">
+        <div class="version-list">
+            {% for v in versions %}
+            <div class="flex justify-between items-center" style="padding: var(--space-sm) 0; border-bottom: 1px solid var(--border);">
+                <div>
+                    <span class="text-phosphor">{{ v.version }}</span>
+                    {% if v.created_at %}
+                    <span class="text-muted" style="margin-left: var(--space-sm); font-size: 0.75rem;">
+                        {{ v.created_at[:16] }}
+                    </span>
+                    {% endif %}
+                </div>
+                {% if v.version != plugin.version %}
+                <button class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;"
+                        hx-post="/api/plugins/{{ plugin.name }}/rollback/{{ v.version }}"
+                        hx-swap="none"
+                        hx-confirm="Rollback to {{ v.version }}?"
+                        onclick="setTimeout(() => location.reload(), 500)">
+                    Rollback
+                </button>
+                {% else %}
+                <span class="text-muted" style="font-size: 0.75rem;">Current</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Errors -->
+{% if errors %}
+<div class="card mb-lg">
+    <div class="card__header">
+        <span class="card__title" style="color: var(--error);">Error History</span>
+    </div>
+    <div class="card__body">
+        {% for error in errors %}
+        <div style="padding: var(--space-md); background: var(--surface-1); border-radius: 4px; margin-bottom: var(--space-md);">
+            <div class="flex justify-between items-center mb-sm">
+                <span style="font-size: 0.75rem; padding: 2px 6px; background: var(--error); color: var(--surface-0); border-radius: 4px;">
+                    {{ error.error_type }}
+                </span>
+                <span class="text-muted" style="font-size: 0.75rem;">
+                    Attempt {{ error.attempt_number }} - {{ error.timestamp[:16] if error.timestamp else '' }}
+                </span>
+            </div>
+            <div class="text-error" style="font-size: 0.85rem;">{{ error.message }}</div>
+            {% if error.traceback %}
+            <details style="margin-top: var(--space-sm);">
+                <summary class="text-muted" style="font-size: 0.75rem; cursor: pointer;">Traceback</summary>
+                <pre style="font-size: 0.7rem; margin-top: var(--space-sm); white-space: pre-wrap;">{{ error.traceback }}</pre>
+            </details>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<script>
+function toggleCodeEdit() {
+    const view = document.getElementById('code-view');
+    const edit = document.getElementById('code-edit');
+    if (edit.style.display === 'none') {
+        view.style.display = 'none';
+        edit.style.display = 'block';
+    } else {
+        view.style.display = 'block';
+        edit.style.display = 'none';
+    }
+}
+
+async function saveCode() {
+    const code = document.getElementById('code-textarea').value;
+    const statusEl = document.getElementById('code-edit-status');
+
+    statusEl.textContent = 'Saving and testing...';
+    statusEl.className = 'text-muted';
+
+    const formData = new FormData();
+    formData.append('code', code);
+
+    try {
+        const response = await fetch('/api/plugins/{{ plugin.name }}/code', {
+            method: 'PUT',
+            body: formData
+        });
+
+        if (response.ok) {
+            statusEl.textContent = 'Saved successfully!';
+            statusEl.className = 'text-phosphor';
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            const text = await response.text();
+            statusEl.textContent = 'Error: ' + text;
+            statusEl.className = 'text-error';
+        }
+    } catch (e) {
+        statusEl.textContent = 'Failed to save: ' + e;
+        statusEl.className = 'text-error';
+    }
+}
+</script>
+
+<style>
+pre code {
+    white-space: pre;
+    display: block;
+}
+</style>
+{% endblock %}

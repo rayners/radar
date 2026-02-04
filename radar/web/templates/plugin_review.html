@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Plugin Review - Radar{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-lg">
+    <h2 class="text-phosphor" style="font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.1em;">
+        PLUGINS PENDING REVIEW
+    </h2>
+    <a href="/plugins" class="btn btn--ghost">Back to Plugins</a>
+</div>
+
+{% if not pending_plugins %}
+<div class="card">
+    <div class="card__body text-muted" style="text-align: center; padding: var(--space-xl);">
+        <p>No plugins pending review.</p>
+        <p style="margin-top: var(--space-sm);">
+            <a href="/plugins" class="text-phosphor">View all plugins</a>
+        </p>
+    </div>
+</div>
+{% else %}
+
+<!-- Pending plugins list -->
+{% for p in pending_plugins %}
+<div class="card mb-lg" id="pending-{{ p.name }}">
+    <div class="card__header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <span class="card__title">{{ p.name }}</span>
+            <span style="font-size: 0.65rem; padding: 2px 6px; background: var(--surface-2); border-radius: 4px; color: var(--amber); margin-left: var(--space-sm);">
+                {{ p.author }}
+            </span>
+        </div>
+        <div class="text-muted" style="font-size: 0.75rem;">
+            Created: {{ p.created_at[:16] if p.created_at else 'Unknown' }}
+        </div>
+    </div>
+    <div class="card__body">
+        <p class="text-muted mb-md">{{ p.description or 'No description' }}</p>
+
+        <!-- Code preview -->
+        <div style="margin-bottom: var(--space-md);">
+            <div class="text-muted mb-sm" style="font-size: 0.75rem;">Code:</div>
+            <pre style="background: var(--surface-1); padding: var(--space-md); border-radius: 4px; overflow-x: auto; font-size: 0.8rem; max-height: 300px; overflow-y: auto;"><code>{{ p.code }}</code></pre>
+        </div>
+
+        <!-- Action buttons -->
+        <div style="display: flex; gap: var(--space-sm); justify-content: flex-end; margin-top: var(--space-lg);">
+            <button class="btn btn--ghost text-error"
+                    hx-post="/api/plugins/{{ p.name }}/reject"
+                    hx-target="#pending-{{ p.name }}"
+                    hx-swap="outerHTML"
+                    hx-confirm="Reject plugin '{{ p.name }}'? It will be moved to the failed directory.">
+                Reject
+            </button>
+            <button class="btn btn--primary"
+                    hx-post="/api/plugins/{{ p.name }}/approve"
+                    hx-target="#pending-{{ p.name }}"
+                    hx-swap="outerHTML">
+                Approve & Enable
+            </button>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
+{% endif %}
+
+<style>
+pre code {
+    white-space: pre;
+    display: block;
+}
+</style>
+{% endblock %}

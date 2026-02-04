@@ -44,6 +44,7 @@ RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API
 - `radar/semantic.py` - Embedding client (Ollama, OpenAI, or local sentence-transformers)
 - `radar/config.py` - YAML config with env var overrides
 - `radar/tools/` - Tool modules registered via `@tool` decorator
+- `radar/plugins.py` - Dynamic plugin system for LLM-generated tools
 - `radar/scheduler.py` - APScheduler heartbeat with quiet hours + event queue
 - `radar/watchers.py` - File system monitoring with watchdog
 - `radar/security.py` - Path blocklists and command safety checks
@@ -317,7 +318,7 @@ heartbeat:
 
 FastAPI + HTMX dashboard at `http://localhost:8420` when daemon is running.
 
-Pages: Dashboard, Chat, History, Memory, Personalities, Tasks, Config, Logs
+Pages: Dashboard, Chat, History, Memory, Personalities, Plugins, Tasks, Config, Logs
 
 Mobile responsive with hamburger menu for sidebar navigation.
 
@@ -403,6 +404,85 @@ radar chat -P technical
 ### Web UI
 
 Navigate to `/personalities` to manage personalities via the web dashboard.
+
+## Plugin System (Self-Improvement)
+
+Radar can create new tools dynamically through LLM-generated plugins. This enables self-improvement capabilities where Radar can extend its own functionality.
+
+### Directory Structure
+
+```
+~/.local/share/radar/plugins/
+  enabled/              # Active plugins (symlinks to available/)
+  available/            # Approved plugins ready to use
+  pending_review/       # LLM-generated plugins awaiting approval
+  failed/               # Rejected plugins
+  versions/             # Version history for rollback
+  errors/               # Error logs for debugging
+```
+
+### Plugin Creation
+
+The LLM can use the `create_tool` meta-tool to generate new tools:
+
+```
+"Create a tool that reverses strings"
+```
+
+This will:
+1. Generate Python code for the tool
+2. Validate code for safety (no dangerous imports/operations)
+3. Run test cases in a sandbox
+4. Save to `pending_review/` for human approval (default) or auto-enable if configured
+
+### Debugging Failed Plugins
+
+Use `debug_tool` to iteratively fix plugins that fail validation or tests:
+
+```
+"Debug the reverse_string tool"  # View error details
+"Fix the reverse_string tool"    # Apply a fix and re-test
+```
+
+The system tracks attempts and stops after max_debug_attempts (default: 5).
+
+### Version Control
+
+Plugins are versioned automatically. Use `rollback_tool` to revert to a previous version:
+
+```
+"Show versions of my_tool"
+"Rollback my_tool to v1"
+```
+
+### Configuration
+
+```yaml
+# radar.yaml
+plugins:
+  allow_llm_generated: true       # Enable LLM tool creation
+  auto_approve: false             # Require human review (safe default)
+  auto_approve_if_tests_pass: false  # Auto-approve if tests pass (power users)
+  max_debug_attempts: 5           # Give up after N fix attempts
+  test_timeout_seconds: 10        # Timeout for running tests
+  max_code_size_bytes: 10000      # Max code size for generated plugins
+```
+
+### Security
+
+- **AST validation** - Blocks dangerous imports (os, subprocess, etc.) and operations (eval, exec, open)
+- **Sandboxed execution** - Tests run with restricted builtins
+- **Human review** - Default requires manual approval via web UI
+- **Version history** - Can rollback to previous working versions
+
+### Web UI
+
+Navigate to `/plugins` to:
+- View all installed plugins
+- Enable/disable plugins
+- Review pending plugins at `/plugins/review`
+- View plugin details, code, versions, and errors
+- Manually edit plugin code
 
 ## Security
 
