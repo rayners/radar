@@ -31,3 +31,6 @@ workspace/
 # Docker environment file
 .env
 .playwright-mcp/
+
+# Local config (use radar.example.yaml as template)
+radar.yaml

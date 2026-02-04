@@ -459,7 +459,23 @@ def _apply_env_overrides(config: Config) -> Config:
 
 
 def get_config_path() -> Path | None:
-    """Get the path to the config file if it exists."""
+    """Get the path to the config file if it exists.
+
+    Priority:
+    1. RADAR_CONFIG_PATH env var (explicit override)
+    2. ./radar.yaml (current directory)
+    3. ~/.config/radar/radar.yaml (user config)
+    """
+    # Priority 1: Explicit env var
+    if env_path := os.environ.get("RADAR_CONFIG_PATH"):
+        path = Path(env_path).expanduser()
+        if path.exists():
+            return path
+        # Warn if specified but doesn't exist
+        warnings.warn(f"RADAR_CONFIG_PATH={env_path} does not exist", UserWarning)
+        return None
+
+    # Priority 2/3: Standard locations
     config_paths = [
         Path.cwd() / "radar.yaml",
         Path.home() / ".config" / "radar" / "radar.yaml",

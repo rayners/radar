@@ -54,7 +54,7 @@ RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API
 
 - Tools are registered with the `@tool` decorator in `radar/tools/`
 - Tools return strings (results displayed to user)
-- Config: YAML in `radar.yaml` or `~/.config/radar/radar.yaml`
+- Config: Copy `radar.example.yaml` to `radar.yaml` (gitignored) or `~/.config/radar/radar.yaml`
 - Environment variables override config (see Configuration section below)
 
 ## Key Design Decisions
@@ -156,6 +156,7 @@ Embedding settings:
 - `RADAR_EMBEDDING_API_KEY` - Embedding API key (defaults to LLM key)
 
 Other:
+- `RADAR_CONFIG_PATH` - Explicit config file path (overrides default locations)
 - `RADAR_NTFY_URL`, `RADAR_NTFY_TOPIC` - Notification settings
 - `RADAR_WEB_HOST`, `RADAR_WEB_PORT`, `RADAR_WEB_AUTH_TOKEN` - Web server settings
 - `RADAR_PERSONALITY` - Active personality name or path
