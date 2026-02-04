@@ -1,0 +1,83 @@
+services:
+  radar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Uncomment to include local embeddings (~500MB larger image):
+      # args:
+      #   LOCAL_EMBEDDINGS: "true"
+    container_name: radar
+    ports:
+      - "8420:8420"
+    environment:
+      # LLM Configuration
+      # Default: connect to Ollama on host machine
+      - RADAR_LLM_PROVIDER=${RADAR_LLM_PROVIDER:-ollama}
+      - RADAR_LLM_BASE_URL=${RADAR_LLM_BASE_URL:-http://host.docker.internal:11434}
+      - RADAR_LLM_MODEL=${RADAR_LLM_MODEL:-}
+      - RADAR_API_KEY=${RADAR_API_KEY:-}
+
+      # Embedding Configuration
+      - RADAR_EMBEDDING_PROVIDER=${RADAR_EMBEDDING_PROVIDER:-}
+      - RADAR_EMBEDDING_MODEL=${RADAR_EMBEDDING_MODEL:-}
+      - RADAR_EMBEDDING_BASE_URL=${RADAR_EMBEDDING_BASE_URL:-}
+      - RADAR_EMBEDDING_API_KEY=${RADAR_EMBEDDING_API_KEY:-}
+
+      # Web UI Configuration
+      - RADAR_WEB_HOST=0.0.0.0
+      - RADAR_WEB_PORT=8420
+      - RADAR_WEB_AUTH_TOKEN=${RADAR_WEB_AUTH_TOKEN:-}
+
+      # Notifications
+      - RADAR_NTFY_URL=${RADAR_NTFY_URL:-}
+      - RADAR_NTFY_TOPIC=${RADAR_NTFY_TOPIC:-}
+
+      # Personality
+      - RADAR_PERSONALITY=${RADAR_PERSONALITY:-}
+    volumes:
+      # =======================================================================
+      # Persistent data volume (REQUIRED)
+      # Stores: conversations (JSONL), semantic memory (SQLite), personalities
+      # Data persists across container restarts/rebuilds
+      # =======================================================================
+      - radar-data:/home/radar/.local/share/radar
+
+      # =======================================================================
+      # Configuration file (OPTIONAL)
+      # Copy radar.docker.yaml to radar.yaml and customize, then uncomment:
+      # =======================================================================
+      # - ./radar.yaml:/home/radar/.config/radar/radar.yaml:ro
+
+      # =======================================================================
+      # Host personalities (OPTIONAL)
+      # Mount existing personalities from host. These overlay the data volume.
+      # =======================================================================
+      # - ~/.local/share/radar/personalities:/home/radar/.local/share/radar/personalities:ro
+
+      # =======================================================================
+      # Workspace (REQUIRED for file access)
+      # Only files in ./workspace are accessible to Radar
+      # =======================================================================
+      - ./workspace:/workspace
+
+      # =======================================================================
+      # GitHub CLI auth (OPTIONAL - for GitHub tool)
+      # Shares your gh authentication with the container
+      # =======================================================================
+      # - ~/.config/gh:/home/radar/.config/gh:ro
+    extra_hosts:
+      # Enable host.docker.internal on Linux
+      - "host.docker.internal:host-gateway"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    restart: unless-stopped
+
+volumes:
+  radar-data:
+    name: radar-data

@@ -1,0 +1,80 @@
+# Radar Docker Configuration
+# Copy to radar.yaml and uncomment the volume mount in docker-compose.yml
+
+# =============================================================================
+# LLM Configuration
+# =============================================================================
+llm:
+  # Provider: "ollama" (default) or "openai" (OpenAI-compatible APIs)
+  provider: ollama
+
+  # Model to use for chat
+  model: qwen3:latest
+
+  # API endpoint - use host.docker.internal to reach host machine
+  # For remote Ollama: http://192.168.1.50:11434
+  # For OpenAI: https://api.openai.com/v1
+  base_url: http://host.docker.internal:11434
+
+# =============================================================================
+# Embedding Configuration (for semantic memory)
+# =============================================================================
+embedding:
+  # Provider: "ollama", "openai", "local", or "none"
+  # Use "local" if you built with LOCAL_EMBEDDINGS=true
+  provider: ollama
+  model: nomic-embed-text
+  # base_url defaults to llm.base_url if not specified
+
+# =============================================================================
+# Web UI Configuration
+# =============================================================================
+web:
+  # Auth token - REQUIRED when exposing outside localhost
+  # Generate: python -c "import secrets; print(secrets.token_urlsafe(32))"
+  # Or set via RADAR_WEB_AUTH_TOKEN environment variable
+  # auth_token: "your-secret-token-here"
+
+# =============================================================================
+# Heartbeat / Scheduler
+# =============================================================================
+heartbeat:
+  interval_minutes: 15
+  quiet_hours_start: "23:00"
+  quiet_hours_end: "07:00"
+
+# =============================================================================
+# Notifications (optional)
+# =============================================================================
+notifications:
+  url: "https://ntfy.sh"
+  topic: ""  # Your ntfy topic
+
+# =============================================================================
+# Tool Configuration
+# =============================================================================
+tools:
+  # Maximum file size for read_file tool (bytes)
+  max_file_size: 102400
+  # Timeout for exec tool (seconds)
+  exec_timeout: 30
+  # Exec safety mode: "safe_only", "block_dangerous", "allow_all"
+  exec_mode: "block_dangerous"
+
+# Maximum number of tool call iterations before stopping
+max_tool_iterations: 10
+
+# =============================================================================
+# Personality (optional)
+# =============================================================================
+# Name of personality file (without .md) or explicit path
+# personality: default
+
+# =============================================================================
+# File Watchers (limited in Docker - only /workspace is accessible)
+# =============================================================================
+# watch_paths:
+#   - path: /workspace/incoming
+#     patterns: ["*.pdf"]
+#     description: "Incoming PDFs"
+#     action: "Summarize this PDF and notify me via ntfy"
