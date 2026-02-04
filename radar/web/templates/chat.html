@@ -85,6 +85,58 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+.message__feedback {
+    display: flex;
+    gap: var(--space-xs);
+    margin-top: var(--space-sm);
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+.message:hover .message__feedback {
+    opacity: 1;
+}
+.feedback-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+.feedback-btn:hover {
+    border-color: var(--phosphor);
+}
+.feedback-btn--positive:hover {
+    background: rgba(0, 255, 136, 0.1);
+    color: var(--phosphor);
+    border-color: var(--phosphor);
+}
+.feedback-btn--negative:hover {
+    background: rgba(255, 100, 100, 0.1);
+    color: var(--error);
+    border-color: var(--error);
+}
+.feedback-icon {
+    font-family: var(--font-mono);
+}
+.feedback-recorded {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-xs);
+    font-size: 0.75rem;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-elevated);
+}
+</style>
 <script>
 // Auto-scroll to bottom on page load
 document.addEventListener('DOMContentLoaded', function() {

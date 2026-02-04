@@ -193,6 +193,7 @@ def is_dynamic_tool(name: str) -> bool:
         "exec", "github", "list_directory", "notify", "pdf_extract",
         "read_file", "recall", "remember", "weather", "write_file",
         "create_tool", "debug_tool", "rollback_tool",
+        "suggest_personality_update", "analyze_feedback",
     }
     return name in _registry and name not in static_tools
 
@@ -212,6 +213,8 @@ from radar.tools import (
     create_tool,
     debug_tool,
     rollback_tool,
+    suggest_personality,
+    analyze_feedback,
 )
 
 __all__ = [

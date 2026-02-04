@@ -405,6 +405,73 @@ radar chat -P technical
 
 Navigate to `/personalities` to manage personalities via the web dashboard.
 
+## Personality Evolution
+
+Radar can evolve its personality based on user feedback. This enables continuous improvement of response quality through a feedback-driven loop.
+
+### How It Works
+
+1. **Collect Feedback**: In the web chat, use the + / - buttons on responses to indicate what worked and what didn't
+2. **Analyze Patterns**: The `analyze_feedback` tool examines feedback to identify patterns
+3. **Suggest Improvements**: The LLM can use `suggest_personality_update` to propose changes
+4. **Review & Apply**: Review pending suggestions at `/personalities/suggestions` and approve or reject
+
+### Tools
+
+- `analyze_feedback` - Analyze recent feedback to identify patterns and suggest improvements
+- `suggest_personality_update` - Propose a personality modification (goes to pending review)
+
+### Configuration
+
+```yaml
+# radar.yaml
+personality_evolution:
+  allow_suggestions: true           # Enable LLM personality suggestions
+  auto_approve_suggestions: false   # Require human review (safe default)
+  min_feedback_for_analysis: 10     # Minimum feedback before analysis
+```
+
+### Feedback Flow
+
+```
+User gives thumbs up/down on chat message
+    |
+Stored in feedback table (processed=False)
+    |
+analyze_feedback tool runs (manual or heartbeat)
+    |
+LLM identifies patterns in positive/negative feedback
+    |
+LLM calls suggest_personality_update with improvements
+    |
+Suggestion stored in personality_suggestions (status=pending)
+    |
+User reviews at /personalities/suggestions
+    |
+Approve: Change applied to personality .md file
+Reject: Stored with reason
+    |
+Changes take effect immediately (lazy loading)
+```
+
+### Web UI
+
+- **Chat** (`/chat`) - Thumbs up/down buttons on assistant messages
+- **Personalities** (`/personalities`) - Link to review suggestions
+- **Suggestions** (`/personalities/suggestions`) - Review and approve/reject pending changes
+
+### Database Tables
+
+Feedback and suggestions are stored in `~/.local/share/radar/memory.db`:
+
+```sql
+-- User feedback on responses
+SELECT * FROM feedback ORDER BY created_at DESC;
+
+-- Pending personality changes
+SELECT * FROM personality_suggestions WHERE status = 'pending';
+```
+
 ## Plugin System (Self-Improvement)
 
 Radar can create new tools dynamically through LLM-generated plugins. This enables self-improvement capabilities where Radar can extend its own functionality.

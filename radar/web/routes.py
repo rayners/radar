@@ -320,19 +320,84 @@ async def api_chat(request: Request):
 
     response, new_conversation_id = run(message, conversation_id)
 
+    # Get message index for feedback (count messages in conversation)
+    from radar.memory import get_messages
+    messages = get_messages(new_conversation_id)
+    message_index = len(messages) - 1  # Last message (the response)
+
     # Include conversation_id in response for HTMX to track
+    # Add feedback buttons to assistant message
     return HTMLResponse(
         f"""
         <div class="message message--user">
             <div class="message__role">you</div>
             <div class="message__content">{escape(message)}</div>
         </div>
-        <div class="message message--assistant" data-conversation-id="{new_conversation_id}">
+        <div class="message message--assistant" data-conversation-id="{new_conversation_id}" data-message-index="{message_index}">
             <div class="message__role">radar</div>
             <div class="message__content">{escape(response)}</div>
+            <div class="message__feedback">
+                <button class="feedback-btn feedback-btn--positive"
+                        hx-post="/api/feedback"
+                        hx-vals='{{"conversation_id": "{new_conversation_id}", "message_index": {message_index}, "sentiment": "positive"}}'
+                        hx-swap="outerHTML"
+                        title="This was helpful">
+                    <span class="feedback-icon">+</span>
+                </button>
+                <button class="feedback-btn feedback-btn--negative"
+                        hx-post="/api/feedback"
+                        hx-vals='{{"conversation_id": "{new_conversation_id}", "message_index": {message_index}, "sentiment": "negative"}}'
+                        hx-swap="outerHTML"
+                        title="This could be better">
+                    <span class="feedback-icon">-</span>
+                </button>
+            </div>
         </div>
         """
     )
+
+
+@app.post("/api/feedback")
+async def api_feedback(request: Request):
+    """Store user feedback on a response."""
+    from html import escape
+    from radar.feedback import store_feedback
+
+    form = await request.form()
+    conversation_id = form.get("conversation_id", "")
+    message_index = int(form.get("message_index", 0))
+    sentiment = form.get("sentiment", "")
+    response_content = form.get("response_content", "")
+    user_comment = form.get("user_comment", "")
+
+    if not conversation_id or sentiment not in ("positive", "negative"):
+        return HTMLResponse(
+            '<span class="text-error">Invalid feedback</span>',
+            status_code=400
+        )
+
+    try:
+        store_feedback(
+            conversation_id=conversation_id,
+            message_index=message_index,
+            sentiment=sentiment,
+            response_content=response_content or None,
+            user_comment=user_comment or None,
+        )
+
+        # Return a confirmation that replaces the feedback buttons
+        icon = "+" if sentiment == "positive" else "-"
+        color = "phosphor" if sentiment == "positive" else "muted"
+        return HTMLResponse(
+            f'<span class="feedback-recorded text-{color}" title="Feedback recorded">'
+            f'<span class="feedback-icon">{icon}</span> Recorded</span>'
+        )
+
+    except Exception as e:
+        return HTMLResponse(
+            f'<span class="text-error">Error: {escape(str(e))}</span>',
+            status_code=500
+        )
 
 
 @app.get("/api/config/test")
@@ -566,6 +631,73 @@ async def api_personality_activate(name: str):
             '<div class="text-error">No config file found. Set RADAR_PERSONALITY env var.</div>',
             status_code=400,
         )
+
+
+# ===== Personality Suggestions Routes =====
+
+
+@app.get("/personalities/suggestions", response_class=HTMLResponse)
+async def personality_suggestions(request: Request):
+    """Personality suggestions review page."""
+    from radar.feedback import get_pending_suggestions, get_feedback_summary
+
+    context = get_common_context(request, "personalities")
+
+    suggestions = get_pending_suggestions()
+    feedback_summary = get_feedback_summary()
+
+    context["suggestions"] = suggestions
+    context["feedback_summary"] = feedback_summary
+
+    return templates.TemplateResponse("personality_suggestions.html", context)
+
+
+@app.post("/api/personalities/suggestions/{suggestion_id}/approve")
+async def api_suggestion_approve(suggestion_id: int):
+    """Approve a personality suggestion."""
+    from html import escape
+    from radar.feedback import approve_suggestion
+
+    success, message = approve_suggestion(suggestion_id)
+
+    if success:
+        return HTMLResponse(
+            f'<div class="suggestion-approved text-phosphor" style="padding: var(--space-md); text-align: center;">'
+            f'<span style="font-size: 1.2rem;">Approved</span><br>'
+            f'<span class="text-muted">{escape(message)}</span>'
+            f'</div>'
+        )
+    return HTMLResponse(
+        f'<div class="text-error">{escape(message)}</div>',
+        status_code=400
+    )
+
+
+@app.post("/api/personalities/suggestions/{suggestion_id}/reject")
+async def api_suggestion_reject(suggestion_id: int, request: Request):
+    """Reject a personality suggestion."""
+    from html import escape
+    from radar.feedback import reject_suggestion
+
+    form = await request.form()
+    reason = form.get("reason", "")
+
+    success, message = reject_suggestion(suggestion_id, reason or None)
+
+    if success:
+        return HTMLResponse("")  # Remove from list
+    return HTMLResponse(
+        f'<div class="text-error">{escape(message)}</div>',
+        status_code=400
+    )
+
+
+@app.get("/api/feedback/summary")
+async def api_feedback_summary():
+    """Get feedback statistics summary."""
+    from radar.feedback import get_feedback_summary
+
+    return get_feedback_summary()
 
 
 # ===== Plugin Routes =====

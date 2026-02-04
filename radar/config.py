@@ -122,6 +122,18 @@ class PluginsConfig:
 
 
 @dataclass
+class PersonalityEvolutionConfig:
+    """Personality evolution/feedback configuration."""
+
+    # Allow LLM to suggest personality changes
+    allow_suggestions: bool = True
+    # Auto-approve personality suggestions (default False for safety)
+    auto_approve_suggestions: bool = False
+    # Minimum feedback entries required before analysis
+    min_feedback_for_analysis: int = 10
+
+
+@dataclass
 class Config:
     """Main configuration container."""
 
@@ -132,6 +144,7 @@ class Config:
     heartbeat: HeartbeatConfig = field(default_factory=HeartbeatConfig)
     web: WebConfig = field(default_factory=WebConfig)
     plugins: PluginsConfig = field(default_factory=PluginsConfig)
+    personality_evolution: PersonalityEvolutionConfig = field(default_factory=PersonalityEvolutionConfig)
     system_prompt: str = ""
     max_tool_iterations: int = 10
     watch_paths: list[dict] = field(default_factory=list)
@@ -153,6 +166,7 @@ class Config:
         heartbeat_data = data.get("heartbeat", {})
         web_data = data.get("web", {})
         plugins_data = data.get("plugins", {})
+        personality_evolution_data = data.get("personality_evolution", {})
 
         # Backward compatibility: if 'ollama' section exists but not 'llm', migrate
         if ollama_data and not llm_data:
@@ -225,6 +239,11 @@ class Config:
                 allow_llm_generated=plugins_data.get("allow_llm_generated", PluginsConfig.allow_llm_generated),
                 auto_approve=plugins_data.get("auto_approve", PluginsConfig.auto_approve),
                 auto_approve_if_tests_pass=plugins_data.get("auto_approve_if_tests_pass", PluginsConfig.auto_approve_if_tests_pass),
+            ),
+            personality_evolution=PersonalityEvolutionConfig(
+                allow_suggestions=personality_evolution_data.get("allow_suggestions", PersonalityEvolutionConfig.allow_suggestions),
+                auto_approve_suggestions=personality_evolution_data.get("auto_approve_suggestions", PersonalityEvolutionConfig.auto_approve_suggestions),
+                min_feedback_for_analysis=personality_evolution_data.get("min_feedback_for_analysis", PersonalityEvolutionConfig.min_feedback_for_analysis),
             ),
             system_prompt=data.get("system_prompt", ""),
             max_tool_iterations=data.get("max_tool_iterations", 10),

@@ -31,6 +31,36 @@ def _init_db(conn: sqlite3.Connection) -> None:
             source TEXT
         )
     """)
+
+    # Feedback table for tracking user sentiment on responses
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conversation_id TEXT NOT NULL,
+            message_index INTEGER NOT NULL,
+            sentiment TEXT NOT NULL CHECK(sentiment IN ('positive', 'negative')),
+            response_content TEXT,
+            user_comment TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            processed BOOLEAN DEFAULT FALSE
+        )
+    """)
+
+    # Personality change suggestions
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS personality_suggestions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            personality_name TEXT NOT NULL,
+            suggestion_type TEXT NOT NULL,
+            content TEXT NOT NULL,
+            reason TEXT,
+            source TEXT,
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            applied_at TIMESTAMP
+        )
+    """)
+
     conn.commit()
 
 

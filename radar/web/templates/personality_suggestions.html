@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Personality Suggestions - Radar{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-lg">
+    <h2 class="text-phosphor" style="font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.1em;">
+        PERSONALITY SUGGESTIONS
+    </h2>
+    <a href="/personalities" class="btn btn--ghost">
+        Back to Personalities
+    </a>
+</div>
+
+<!-- Feedback Summary -->
+<div class="card mb-lg">
+    <div class="card__header">
+        <span class="card__title">Feedback Summary</span>
+    </div>
+    <div class="card__body">
+        <div class="flex gap-lg" style="flex-wrap: wrap;">
+            <div class="stat">
+                <span class="stat__value">{{ feedback_summary.total }}</span>
+                <span class="stat__label">Total Feedback</span>
+            </div>
+            <div class="stat">
+                <span class="stat__value text-phosphor">{{ feedback_summary.positive }}</span>
+                <span class="stat__label">Positive</span>
+            </div>
+            <div class="stat">
+                <span class="stat__value text-error">{{ feedback_summary.negative }}</span>
+                <span class="stat__label">Negative</span>
+            </div>
+            <div class="stat">
+                <span class="stat__value">{{ feedback_summary.unprocessed }}</span>
+                <span class="stat__label">Unprocessed</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Pending Suggestions -->
+<div class="card">
+    <div class="card__header">
+        <span class="card__title">Pending Suggestions ({{ suggestions | length }})</span>
+    </div>
+    <div class="card__body">
+        {% if suggestions %}
+        <div id="suggestions-list">
+            {% for s in suggestions %}
+            <div class="suggestion-item card mb-md" id="suggestion-{{ s.id }}" style="border-left: 3px solid var(--phosphor);">
+                <div class="card__header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: var(--space-sm);">
+                    <div>
+                        <span class="badge badge--{{ s.suggestion_type }}">{{ s.suggestion_type }}</span>
+                        <span class="text-muted" style="margin-left: var(--space-sm);">{{ s.personality_name }}</span>
+                    </div>
+                    <div class="text-muted" style="font-size: 0.75rem;">
+                        {{ s.created_at[:16] if s.created_at else '' }}
+                        <span class="badge" style="margin-left: var(--space-xs);">{{ s.source }}</span>
+                    </div>
+                </div>
+                <div class="card__body">
+                    {% if s.reason %}
+                    <p class="text-muted mb-md" style="font-style: italic;">{{ s.reason }}</p>
+                    {% endif %}
+                    <pre class="suggestion-content" style="background: var(--surface-elevated); padding: var(--space-md); border-radius: var(--radius-sm); overflow-x: auto; white-space: pre-wrap; word-break: break-word; font-size: 0.85rem;">{{ s.content }}</pre>
+                    <div class="flex gap-sm mt-md" style="flex-wrap: wrap;">
+                        <button class="btn btn--primary"
+                                hx-post="/api/personalities/suggestions/{{ s.id }}/approve"
+                                hx-target="#suggestion-{{ s.id }}"
+                                hx-swap="outerHTML"
+                                hx-confirm="Approve this suggestion? It will modify the personality file.">
+                            Approve
+                        </button>
+                        <button class="btn btn--ghost text-error"
+                                hx-post="/api/personalities/suggestions/{{ s.id }}/reject"
+                                hx-target="#suggestion-{{ s.id }}"
+                                hx-swap="outerHTML"
+                                hx-confirm="Reject this suggestion?">
+                            Reject
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-muted" style="text-align: center; padding: var(--space-xl);">
+            <p style="font-size: 1.1rem;">No pending suggestions</p>
+            <p style="margin-top: var(--space-sm);">
+                Suggestions appear here when the LLM analyzes feedback and proposes personality improvements.
+            </p>
+            <p style="margin-top: var(--space-md);">
+                <a href="/chat" class="text-phosphor">Chat with Radar</a> and provide feedback using the + / - buttons.
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 80px;
+}
+.stat__value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+}
+.stat__label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: var(--space-xs);
+}
+.badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    background: var(--surface-elevated);
+    color: var(--text-muted);
+}
+.badge--add {
+    background: rgba(0, 255, 136, 0.1);
+    color: var(--phosphor);
+}
+.badge--remove {
+    background: rgba(255, 100, 100, 0.1);
+    color: var(--error);
+}
+.badge--modify {
+    background: rgba(255, 200, 50, 0.1);
+    color: #ffcc33;
+}
+.suggestion-content {
+    max-height: 300px;
+    overflow-y: auto;
+}
+</style>
+{% endblock %}
