@@ -181,9 +181,25 @@ Currently only `tests/test_feedback.py` exists (~16 tests). Major gaps:
 
 ## 6. Scheduler & Automation
 
+### Chat-based Scheduled Tasks
+Natural language task scheduling via chat:
+- [ ] Database table for scheduled tasks (time, message, repeat pattern, last_run)
+- [ ] Tools: `schedule_task`, `list_scheduled_tasks`, `cancel_task`
+- [ ] Heartbeat checks for due tasks and injects them as events
+- [ ] Example: "Send me the weather every morning at 7am"
+
+**Tradeoffs vs crontab:**
+| Aspect | Crontab | Heartbeat |
+|--------|---------|-----------|
+| Reliability | System-level, always runs | Depends on radar daemon |
+| Configuration | Separate from radar | Unified in radar.yaml |
+| Context | Each run is isolated | Persistent conversation |
+| Docker | Requires cron in container | Works out of the box |
+
+### Other Scheduler Improvements
 - [ ] Persistent event queue (survives crashes)
 - [ ] Event priority levels (critical/normal/low)
-- [ ] Per-task cron scheduling ("Every Monday at 9am, summarize my week")
+- [ ] Config-based scheduled tasks (radar.yaml `scheduled_tasks:` section)
 - [ ] Heartbeat retry on failure
 - [ ] Metrics (duration, event count, success rate)
 - [ ] Task dependencies (run A after B completes)
