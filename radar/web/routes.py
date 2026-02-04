@@ -332,6 +332,7 @@ async def api_ask(request: Request):
 @app.post("/api/chat")
 async def api_chat(request: Request):
     """Chat message endpoint."""
+    import json
     from html import escape
     from radar.agent import run
 
@@ -349,8 +350,12 @@ async def api_chat(request: Request):
     messages = get_messages(new_conversation_id)
     message_index = len(messages) - 1  # Last message (the response)
 
+    # Encode response for data attribute (JSON encode then escape for HTML attribute)
+    raw_response_attr = escape(json.dumps(response))
+
     # Include conversation_id in response for HTMX to track
     # Add feedback buttons to assistant message
+    # data-raw contains JSON-encoded markdown for client-side rendering
     return HTMLResponse(
         f"""
         <div class="message message--user">
@@ -359,7 +364,7 @@ async def api_chat(request: Request):
         </div>
         <div class="message message--assistant" data-conversation-id="{new_conversation_id}" data-message-index="{message_index}">
             <div class="message__role">radar</div>
-            <div class="message__content">{escape(response)}</div>
+            <div class="message__content" data-raw={raw_response_attr}></div>
             <div class="message__feedback">
                 <button class="feedback-btn feedback-btn--positive"
                         hx-post="/api/feedback"

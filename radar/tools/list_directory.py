@@ -36,13 +36,17 @@ def list_directory(path: str, pattern: str | None = None) -> str:
     except PermissionError:
         return f"Error: Permission denied: {path}"
 
+    # Sort: directories first, then files, alphabetically
+    all_dirs = sorted([e for e in entries if e.is_dir()], key=lambda x: x.name.lower())
+    all_files = sorted([e for e in entries if e.is_file()], key=lambda x: x.name.lower())
+
     # Filter by pattern if provided
     if pattern:
-        entries = [e for e in entries if fnmatch.fnmatch(e.name, pattern)]
-
-    # Sort: directories first, then files, alphabetically
-    dirs = sorted([e for e in entries if e.is_dir()], key=lambda x: x.name.lower())
-    files = sorted([e for e in entries if e.is_file()], key=lambda x: x.name.lower())
+        dirs = [d for d in all_dirs if fnmatch.fnmatch(d.name, pattern)]
+        files = [f for f in all_files if fnmatch.fnmatch(f.name, pattern)]
+    else:
+        dirs = all_dirs
+        files = all_files
 
     result_lines = []
     for d in dirs:
@@ -52,6 +56,11 @@ def list_directory(path: str, pattern: str | None = None) -> str:
         result_lines.append(f"[FILE] {f.name} ({size} bytes)")
 
     if not result_lines:
-        return "Directory is empty" + (f" (pattern: {pattern})" if pattern else "")
+        if pattern:
+            # Show what IS in the directory so LLM can navigate
+            hint_dirs = [d.name for d in all_dirs[:5]]
+            hint = f" Subdirectories: {', '.join(hint_dirs)}" if hint_dirs else " No subdirectories."
+            return f"No files matching '{pattern}' in {path}.{hint}"
+        return "Directory is empty"
 
     return "\n".join(result_lines)

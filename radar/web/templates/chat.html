@@ -22,7 +22,11 @@
         {% for msg in messages | default([]) %}
         <div class="message message--{{ msg.role }}"{% if msg.role == 'assistant' %} data-conversation-id="{{ conversation_id }}" data-message-index="{{ msg.id }}"{% endif %}>
             <div class="message__role">{% if msg.role == 'user' %}you{% elif msg.role == 'assistant' %}radar{% else %}{{ msg.role }}{% endif %}</div>
+            {% if msg.role == 'assistant' %}
+            <div class="message__content" data-raw="{{ msg.content | tojson }}"></div>
+            {% else %}
             <div class="message__content">{{ msg.content }}</div>
+            {% endif %}
 
             {% if msg.tool_calls %}
             <div class="message__tool-calls">
@@ -79,20 +83,18 @@
     </div>
 
     <div class="chat__input-area">
-        <form hx-post="/api/chat"
+        <form id="chat-form"
+              hx-post="/api/chat"
               hx-target="#messages"
               hx-swap="beforeend"
-              hx-indicator="#chat-indicator"
-              hx-on::after-request="this.reset(); document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;">
-            {% if conversation_id %}
-            <input type="hidden" name="conversation_id" value="{{ conversation_id }}">
-            {% endif %}
+              hx-indicator="#chat-indicator">
+            <input type="hidden" name="conversation_id" id="conversation-id" value="{{ conversation_id or '' }}">
             <div class="flex gap-md">
                 <textarea name="message"
+                          id="chat-input"
                           class="input"
                           placeholder="Type your message... (Shift+Enter for newline)"
-                          rows="2"
-                          onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); this.form.requestSubmit(); }"></textarea>
+                          rows="2"></textarea>
                 <button type="submit" class="btn btn--primary" style="align-self: flex-end;">
                     <span class="htmx-indicator" id="chat-indicator">...</span>
                     <span>Send</span>
@@ -155,12 +157,100 @@
     border-radius: var(--radius-sm);
     background: var(--surface-elevated);
 }
+/* Markdown rendering styles */
+.message__content p { margin: 0 0 0.5em 0; }
+.message__content p:last-child { margin-bottom: 0; }
+.message__content ul, .message__content ol { margin: 0.5em 0; padding-left: 1.5em; }
+.message__content code {
+    background: var(--surface-elevated);
+    padding: 0.1em 0.3em;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+}
+.message__content pre {
+    background: var(--surface-elevated);
+    padding: var(--space-sm);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    margin: 0.5em 0;
+}
+.message__content pre code {
+    background: none;
+    padding: 0;
+}
+.message__content blockquote {
+    border-left: 3px solid var(--phosphor);
+    margin: 0.5em 0;
+    padding-left: var(--space-sm);
+    color: var(--text-muted);
+}
 </style>
 <script>
 // Auto-scroll to bottom on page load
 document.addEventListener('DOMContentLoaded', function() {
     const messages = document.getElementById('messages');
+    const form = document.getElementById('chat-form');
+    const input = document.getElementById('chat-input');
+
+    // Scroll to bottom
     messages.scrollTop = messages.scrollHeight;
+
+    // Handle Enter key (desktop)
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            form.dispatchEvent(new Event('submit', {bubbles: true, cancelable: true}));
+        }
+    });
+
+    // Render markdown in message content (sanitized with DOMPurify)
+    function renderMarkdown() {
+        messages.querySelectorAll('.message__content[data-raw]').forEach(function(el) {
+            var rawJson = el.getAttribute('data-raw');
+            if (rawJson && window.marked && window.DOMPurify) {
+                try {
+                    var raw = JSON.parse(rawJson);
+                    var html = marked.parse(raw);
+                    var sanitized = DOMPurify.sanitize(html);
+                    // Clear and append sanitized content
+                    el.textContent = '';
+                    var temp = document.createElement('div');
+                    temp.innerHTML = DOMPurify.sanitize(html);
+                    while (temp.firstChild) {
+                        el.appendChild(temp.firstChild);
+                    }
+                    el.removeAttribute('data-raw');
+                } catch (e) {
+                    console.error('Markdown render error:', e);
+                }
+            }
+        });
+    }
+
+    // Clear input, update conversation_id, render markdown, and scroll after HTMX response
+    document.body.addEventListener('htmx:afterRequest', function(e) {
+        if (e.detail.elt === form && e.detail.successful) {
+            input.value = '';
+            // Extract conversation_id from the last assistant message
+            var allMsgs = messages.querySelectorAll('.message--assistant[data-conversation-id]');
+            if (allMsgs.length > 0) {
+                var lastMsg = allMsgs[allMsgs.length - 1];
+                var convId = lastMsg.getAttribute('data-conversation-id');
+                if (convId) {
+                    document.getElementById('conversation-id').value = convId;
+                }
+            }
+            // Render any markdown in new messages
+            renderMarkdown();
+            setTimeout(function() {
+                messages.scrollTop = messages.scrollHeight;
+            }, 100);
+        }
+    });
+
+    // Render markdown on page load
+    renderMarkdown();
 });
 </script>
 {% endblock %}
