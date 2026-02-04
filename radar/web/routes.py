@@ -364,7 +364,7 @@ async def api_chat(request: Request):
         </div>
         <div class="message message--assistant" data-conversation-id="{new_conversation_id}" data-message-index="{message_index}">
             <div class="message__role">radar</div>
-            <div class="message__content" data-raw={raw_response_attr}></div>
+            <div class="message__content" data-raw="{raw_response_attr}"></div>
             <div class="message__feedback">
                 <button class="feedback-btn feedback-btn--positive"
                         hx-post="/api/feedback"
