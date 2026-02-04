@@ -20,8 +20,8 @@
 
     <div class="chat__messages" id="messages">
         {% for msg in messages | default([]) %}
-        <div class="message message--{{ msg.role }}">
-            <div class="message__role">{{ msg.role }}</div>
+        <div class="message message--{{ msg.role }}"{% if msg.role == 'assistant' %} data-conversation-id="{{ conversation_id }}" data-message-index="{{ msg.id }}"{% endif %}>
+            <div class="message__role">{% if msg.role == 'user' %}you{% elif msg.role == 'assistant' %}radar{% else %}{{ msg.role }}{% endif %}</div>
             <div class="message__content">{{ msg.content }}</div>
 
             {% if msg.tool_calls %}
@@ -48,6 +48,25 @@
                     </div>
                 </div>
                 {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if msg.role == 'assistant' %}
+            <div class="message__feedback">
+                <button class="feedback-btn feedback-btn--positive"
+                        hx-post="/api/feedback"
+                        hx-vals='{"conversation_id": "{{ conversation_id }}", "message_index": {{ msg.id }}, "sentiment": "positive"}'
+                        hx-swap="outerHTML"
+                        title="This was helpful">
+                    <span class="feedback-icon">+</span>
+                </button>
+                <button class="feedback-btn feedback-btn--negative"
+                        hx-post="/api/feedback"
+                        hx-vals='{"conversation_id": "{{ conversation_id }}", "message_index": {{ msg.id }}, "sentiment": "negative"}'
+                        hx-swap="outerHTML"
+                        title="This could be better">
+                    <span class="feedback-icon">-</span>
+                </button>
             </div>
             {% endif %}
         </div>

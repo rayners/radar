@@ -2,7 +2,7 @@
 
 import secrets
 
-from fastapi import Request
+from fastapi import Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from radar.web import app, templates, get_common_context, _requires_auth
@@ -113,15 +113,15 @@ async def dashboard(request: Request):
 
 
 @app.get("/chat", response_class=HTMLResponse)
-async def chat(request: Request, continue_: str = None):
+async def chat(request: Request, continue_: str = Query(None, alias="continue")):
     """Chat page."""
     context = get_common_context(request, "chat")
     context["conversation_id"] = continue_
-    context["messages"] = []  # TODO: Load from memory if continuing
+    context["messages"] = []
 
     if continue_:
-        # TODO: Load conversation history
-        pass
+        from radar.memory import get_messages_for_display
+        context["messages"] = get_messages_for_display(continue_)
 
     return templates.TemplateResponse("chat.html", context)
 

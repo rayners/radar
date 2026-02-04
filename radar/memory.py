@@ -146,3 +146,75 @@ def messages_to_api_format(messages: list[dict[str, Any]]) -> list[dict[str, Any
             api_msg["tool_calls"] = msg["tool_calls"]
         api_messages.append(api_msg)
     return api_messages
+
+
+def get_messages_for_display(conversation_id: str) -> list[dict[str, Any]]:
+    """Get messages formatted for web UI display.
+
+    Transforms tool_calls format and associates results with their calls.
+    Skips "tool" role messages as they are merged into assistant messages.
+
+    Args:
+        conversation_id: The conversation ID
+
+    Returns:
+        List of messages with tool_calls in display format:
+        {"role": "user"|"assistant", "content": "...", "tool_calls": [{"name": ..., "args": ..., "result": ...}]}
+    """
+    raw_messages = get_messages(conversation_id)
+
+    # Build a map of tool_call_id -> result from tool role messages
+    tool_results: dict[str, str] = {}
+    for msg in raw_messages:
+        if msg.get("role") == "tool" and msg.get("tool_call_id"):
+            tool_results[msg["tool_call_id"]] = msg.get("content", "")
+
+    display_messages: list[dict[str, Any]] = []
+
+    for i, msg in enumerate(raw_messages):
+        role = msg.get("role")
+
+        # Skip tool role messages - their results are merged into assistant messages
+        if role == "tool":
+            continue
+
+        display_msg: dict[str, Any] = {
+            "role": role,
+            "content": msg.get("content") or "",
+            "id": msg.get("id"),
+        }
+
+        # Transform tool_calls to display format
+        if msg.get("tool_calls"):
+            display_tool_calls = []
+
+            # Collect tool results that follow this message (for positional matching)
+            following_tool_results = []
+            for j in range(i + 1, len(raw_messages)):
+                if raw_messages[j].get("role") == "tool":
+                    following_tool_results.append(raw_messages[j].get("content", ""))
+                else:
+                    break
+
+            for idx, tc in enumerate(msg["tool_calls"]):
+                # Extract from stored format: {"function": {"name": ..., "arguments": {...}}, "id": ...}
+                func = tc.get("function", {})
+                tool_call_id = tc.get("id", "")
+
+                # Try to get result by tool_call_id first, then by position
+                result = tool_results.get(tool_call_id, "")
+                if not result and idx < len(following_tool_results):
+                    result = following_tool_results[idx]
+
+                display_tool_calls.append({
+                    "name": func.get("name", "unknown"),
+                    "args": func.get("arguments", {}),
+                    "result": result,
+                })
+
+            if display_tool_calls:
+                display_msg["tool_calls"] = display_tool_calls
+
+        display_messages.append(display_msg)
+
+    return display_messages

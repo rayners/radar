@@ -22,7 +22,7 @@ test.txt
 *.db
 
 # Local Claude notes
-.claude.local.md
+CLAUDE.local.md
 
 # Docker workspace (user files for container access)
 workspace/
@@ -30,3 +30,4 @@ workspace/
 
 # Docker environment file
 .env
+.playwright-mcp/
