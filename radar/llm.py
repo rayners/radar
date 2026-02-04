@@ -9,6 +9,16 @@ from radar.config import get_config
 from radar.tools import execute_tool, get_tools_schema
 
 
+def _log_api_call(provider: str, model: str) -> None:
+    """Log an API call and increment counter."""
+    try:
+        from radar.logging import log, increment_api_calls
+        increment_api_calls()
+        log("debug", f"LLM API call", provider=provider, model=model)
+    except Exception:
+        pass  # Don't fail on logging errors
+
+
 def chat(
     messages: list[dict[str, Any]],
     use_tools: bool = True,
@@ -50,6 +60,7 @@ def _chat_ollama(messages, use_tools, config):
             payload["tools"] = tools
 
         try:
+            _log_api_call("ollama", config.llm.model)
             response = httpx.post(url, json=payload, timeout=120)
             response.raise_for_status()
         except httpx.TimeoutException:
@@ -127,6 +138,7 @@ def _chat_openai(messages, use_tools, config):
             kwargs["tools"] = openai_tools
 
         try:
+            _log_api_call("openai", config.llm.model)
             response = client.chat.completions.create(**kwargs)
         except Exception as e:
             raise RuntimeError(f"OpenAI API error: {e}")

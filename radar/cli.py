@@ -254,6 +254,10 @@ def start(host: str | None, port: int | None):
     ))
 
     try:
+        # Initialize logging
+        from radar.logging import setup_logging
+        setup_logging()
+
         # Start scheduler
         config = get_config()
         console.print(f"[dim]Starting scheduler (heartbeat every {config.heartbeat.interval_minutes} min)[/dim]")

@@ -50,19 +50,34 @@ def get_tools_schema() -> list[dict]:
     return [schema for _, schema in _registry.values()]
 
 
+def _log_tool_execution(name: str, success: bool, error: str | None = None) -> None:
+    """Log a tool execution."""
+    try:
+        from radar.logging import log
+        if success:
+            log("info", f"Tool executed: {name}", tool=name)
+        else:
+            log("warn", f"Tool failed: {name}", tool=name, error=error)
+    except Exception:
+        pass
+
+
 def execute_tool(name: str, arguments: dict[str, Any]) -> str:
     """Execute a tool by name with given arguments.
 
     Returns the tool's string result or error message.
     """
     if name not in _registry:
+        _log_tool_execution(name, False, "Unknown tool")
         return f"Error: Unknown tool '{name}'"
 
     func, _ = _registry[name]
     try:
         result = func(**arguments)
+        _log_tool_execution(name, True)
         return str(result)
     except Exception as e:
+        _log_tool_execution(name, False, str(e))
         return f"Error executing {name}: {e}"
 
 

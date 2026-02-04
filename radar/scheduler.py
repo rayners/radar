@@ -64,11 +64,21 @@ def _build_heartbeat_message(events: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def _log_heartbeat(message: str, **extra) -> None:
+    """Log a heartbeat event."""
+    try:
+        from radar.logging import log
+        log("info", message, **extra)
+    except Exception:
+        pass
+
+
 def _heartbeat_tick() -> None:
     """Execute a heartbeat tick."""
     global _last_heartbeat, _event_queue
 
     if _is_quiet_hours():
+        _log_heartbeat("Heartbeat skipped (quiet hours)")
         return
 
     # Collect pending events
@@ -81,11 +91,14 @@ def _heartbeat_tick() -> None:
     # Run agent with heartbeat message
     try:
         from radar.agent import run
+        _log_heartbeat("Heartbeat started", event_count=len(events))
         run(message, conversation_id=_get_heartbeat_conversation_id())
+        _log_heartbeat("Heartbeat completed", event_count=len(events))
     except Exception as e:
         # Log error but don't crash scheduler
         import sys
         print(f"Heartbeat error: {e}", file=sys.stderr)
+        _log_heartbeat("Heartbeat failed", error=str(e))
 
     _last_heartbeat = datetime.now()
 

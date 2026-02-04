@@ -22,20 +22,11 @@
               hx-target="#memory-list"
               hx-swap="innerHTML"
               hx-trigger="keyup changed delay:300ms from:input">
-            <div class="flex gap-md">
-                <input type="text"
-                       name="q"
-                       class="input"
-                       placeholder="Search memories..."
-                       autocomplete="off">
-                <select name="category" class="input" style="width: 180px;">
-                    <option value="">All Categories</option>
-                    <option value="user_preference">Preferences</option>
-                    <option value="learned_fact">Facts</option>
-                    <option value="task_state">Tasks</option>
-                    <option value="personality_note">Personality</option>
-                </select>
-            </div>
+            <input type="text"
+                   name="q"
+                   class="input"
+                   placeholder="Search memories..."
+                   autocomplete="off">
         </form>
     </div>
 </div>
@@ -44,12 +35,11 @@
 <div class="fact-list" id="memory-list">
     {% for fact in facts | default([]) %}
     <div class="fact" id="fact-{{ fact.id }}">
-        <span class="fact__category">{{ fact.category }}</span>
+        <span class="fact__category">{{ fact.source | default('manual') }}</span>
         <div class="fact__content">
-            <div class="fact__key">{{ fact.key }}</div>
-            <div class="fact__value">{{ fact.value }}</div>
+            <div class="fact__value">{{ fact.content }}</div>
             <div class="fact__meta">
-                Added {{ fact.created_at }} · Source: {{ fact.source | default('manual') }}
+                Added {{ fact.created_at }}
             </div>
         </div>
         <div class="fact__actions">
