@@ -159,30 +159,31 @@
 }
 /* Markdown rendering styles */
 .message__content p { margin: 0; }
-.message__content p + p { margin-top: 0.4em; }
-.message__content ul, .message__content ol { margin: 0.3em 0; padding-left: 1.5em; }
+.message__content p + p { margin-top: 0.25em; }
+.message__content ul, .message__content ol { margin: 0.2em 0; padding-left: 1.2em; }
+.message__content li { margin: 0; }
 .message__content code {
     background: var(--surface-elevated);
-    padding: 0.1em 0.3em;
-    border-radius: var(--radius-sm);
+    padding: 0.05em 0.2em;
+    border-radius: 2px;
     font-family: var(--font-mono);
-    font-size: 0.9em;
+    font-size: 0.85em;
 }
 .message__content pre {
     background: var(--surface-elevated);
-    padding: var(--space-sm);
-    border-radius: var(--radius-sm);
+    padding: var(--space-xs);
+    border-radius: 2px;
     overflow-x: auto;
-    margin: 0.5em 0;
+    margin: 0.25em 0;
 }
 .message__content pre code {
     background: none;
     padding: 0;
 }
 .message__content blockquote {
-    border-left: 3px solid var(--phosphor);
-    margin: 0.5em 0;
-    padding-left: var(--space-sm);
+    border-left: 2px solid var(--phosphor);
+    margin: 0.25em 0;
+    padding-left: var(--space-xs);
     color: var(--text-muted);
 }
 </style>
