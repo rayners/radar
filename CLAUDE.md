@@ -74,6 +74,7 @@ Every new feature or bug fix must include tests. Run tests with `python -m pytes
 - Patch at the source module (e.g., `radar.agent.ask`), not the importing module, since routes use lazy imports inside function bodies
 - Exception: `loader.py`'s `create_plugin` does `from radar.config import get_config` inside the function body — patch `radar.config.get_config` (the source module), not `radar.plugins.loader.get_config`
 - Plugin TestRunner sandbox: only safe builtins are available (no `ValueError`, `open`, etc.). To test exceptions, use operations that trigger built-in errors (e.g., `1/0`)
+- Dynamic tool sandbox (`register_dynamic_tool`): restricted builtins block `import`/`open` at **call time**, not definition time. Registration succeeds; execution fails. Test both phases separately.
 - New CLI commands: use `click.testing.CliRunner` with mocked lazy imports (see `tests/test_cli_daemon.py`)
 
 ## Code Conventions
