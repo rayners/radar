@@ -247,7 +247,7 @@ Natural language task scheduling via chat:
 
 - [x] Split `routes.py` into domain modules (9 modules under `radar/web/routes/` using APIRouter)
 - [ ] Split `config.py` (534 lines) - separate concerns
-- [ ] Split `plugins.py` (1012 lines) - validation, loading, testing
+- [x] Split `plugins.py` into `radar/plugins/` package (models, validator, runner, versions, loader)
 - [ ] Consistent error handling patterns
 - [ ] API versioning strategy
 - [ ] Structured error responses (RFC 7807)
