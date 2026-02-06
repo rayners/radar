@@ -246,7 +246,7 @@ Natural language task scheduling via chat:
 ## 10. Code Quality & Refactoring
 
 - [x] Split `routes.py` into domain modules (9 modules under `radar/web/routes/` using APIRouter)
-- [ ] Split `config.py` (534 lines) - separate concerns
+- [x] Split `config.py` into `radar/config/` package (paths, schema, loader)
 - [x] Split `plugins.py` into `radar/plugins/` package (models, validator, runner, versions, loader)
 - [ ] Consistent error handling patterns
 - [ ] API versioning strategy
