@@ -2,10 +2,15 @@
 
 import builtins
 from functools import wraps
+from pathlib import Path
 from typing import Any, Callable
 
 # Global registry: name -> (function, schema)
 _registry: dict[str, tuple[Callable, dict]] = {}
+
+# Sets populated during discovery — used by is_dynamic_tool()
+_static_tools: set[str] = set()
+_external_tools: set[str] = set()
 
 
 def tool(
@@ -47,6 +52,7 @@ def tool(
 
 def get_tools_schema() -> list[dict]:
     """Return list of tool definitions for the API."""
+    ensure_external_tools_loaded()
     return [schema for _, schema in _registry.values()]
 
 
@@ -202,38 +208,81 @@ def unregister_tool(name: str) -> bool:
 
 
 def is_dynamic_tool(name: str) -> bool:
-    """Check if a tool was dynamically registered."""
-    # Dynamic tools aren't in the static imports list
-    static_tools = {
-        "exec", "github", "list_directory", "notify", "pdf_extract",
-        "read_file", "recall", "remember", "weather", "web_search",
-        "write_file", "create_tool", "debug_tool", "rollback_tool",
-        "suggest_personality_update", "analyze_feedback",
-        "schedule_task", "list_scheduled_tasks", "cancel_task",
-    }
-    return name in _registry and name not in static_tools
+    """Check if a tool was dynamically registered (plugin, not built-in or external)."""
+    return name in _registry and name not in _static_tools and name not in _external_tools
 
 
-# Auto-import all tool modules to register them
-from radar.tools import (
-    exec,
-    github,
-    list_directory,
-    notify,
-    pdf_extract,
-    read_file,
-    recall,
-    remember,
-    scheduled_tasks,
-    weather,
-    web_search,
-    write_file,
-    create_tool,
-    debug_tool,
-    rollback_tool,
-    suggest_personality,
-    analyze_feedback,
-)
+def _discover_tools() -> set[str]:
+    """Auto-discover and import tool modules from this package."""
+    import importlib
+    import pkgutil
+
+    snapshot = set(_registry.keys())
+    for _finder, module_name, _is_pkg in pkgutil.iter_modules(__path__):
+        if module_name.startswith("_"):
+            continue
+        importlib.import_module(f"radar.tools.{module_name}")
+    return set(_registry.keys()) - snapshot
+
+
+def load_external_tools(directories: list[str | Path]) -> list[str]:
+    """Load tool modules from external directories.
+
+    Args:
+        directories: List of directory paths to scan for .py tool files.
+
+    Returns:
+        List of module stems that were loaded.
+    """
+    import importlib.util
+
+    loaded = []
+    for dir_path in directories:
+        path = Path(dir_path).expanduser()
+        if not path.is_dir():
+            continue
+        for file in sorted(path.glob("*.py")):
+            if file.name.startswith("_"):
+                continue
+            spec = importlib.util.spec_from_file_location(
+                f"radar_external_tools.{file.stem}", file
+            )
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)
+                loaded.append(file.stem)
+    return loaded
+
+
+_external_tools_loaded = False
+
+
+def ensure_external_tools_loaded() -> None:
+    """Load external/user-local tools once. Called lazily from get_tools_schema()."""
+    global _external_tools_loaded
+    if _external_tools_loaded:
+        return
+    _external_tools_loaded = True
+
+    try:
+        from radar.config import get_config, get_data_paths
+
+        config = get_config()
+        paths = get_data_paths()
+
+        dirs: list[str | Path] = [paths.tools]
+        dirs.extend(config.tools.extra_dirs)
+
+        snapshot = set(_registry.keys())
+        load_external_tools(dirs)
+        _external_tools.update(set(_registry.keys()) - snapshot - _static_tools)
+    except Exception:
+        # Config not available (e.g., during testing) — skip silently
+        pass
+
+
+# Auto-discover built-in tool modules at import time
+_static_tools = _discover_tools()
 
 __all__ = [
     "tool",
@@ -243,4 +292,6 @@ __all__ = [
     "register_dynamic_tool",
     "unregister_tool",
     "is_dynamic_tool",
+    "load_external_tools",
+    "ensure_external_tools_loaded",
 ]

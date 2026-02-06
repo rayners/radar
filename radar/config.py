@@ -74,6 +74,13 @@ class DataPaths:
         return path
 
     @property
+    def tools(self) -> Path:
+        """Get user tools directory."""
+        path = self.base / "tools"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @property
     def log_file(self) -> Path:
         """Get log file path."""
         return self.base / "radar.log"
@@ -183,6 +190,8 @@ class ToolsConfig:
     # - block_dangerous: Block known dangerous patterns, allow others (default)
     # - allow_all: No restrictions (dangerous!)
     exec_mode: str = "block_dangerous"
+    # Extra directories to scan for user-local tool files
+    extra_dirs: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -343,6 +352,7 @@ class Config:
                 max_file_size=tools_data.get("max_file_size", ToolsConfig.max_file_size),
                 exec_timeout=tools_data.get("exec_timeout", ToolsConfig.exec_timeout),
                 exec_mode=tools_data.get("exec_mode", ToolsConfig.exec_mode),
+                extra_dirs=tools_data.get("extra_dirs", []),
             ),
             heartbeat=HeartbeatConfig(
                 interval_minutes=heartbeat_data.get("interval_minutes", HeartbeatConfig.interval_minutes),

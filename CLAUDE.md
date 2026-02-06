@@ -85,6 +85,8 @@ Every new feature or bug fix must include tests. Run tests with `python -m pytes
 
 ## Adding a New Tool
 
+Create a file in `radar/tools/` — it's auto-discovered on import (no manual imports needed):
+
 ```python
 # radar/tools/my_tool.py
 from radar.tools import tool
@@ -100,7 +102,39 @@ def my_tool(arg: str) -> str:
     return f"Result: {arg}"
 ```
 
-Then import in `radar/tools/__init__.py`.
+The `_discover_tools()` function in `__init__.py` uses `pkgutil.iter_modules` to find and import all `.py` files in the package automatically. Files starting with `_` are skipped.
+
+### Adding a User-Local Tool
+
+User-local tools live outside the package and follow the same `@tool` pattern:
+
+- **Default directory**: `~/.local/share/radar/tools/` (always scanned)
+- **Extra directories**: Configure `tools.extra_dirs` in `radar.yaml`
+
+```yaml
+# radar.yaml
+tools:
+  extra_dirs:
+    - ~/my-radar-tools
+    - /opt/shared-radar-tools
+```
+
+Create a `.py` file in any of these directories:
+
+```python
+# ~/.local/share/radar/tools/hello.py
+from radar.tools import tool
+
+@tool(
+    name="hello",
+    description="Say hello",
+    parameters={"name": {"type": "string", "description": "Who to greet"}},
+)
+def hello(name: str) -> str:
+    return f"Hello, {name}!"
+```
+
+External tools are loaded when the tool schema is first requested (not at package import time). They are tracked separately from built-in tools and plugins.
 
 ## Adding New Config Sections
 

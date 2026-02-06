@@ -8,7 +8,7 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (65 tests) — **130 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (65 tests), `test_tool_discovery.py` (16 tests) — **146 total**.
 
 - [ ] **Core agent tests** - context building, tool execution loop, message storage
 - [ ] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, error handling
@@ -259,10 +259,10 @@ Natural language task scheduling via chat:
 Reducing friction for adding new tools and plugins.
 
 ### Tool Registration & Discovery
-- [ ] **Tool auto-discovery** — Scan `radar/tools/*.py` for `@tool` decorators instead of requiring manual imports in `__init__.py`. Adding a tool should just be "create the file."
+- [x] **Tool auto-discovery** — `_discover_tools()` uses `pkgutil.iter_modules` to auto-import all tool modules. Adding a tool is just "create the file."
 - [ ] **Tool config support** — Let tools declare config fields (stored under `tools.<name>:` in `radar.yaml`). Currently tools that need settings (e.g., API keys, preferences) have no standard pattern.
 - [ ] **Tool dependency validation** — Tools can declare required Python packages; checked at startup with clear error messages for missing deps.
-- [ ] **`static_tools` list maintenance** — `is_dynamic_tool()` uses a hardcoded list that must be manually kept in sync. Derive it from the registry automatically.
+- [x] **`static_tools` list maintenance** — `_static_tools` set is now derived automatically from the registry during discovery. `is_dynamic_tool()` no longer uses a hardcoded list.
 
 ### Plugin Lifecycle
 - [ ] **Plugin loading at startup** — Load all enabled plugins when daemon starts, not on first tool call. Currently a plugin created via chat isn't available until the tool registry is next queried.
@@ -293,7 +293,7 @@ Reducing friction for adding new tools and plugins.
 **High Priority (Foundational):**
 1. Test coverage for core components
 2. Config save functionality in web UI
-3. Tool auto-discovery and `static_tools` cleanup
+3. ~~Tool auto-discovery and `static_tools` cleanup~~ (done)
 4. Error handling improvements
 
 **Medium Priority (Usability):**
