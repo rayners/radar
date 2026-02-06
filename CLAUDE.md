@@ -23,11 +23,17 @@ radar config             # Show configuration
 radar history            # View conversation history
 
 # Daemon mode
-radar start              # Start daemon (scheduler + web UI)
+radar start              # Start daemon (daemonizes by default)
+radar start --foreground # Run in foreground (don't detach)
 radar start -h 0.0.0.0   # Listen on all interfaces (remote access)
 radar stop               # Stop daemon
 radar status             # Show daemon/scheduler status
 radar heartbeat          # Trigger manual heartbeat
+
+# Systemd service
+radar service install    # Install + enable + start user service
+radar service uninstall  # Stop + disable + remove user service
+radar service status     # Show systemd service status
 
 # Testing with specific LLM endpoint
 RADAR_LLM_BASE_URL="http://host:11434" radar ask "test"
@@ -66,6 +72,7 @@ Every new feature or bug fix must include tests. Run tests with `python -m pytes
 - New routes: use `starlette.testclient.TestClient` with mocked dependencies (see `tests/test_web_routes.py`)
 - New config/storage: use the `isolated_data_dir` fixture from `conftest.py`
 - Patch at the source module (e.g., `radar.agent.ask`), not the importing module, since routes use lazy imports inside function bodies
+- New CLI commands: use `click.testing.CliRunner` with mocked lazy imports (see `tests/test_cli_daemon.py`)
 
 ## Code Conventions
 
@@ -427,16 +434,18 @@ python -c "from radar.tools.recall import recall; print(recall('query'))"
 
 ## Daemon Mode
 
-The daemon runs the scheduler and web server together:
+The daemon runs the scheduler and web server together. It daemonizes by default (double-fork, detaches from terminal).
 
 ```bash
-radar start                    # Default: localhost:8420
+radar start                    # Daemonize (default: localhost:8420)
+radar start --foreground       # Run in foreground (don't detach)
 radar start -h 0.0.0.0 -p 9000 # Custom host/port
 radar stop                     # Stop daemon
 radar status                   # Check if running
 ```
 
-PID file: `~/.local/share/radar/radar.pid`
+- PID file: `~/.local/share/radar/radar.pid`
+- Log file: `~/.local/share/radar/radar.log` (daemon stdout/stderr redirected here)
 
 Configuration in `radar.yaml`:
 ```yaml
@@ -449,6 +458,19 @@ heartbeat:
   quiet_hours_start: "23:00"
   quiet_hours_end: "07:00"
 ```
+
+### Systemd Service
+
+For persistent operation across reboots, use the systemd user service:
+
+```bash
+radar service install          # Install, enable, and start
+radar service install -h 0.0.0.0 -p 9000  # Custom host/port
+radar service uninstall        # Stop, disable, and remove
+radar service status           # Show systemd status
+```
+
+The unit file is written to `~/.config/systemd/user/radar.service` and uses `radar start --foreground` as the `ExecStart` command (Type=simple, Restart=on-failure).
 
 ## Web Dashboard
 
