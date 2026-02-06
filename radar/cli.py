@@ -198,7 +198,7 @@ def start(host: str | None, port: int | None):
     """Start Radar daemon (scheduler + web server)."""
     from radar.scheduler import start_scheduler
     from radar.watchers import start_watchers
-    from radar.web.routes import run_server
+    from radar.web import run_server
 
     config = get_config()
 

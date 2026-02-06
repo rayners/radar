@@ -153,5 +153,25 @@ def get_common_context(request: Request, active_page: str) -> dict:
     }
 
 
-# Import routes
-from radar.web import routes  # noqa: E402, F401
+# Register route modules
+from radar.web.routes.auth import router as auth_router
+from radar.web.routes.dashboard import router as dashboard_router
+from radar.web.routes.chat import router as chat_router
+from radar.web.routes.tasks import router as tasks_router
+from radar.web.routes.memory import router as memory_router
+from radar.web.routes.config import router as config_router
+from radar.web.routes.logs import router as logs_router
+from radar.web.routes.personalities import router as personalities_router
+from radar.web.routes.plugins import router as plugins_router
+
+for _r in [auth_router, dashboard_router, chat_router, tasks_router,
+           memory_router, config_router, logs_router, personalities_router,
+           plugins_router]:
+    app.include_router(_r)
+
+
+def run_server(host: str = "127.0.0.1", port: int = 8420):
+    """Run the web server."""
+    import uvicorn
+
+    uvicorn.run(app, host=host, port=port, log_level="info")
