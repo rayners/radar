@@ -195,6 +195,7 @@ async def config(request: Request):
             "provider": config.llm.provider,
             "base_url": config.llm.base_url,
             "model": config.llm.model,
+            "fallback_model": config.llm.fallback_model,
         },
         "embedding": {
             "provider": config.embedding.provider,

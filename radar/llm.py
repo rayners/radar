@@ -19,6 +19,29 @@ def _log_api_call(provider: str, model: str) -> None:
         pass  # Don't fail on logging errors
 
 
+def _is_rate_limit_error(status_code: int | None, error_text: str) -> bool:
+    """Check if an error indicates rate limiting."""
+    if status_code in (429, 503):
+        return True
+    lower = error_text.lower()
+    return "rate limit" in lower or "temporarily unavailable" in lower
+
+
+def _log_fallback(primary: str, fallback: str, status_code: int | None, error_text: str) -> None:
+    """Log a model fallback event."""
+    try:
+        from radar.logging import log
+        log(
+            "warn",
+            f"Rate limited on {primary} (HTTP {status_code}), falling back to {fallback}",
+            primary_model=primary,
+            fallback_model=fallback,
+            error=error_text[:200],
+        )
+    except Exception:
+        pass
+
+
 def chat(
     messages: list[dict[str, Any]],
     use_tools: bool = True,
@@ -47,12 +70,14 @@ def _chat_ollama(messages, use_tools, config):
     tools = get_tools_schema() if use_tools else []
     all_messages = list(messages)
     iterations = 0
+    active_model = config.llm.model
+    fell_back = False
 
     while iterations < config.max_tool_iterations:
         iterations += 1
 
         payload = {
-            "model": config.llm.model,
+            "model": active_model,
             "messages": all_messages,
             "stream": False,
         }
@@ -60,13 +85,25 @@ def _chat_ollama(messages, use_tools, config):
             payload["tools"] = tools
 
         try:
-            _log_api_call("ollama", config.llm.model)
+            _log_api_call("ollama", active_model)
             response = httpx.post(url, json=payload, timeout=120)
             response.raise_for_status()
         except httpx.TimeoutException:
             raise RuntimeError("Ollama request timed out")
         except httpx.HTTPStatusError as e:
-            raise RuntimeError(f"Ollama error: {e.response.status_code} - {e.response.text}")
+            status_code = e.response.status_code
+            error_text = e.response.text
+            if (
+                not fell_back
+                and config.llm.fallback_model
+                and _is_rate_limit_error(status_code, error_text)
+            ):
+                _log_fallback(active_model, config.llm.fallback_model, status_code, error_text)
+                active_model = config.llm.fallback_model
+                fell_back = True
+                iterations -= 1  # Don't count failed attempt
+                continue
+            raise RuntimeError(f"Ollama error: {status_code} - {error_text}")
         except httpx.ConnectError:
             raise RuntimeError(f"Cannot connect to Ollama at {config.llm.base_url}")
 
@@ -123,6 +160,8 @@ def _chat_openai(messages, use_tools, config):
     tools = get_tools_schema() if use_tools else None
     all_messages = _convert_messages_to_openai(messages)
     iterations = 0
+    active_model = config.llm.model
+    fell_back = False
 
     # Convert tools to OpenAI format
     openai_tools = _convert_tools_to_openai(tools) if tools else None
@@ -131,16 +170,28 @@ def _chat_openai(messages, use_tools, config):
         iterations += 1
 
         kwargs = {
-            "model": config.llm.model,
+            "model": active_model,
             "messages": all_messages,
         }
         if openai_tools:
             kwargs["tools"] = openai_tools
 
         try:
-            _log_api_call("openai", config.llm.model)
+            _log_api_call("openai", active_model)
             response = client.chat.completions.create(**kwargs)
         except Exception as e:
+            status_code = getattr(e, "status_code", None)
+            error_text = str(e)
+            if (
+                not fell_back
+                and config.llm.fallback_model
+                and _is_rate_limit_error(status_code, error_text)
+            ):
+                _log_fallback(active_model, config.llm.fallback_model, status_code, error_text)
+                active_model = config.llm.fallback_model
+                fell_back = True
+                iterations -= 1
+                continue
             raise RuntimeError(f"OpenAI API error: {e}")
 
         assistant_message = response.choices[0].message

@@ -127,6 +127,10 @@ class LLMConfig:
     # API key (use env var RADAR_API_KEY, not config file)
     api_key: str = ""
 
+    # Fallback model for rate limit errors (empty = disabled)
+    # When the primary model returns 429/503, automatically retry with this model
+    fallback_model: str = ""
+
 
 @dataclass
 class EmbeddingConfig:
@@ -323,6 +327,7 @@ class Config:
                 model=llm_data.get("model", LLMConfig.model),
                 base_url=llm_data.get("base_url", LLMConfig.base_url),
                 api_key=llm_data.get("api_key", LLMConfig.api_key),
+                fallback_model=llm_data.get("fallback_model", LLMConfig.fallback_model),
             ),
             embedding=EmbeddingConfig(
                 provider=embedding_data.get("provider", EmbeddingConfig.provider),
@@ -394,6 +399,8 @@ def _apply_env_overrides(config: Config) -> Config:
         config.llm.base_url = base_url
     if model := os.environ.get("RADAR_LLM_MODEL"):
         config.llm.model = model
+    if fallback_model := os.environ.get("RADAR_LLM_FALLBACK_MODEL"):
+        config.llm.fallback_model = fallback_model
 
     # New embedding config env vars
     if emb_provider := os.environ.get("RADAR_EMBEDDING_PROVIDER"):

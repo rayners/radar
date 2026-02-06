@@ -148,6 +148,7 @@ LLM settings:
 - `RADAR_LLM_PROVIDER` - "ollama" or "openai"
 - `RADAR_LLM_BASE_URL` - API endpoint URL
 - `RADAR_LLM_MODEL` - Model name
+- `RADAR_LLM_FALLBACK_MODEL` - Fallback model on rate limit errors
 
 Embedding settings:
 - `RADAR_EMBEDDING_PROVIDER` - "ollama", "openai", "local", or "none"
@@ -213,6 +214,34 @@ embedding:
   model: all-MiniLM-L6-v2
 ```
 Requires: `pip install radar[local-embeddings]`
+
+**Cloud Model with Local Fallback:**
+```yaml
+llm:
+  provider: ollama
+  model: kimi-k2.5:cloud
+  base_url: http://localhost:11434
+  fallback_model: qwen3:latest  # Auto-switch on rate limit (429/503)
+```
+
+### Model Fallback
+
+When using cloud models (e.g., `kimi-k2.5:cloud`) that have rate limits, configure `fallback_model` to automatically switch to a local model when rate-limited:
+
+```yaml
+llm:
+  model: kimi-k2.5:cloud
+  fallback_model: qwen3:latest
+```
+
+Or via env var: `RADAR_LLM_FALLBACK_MODEL=qwen3:latest`
+
+Behavior:
+- Triggers on HTTP 429 (Too Many Requests) or 503 (Service Unavailable)
+- Fallback is sticky for the conversation turn (all remaining tool-loop iterations use the fallback)
+- Only one fallback attempt per turn — if the fallback model also fails, the error propagates
+- The failed attempt doesn't count toward `max_tool_iterations`
+- Works mid-tool-loop: tool results from the primary model stay in context
 
 ### Models Tested
 

@@ -2,11 +2,15 @@
 # Copy this file to ~/.config/radar/radar.yaml for global config
 # or keep in project directory for project-specific config
 
-ollama:
+llm:
+  # LLM provider: "ollama" (default) or "openai" (OpenAI-compatible API)
+  provider: ollama
   # Ollama API base URL
   base_url: "http://localhost:11434"
   # Model to use for chat
   model: "qwen3:latest"
+  # Fallback model for rate limit errors (e.g., cloud models with quotas)
+  # fallback_model: "qwen3:latest"
 
 notifications:
   # ntfy.sh server URL
