@@ -8,7 +8,7 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Currently only `tests/test_feedback.py` exists (~16 tests). Major gaps:
+Test files: `test_feedback.py` (~16 tests), `test_scheduled_tasks.py` (~40 tests), `test_web_routes.py` (~60 tests).
 
 - [ ] **Core agent tests** - context building, tool execution loop, message storage
 - [ ] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, error handling
@@ -18,7 +18,7 @@ Currently only `tests/test_feedback.py` exists (~16 tests). Major gaps:
 - [ ] **Config tests** - YAML loading, env var overrides, validation errors
 - [ ] **Scheduler tests** - heartbeat ticks, quiet hours, event queuing
 - [ ] **Plugin tests** - code validation, sandboxed execution, version rollback
-- [ ] **Web route tests** - FastAPI endpoints, HTMX responses
+- [x] **Web route tests** - FastAPI endpoints, HTMX responses (60 tests across all 9 route modules)
 - [ ] **Integration test harness** - full conversation flow with mock LLM
 
 ---
@@ -37,10 +37,10 @@ Currently only `tests/test_feedback.py` exists (~16 tests). Major gaps:
 - [ ] Config hot-reload without daemon restart
 
 ### Tasks Page
-- [ ] Custom scheduled task CRUD (currently `tasks = []`)
-- [ ] `/tasks/add` modal for creating tasks
-- [ ] `/api/tasks/{id}/run` for manual execution
-- [ ] `/api/heartbeat/trigger` for manual heartbeat
+- [x] Custom scheduled task CRUD
+- [x] `/tasks/add` modal for creating tasks
+- [x] `/api/tasks/{id}/run` for manual execution
+- [x] `/api/heartbeat/trigger` for manual heartbeat
 - [ ] Cron expression support for task scheduling
 
 ### History Page
@@ -183,10 +183,10 @@ Currently only `tests/test_feedback.py` exists (~16 tests). Major gaps:
 
 ### Chat-based Scheduled Tasks
 Natural language task scheduling via chat:
-- [ ] Database table for scheduled tasks (time, message, repeat pattern, last_run)
-- [ ] Tools: `schedule_task`, `list_scheduled_tasks`, `cancel_task`
-- [ ] Heartbeat checks for due tasks and injects them as events
-- [ ] Example: "Send me the weather every morning at 7am"
+- [x] Database table for scheduled tasks (time, message, repeat pattern, last_run)
+- [x] Tools: `schedule_task`, `list_scheduled_tasks`, `cancel_task`
+- [x] Heartbeat checks for due tasks and injects them as events
+- [x] Example: "Send me the weather every morning at 7am"
 
 **Tradeoffs vs crontab:**
 | Aspect | Crontab | Heartbeat |
@@ -245,7 +245,7 @@ Natural language task scheduling via chat:
 
 ## 10. Code Quality & Refactoring
 
-- [ ] Split `routes.py` (1000+ lines) into domain modules
+- [x] Split `routes.py` into domain modules (9 modules under `radar/web/routes/` using APIRouter)
 - [ ] Split `config.py` (400+ lines) - separate concerns
 - [ ] Split `plugins.py` (500+ lines) - validation, loading, testing
 - [ ] Consistent error handling patterns

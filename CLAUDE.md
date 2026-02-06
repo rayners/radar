@@ -51,6 +51,13 @@ RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API
 - `radar/security.py` - Path blocklists and command safety checks
 - `radar/web/` - FastAPI + HTMX web dashboard (mobile responsive)
 
+## Tracking Work
+
+When completing work that relates to items in `docs/TODO.md`, update the file:
+- Mark finished items with `[x]` and add a brief note of what was done if helpful
+- Update counts or descriptions that have become stale (e.g., test counts)
+- Do this as part of the same commit as the work itself
+
 ## Code Conventions
 
 - Tools are registered with the `@tool` decorator in `radar/tools/`
