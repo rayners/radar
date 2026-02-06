@@ -73,6 +73,18 @@ def _heartbeat_tick() -> None:
         _log_heartbeat("Heartbeat skipped (quiet hours)")
         return
 
+    # Process due scheduled tasks
+    try:
+        from radar.scheduled_tasks import get_due_tasks, mark_task_executed
+        for task in get_due_tasks():
+            add_event("scheduled_task", {
+                "description": f"Scheduled task: {task['name']}",
+                "action": task["message"],
+            })
+            mark_task_executed(task["id"])
+    except Exception as e:
+        _log_heartbeat("Scheduled task processing error", error=str(e))
+
     # Collect pending events
     events = _event_queue.copy()
     _event_queue.clear()

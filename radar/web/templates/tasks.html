@@ -25,10 +25,10 @@
                     <th style="width: 180px;">Schedule</th>
                     <th style="width: 150px;">Last Run</th>
                     <th style="width: 150px;">Next Run</th>
-                    <th style="width: 100px;"></th>
+                    <th style="width: 140px;"></th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="task-list">
                 {% for task in tasks | default([]) %}
                 <tr id="task-{{ task.id }}">
                     <td style="text-align: center;">
@@ -50,10 +50,17 @@
                     <td>
                         <div class="flex gap-sm">
                             <button class="btn btn--ghost" style="padding: 2px 6px; font-size: 0.7rem;"
+                                    hx-post="/api/tasks/{{ task.id }}/toggle"
+                                    hx-target="#task-list"
+                                    hx-swap="innerHTML"
+                                    title="{% if task.enabled %}Pause{% else %}Resume{% endif %}">
+                                {% if task.enabled %}||{% else %}&#9654;{% endif %}
+                            </button>
+                            <button class="btn btn--ghost" style="padding: 2px 6px; font-size: 0.7rem;"
                                     hx-post="/api/tasks/{{ task.id }}/run"
                                     hx-swap="none"
                                     title="Run now">
-                                ▶
+                                &#9654;
                             </button>
                             <button class="btn btn--ghost" style="padding: 2px 6px; font-size: 0.7rem;"
                                     hx-delete="/api/tasks/{{ task.id }}"
@@ -61,7 +68,7 @@
                                     hx-swap="outerHTML"
                                     hx-confirm="Delete this task?"
                                     title="Delete">
-                                ✕
+                                &#10005;
                             </button>
                         </div>
                     </td>
@@ -71,7 +78,7 @@
                     <td colspan="6" class="text-muted" style="text-align: center; padding: var(--space-xl);">
                         <p>No scheduled tasks yet.</p>
                         <p style="margin-top: var(--space-sm); font-size: 0.85rem;">
-                            Tasks can run on a schedule (cron) or be triggered by events.
+                            Create tasks via chat ("remind me to check weather every morning at 7am") or the button above.
                         </p>
                     </td>
                 </tr>

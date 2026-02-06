@@ -46,6 +46,7 @@ RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API
 - `radar/tools/` - Tool modules registered via `@tool` decorator
 - `radar/plugins.py` - Dynamic plugin system for LLM-generated tools
 - `radar/scheduler.py` - APScheduler heartbeat with quiet hours + event queue
+- `radar/scheduled_tasks.py` - Scheduled task CRUD (DB in `memory.db`, table `scheduled_tasks`)
 - `radar/watchers.py` - File system monitoring with watchdog
 - `radar/security.py` - Path blocklists and command safety checks
 - `radar/web/` - FastAPI + HTMX web dashboard (mobile responsive)
@@ -64,6 +65,7 @@ RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API
 - **JSONL conversations** - One file per conversation in `~/.local/share/radar/conversations/`
 - **SQLite semantic memory** - Embeddings stored in `~/.local/share/radar/memory.db`
 - **Tools are functions** - Decorated Python functions returning strings
+- **SQLite datetime format** - Use `strftime("%Y-%m-%d %H:%M:%S")` (space separator), NOT `.isoformat()` (T separator). ISO `T` breaks SQLite `datetime()` comparisons.
 
 ## Adding a New Tool
 
@@ -364,6 +366,8 @@ Environment variables:
 - `RADAR_SEARXNG_URL` - SearXNG instance URL
 
 ## Testing Tools
+
+Run tests: `python -m pytest tests/ -v`
 
 Test tool functions directly (bypasses LLM):
 ```bash

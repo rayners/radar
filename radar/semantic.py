@@ -39,6 +39,26 @@ def _init_db(conn: sqlite3.Connection) -> None:
         )
     """)
 
+    # Scheduled tasks
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS scheduled_tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            description TEXT NOT NULL,
+            schedule_type TEXT NOT NULL CHECK(schedule_type IN ('once', 'daily', 'weekly', 'interval')),
+            time_of_day TEXT,
+            day_of_week TEXT,
+            interval_minutes INTEGER,
+            run_at TEXT,
+            message TEXT NOT NULL,
+            enabled BOOLEAN DEFAULT TRUE,
+            last_run TIMESTAMP,
+            next_run TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT DEFAULT 'chat'
+        )
+    """)
+
     # Personality change suggestions
     conn.execute("""
         CREATE TABLE IF NOT EXISTS personality_suggestions (

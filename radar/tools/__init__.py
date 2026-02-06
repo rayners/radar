@@ -209,6 +209,7 @@ def is_dynamic_tool(name: str) -> bool:
         "read_file", "recall", "remember", "weather", "web_search",
         "write_file", "create_tool", "debug_tool", "rollback_tool",
         "suggest_personality_update", "analyze_feedback",
+        "schedule_task", "list_scheduled_tasks", "cancel_task",
     }
     return name in _registry and name not in static_tools
 
@@ -223,6 +224,7 @@ from radar.tools import (
     read_file,
     recall,
     remember,
+    scheduled_tasks,
     weather,
     web_search,
     write_file,
