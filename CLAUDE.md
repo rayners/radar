@@ -491,7 +491,20 @@ Personality files customize Radar's behavior. Stored as markdown files in `~/.lo
 
 ### Personality File Format
 
+Personality files support optional YAML front matter for model and tool configuration. This turns a personality from "just a system prompt" into a full agent profile: behavior + capabilities + compute.
+
 ```markdown
+---
+model: qwen3:30b-a3b              # Override global model for this personality
+fallback_model: qwen3:latest       # Override global fallback model
+tools:
+  include:                         # OR exclude: (mutually exclusive)
+    - github
+    - exec
+    - read_file
+    - write_file
+---
+
 # Personality Name
 
 Brief description of this personality style.
@@ -509,7 +522,64 @@ Additional context or knowledge to include.
 Current time: {current_time}
 ```
 
-The `{current_time}` placeholder is replaced with the current timestamp.
+**Front matter fields** (all optional):
+- `model` — LLM model to use (overrides `config.llm.model`)
+- `fallback_model` — Fallback model on rate limit (overrides `config.llm.fallback_model`)
+- `tools.include` — Allowlist of tool names (only these tools available)
+- `tools.exclude` — Denylist of tool names (all tools except these)
+- `tools.include` and `tools.exclude` are mutually exclusive
+
+Files without front matter work exactly as before (all tools, global model).
+
+The `{current_time}` placeholder is replaced with the current timestamp. Front matter is stripped before sending to the LLM.
+
+#### Example: MASH-Inspired Personalities
+
+```markdown
+# ~/.local/share/radar/personalities/hawkeye.md
+---
+model: qwen3:latest
+tools:
+  exclude:
+    - exec
+---
+
+# Hawkeye
+
+Finest kind.
+
+## Instructions
+
+You are Hawkeye Pierce — brilliant, irreverent, and fundamentally decent.
+Lead with humor, but never at the expense of getting the job done.
+When things get serious, drop the jokes and be direct.
+Deflect praise, but never shirk responsibility.
+```
+
+```markdown
+# ~/.local/share/radar/personalities/radar.md
+---
+tools:
+  include:
+    - weather
+    - schedule_task
+    - remember
+    - recall
+    - notify
+---
+
+# Radar
+
+He knows what you need before you do.
+
+## Instructions
+
+You are Radar O'Reilly — eager, earnest, and always one step ahead.
+Anticipate what the user needs before they finish asking.
+Be thorough and organized. Keep track of everything.
+When something is beyond your capabilities, say so honestly.
+Refer to complex tasks as "requisition forms" that need processing.
+```
 
 ### Configuration
 

@@ -11,6 +11,41 @@ from radar.web import templates, get_common_context
 router = APIRouter()
 
 
+def _extract_personality_info(content: str) -> dict:
+    """Extract display info from a personality file, parsing front matter if present.
+
+    Returns dict with: description, model (optional), tools_filter (optional summary).
+    """
+    from radar.agent import parse_personality
+
+    try:
+        pc = parse_personality(content)
+    except ValueError:
+        # Both include and exclude — treat as plain content
+        pc = None
+
+    body = pc.content if pc else content
+
+    # Get description (first non-empty, non-heading line from body)
+    description = ""
+    for line in body.split("\n"):
+        line = line.strip()
+        if line and not line.startswith("#"):
+            description = line[:100]
+            break
+
+    info: dict = {"description": description}
+
+    if pc and pc.model:
+        info["model"] = pc.model
+    if pc and pc.tools_include:
+        info["tools_filter"] = f"include: {', '.join(pc.tools_include)}"
+    elif pc and pc.tools_exclude:
+        info["tools_filter"] = f"exclude: {', '.join(pc.tools_exclude)}"
+
+    return info
+
+
 @router.get("/personalities", response_class=HTMLResponse)
 async def personalities(request: Request):
     """Personalities management page."""
@@ -32,16 +67,12 @@ async def personalities(request: Request):
     for pfile in personality_files:
         name = pfile.stem
         content = pfile.read_text()
-        # Get description (first non-empty, non-heading line)
-        description = ""
-        for line in content.split("\n"):
-            line = line.strip()
-            if line and not line.startswith("#"):
-                description = line[:100]
-                break
+        info = _extract_personality_info(content)
         personalities_list.append({
             "name": name,
-            "description": description,
+            "description": info["description"],
+            "model": info.get("model"),
+            "tools_filter": info.get("tools_filter"),
             "is_active": name == config.personality,
         })
 
@@ -73,17 +104,17 @@ async def api_personalities_list():
     for pfile in personality_files:
         name = pfile.stem
         content = pfile.read_text()
-        description = ""
-        for line in content.split("\n"):
-            line = line.strip()
-            if line and not line.startswith("#"):
-                description = line[:100]
-                break
-        result.append({
+        info = _extract_personality_info(content)
+        entry = {
             "name": name,
-            "description": description,
+            "description": info["description"],
             "is_active": name == config.personality,
-        })
+        }
+        if info.get("model"):
+            entry["model"] = info["model"]
+        if info.get("tools_filter"):
+            entry["tools_filter"] = info["tools_filter"]
+        result.append(entry)
 
     return {"personalities": result, "active": config.personality}
 

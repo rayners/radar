@@ -45,12 +45,20 @@ def _log_fallback(primary: str, fallback: str, status_code: int | None, error_te
 def chat(
     messages: list[dict[str, Any]],
     use_tools: bool = True,
+    model_override: str | None = None,
+    fallback_model_override: str | None = None,
+    tools_include: list[str] | None = None,
+    tools_exclude: list[str] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Send messages to LLM and handle tool calls.
 
     Args:
         messages: List of message dicts with role/content
         use_tools: Whether to include tools and handle tool calls
+        model_override: Model to use instead of config default (e.g. from personality)
+        fallback_model_override: Fallback model override (e.g. from personality)
+        tools_include: If set, only provide these tools (allowlist)
+        tools_exclude: If set, exclude these tools (denylist)
 
     Returns:
         Tuple of (final assistant message, full message history)
@@ -58,19 +66,36 @@ def chat(
     config = get_config()
 
     if config.llm.provider == "openai":
-        return _chat_openai(messages, use_tools, config)
+        return _chat_openai(
+            messages, use_tools, config,
+            model_override=model_override,
+            fallback_model_override=fallback_model_override,
+            tools_include=tools_include,
+            tools_exclude=tools_exclude,
+        )
     else:
-        return _chat_ollama(messages, use_tools, config)
+        return _chat_ollama(
+            messages, use_tools, config,
+            model_override=model_override,
+            fallback_model_override=fallback_model_override,
+            tools_include=tools_include,
+            tools_exclude=tools_exclude,
+        )
 
 
-def _chat_ollama(messages, use_tools, config):
+def _chat_ollama(
+    messages, use_tools, config, *,
+    model_override=None, fallback_model_override=None,
+    tools_include=None, tools_exclude=None,
+):
     """Chat using Ollama's native API."""
     url = f"{config.llm.base_url.rstrip('/')}/api/chat"
 
-    tools = get_tools_schema() if use_tools else []
+    tools = get_tools_schema(include=tools_include, exclude=tools_exclude) if use_tools else []
     all_messages = list(messages)
     iterations = 0
-    active_model = config.llm.model
+    active_model = model_override or config.llm.model
+    effective_fallback = fallback_model_override or config.llm.fallback_model
     fell_back = False
 
     while iterations < config.max_tool_iterations:
@@ -95,11 +120,11 @@ def _chat_ollama(messages, use_tools, config):
             error_text = e.response.text
             if (
                 not fell_back
-                and config.llm.fallback_model
+                and effective_fallback
                 and _is_rate_limit_error(status_code, error_text)
             ):
-                _log_fallback(active_model, config.llm.fallback_model, status_code, error_text)
-                active_model = config.llm.fallback_model
+                _log_fallback(active_model, effective_fallback, status_code, error_text)
+                active_model = effective_fallback
                 fell_back = True
                 iterations -= 1  # Don't count failed attempt
                 continue
@@ -148,7 +173,11 @@ def _chat_ollama(messages, use_tools, config):
     return final_message, all_messages
 
 
-def _chat_openai(messages, use_tools, config):
+def _chat_openai(
+    messages, use_tools, config, *,
+    model_override=None, fallback_model_override=None,
+    tools_include=None, tools_exclude=None,
+):
     """Chat using OpenAI-compatible API."""
     from openai import OpenAI
 
@@ -157,10 +186,11 @@ def _chat_openai(messages, use_tools, config):
         api_key=config.llm.api_key or "not-needed",  # Some proxies don't require key
     )
 
-    tools = get_tools_schema() if use_tools else None
+    tools = get_tools_schema(include=tools_include, exclude=tools_exclude) if use_tools else None
     all_messages = _convert_messages_to_openai(messages)
     iterations = 0
-    active_model = config.llm.model
+    active_model = model_override or config.llm.model
+    effective_fallback = fallback_model_override or config.llm.fallback_model
     fell_back = False
 
     # Convert tools to OpenAI format
@@ -184,11 +214,11 @@ def _chat_openai(messages, use_tools, config):
             error_text = str(e)
             if (
                 not fell_back
-                and config.llm.fallback_model
+                and effective_fallback
                 and _is_rate_limit_error(status_code, error_text)
             ):
-                _log_fallback(active_model, config.llm.fallback_model, status_code, error_text)
-                active_model = config.llm.fallback_model
+                _log_fallback(active_model, effective_fallback, status_code, error_text)
+                active_model = effective_fallback
                 fell_back = True
                 iterations -= 1
                 continue

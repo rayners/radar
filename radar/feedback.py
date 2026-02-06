@@ -8,6 +8,33 @@ from typing import Any
 from radar.semantic import _get_connection
 
 
+def _preserve_front_matter(original: str, new_body: str) -> str:
+    """Re-prepend original front matter if new_body doesn't have its own.
+
+    Args:
+        original: Original personality file content (may have front matter).
+        new_body: New content to write (from a suggestion).
+
+    Returns:
+        new_body with original front matter prepended if needed.
+    """
+    if not original.startswith("---"):
+        return new_body
+
+    end = original.find("---", 3)
+    if end == -1:
+        return new_body
+
+    # Original has front matter
+    front_matter_block = original[:end + 3]
+
+    # If new body already starts with front matter, leave it alone
+    if new_body.startswith("---"):
+        return new_body
+
+    return front_matter_block + "\n" + new_body
+
+
 def store_feedback(
     conversation_id: str,
     message_index: int,
@@ -300,9 +327,9 @@ def approve_suggestion(suggestion_id: int) -> tuple[bool, str]:
             # Remove the specified content
             new_content = existing_content.replace(content, "")
         elif suggestion_type == "modify":
-            # For modify, the content should contain the full replacement
-            # This is a simple replacement - could be enhanced with diff support
-            new_content = content
+            # For modify, the content is the full replacement body.
+            # Preserve any existing front matter from the original file.
+            new_content = _preserve_front_matter(existing_content, content)
         else:
             return False, f"Unknown suggestion type: {suggestion_type}"
 

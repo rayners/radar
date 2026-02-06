@@ -1,8 +1,11 @@
 """Agent orchestration - context building and LLM interaction."""
 
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from radar.config import get_config, get_data_paths
 from radar.llm import chat
@@ -12,6 +15,77 @@ from radar.memory import (
     get_messages,
     messages_to_api_format,
 )
+
+
+@dataclass
+class PersonalityConfig:
+    """Parsed personality with optional front matter metadata."""
+
+    content: str  # Markdown body (front matter stripped)
+    model: str | None = None
+    fallback_model: str | None = None
+    tools_include: list[str] | None = None
+    tools_exclude: list[str] | None = None
+
+
+def parse_personality(raw: str) -> PersonalityConfig:
+    """Parse a personality file, extracting optional YAML front matter.
+
+    Args:
+        raw: Raw personality file content.
+
+    Returns:
+        PersonalityConfig with parsed metadata and body content.
+
+    Raises:
+        ValueError: If both tools.include and tools.exclude are present.
+    """
+    # Check for front matter (must start with ---)
+    if not raw.startswith("---"):
+        return PersonalityConfig(content=raw)
+
+    # Find the closing ---
+    end = raw.find("---", 3)
+    if end == -1:
+        # No closing --- — treat entire content as body (malformed)
+        return PersonalityConfig(content=raw)
+
+    front_matter_str = raw[3:end].strip()
+    body = raw[end + 3:].lstrip("\n")
+
+    if not front_matter_str:
+        # Empty front matter block
+        return PersonalityConfig(content=body)
+
+    try:
+        fm = yaml.safe_load(front_matter_str)
+    except yaml.YAMLError:
+        # Malformed YAML — treat entire content as body
+        return PersonalityConfig(content=raw)
+
+    if not isinstance(fm, dict):
+        return PersonalityConfig(content=body)
+
+    # Extract fields
+    model = fm.get("model")
+    fallback_model = fm.get("fallback_model")
+
+    tools = fm.get("tools") or {}
+    tools_include = tools.get("include") if isinstance(tools, dict) else None
+    tools_exclude = tools.get("exclude") if isinstance(tools, dict) else None
+
+    if tools_include and tools_exclude:
+        raise ValueError(
+            "Personality front matter cannot specify both tools.include and tools.exclude"
+        )
+
+    return PersonalityConfig(
+        content=body,
+        model=model if isinstance(model, str) else None,
+        fallback_model=fallback_model if isinstance(fallback_model, str) else None,
+        tools_include=tools_include,
+        tools_exclude=tools_exclude,
+    )
 
 DEFAULT_PERSONALITY = """# Default
 
@@ -70,23 +144,41 @@ def load_personality(name_or_path: str) -> str:
     return DEFAULT_PERSONALITY
 
 
-def _build_system_prompt(personality_override: str | None = None) -> str:
+def _load_personality_config(name_or_path: str) -> PersonalityConfig:
+    """Load and parse a personality file into a PersonalityConfig.
+
+    Args:
+        name_or_path: Personality name or explicit file path.
+
+    Returns:
+        PersonalityConfig with parsed metadata and body content.
+    """
+    raw = load_personality(name_or_path)
+    return parse_personality(raw)
+
+
+def _build_system_prompt(
+    personality_override: str | None = None,
+) -> tuple[str, PersonalityConfig]:
     """Build the system prompt with current time and personality notes.
 
     Args:
         personality_override: Optional personality name/path to use instead of config.
+
+    Returns:
+        Tuple of (system prompt string, PersonalityConfig).
     """
     config = get_config()
 
     # Use override if provided, otherwise use config
     personality_name = personality_override or config.personality
 
-    # Load personality file (falls back to DEFAULT_PERSONALITY if not found)
-    template = load_personality(personality_name)
+    # Load and parse personality file (falls back to DEFAULT_PERSONALITY if not found)
+    pc = _load_personality_config(personality_name)
 
-    # Format with current time
+    # Format with current time — use the parsed content (front matter stripped)
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    prompt = template.replace("{current_time}", current_time)
+    prompt = pc.content.replace("{current_time}", current_time)
 
     # Inject personality notes from semantic memory
     try:
@@ -99,7 +191,7 @@ def _build_system_prompt(personality_override: str | None = None) -> str:
     except Exception:
         pass  # Memory not available or empty
 
-    return prompt
+    return prompt, pc
 
 
 def run(
@@ -125,14 +217,21 @@ def run(
     add_message(conversation_id, "user", user_message)
 
     # Build messages for API
-    system_message = {"role": "system", "content": _build_system_prompt(personality)}
+    prompt, pc = _build_system_prompt(personality)
+    system_message = {"role": "system", "content": prompt}
 
     # Load conversation history
     stored_messages = get_messages(conversation_id)
     api_messages = [system_message] + messages_to_api_format(stored_messages)
 
     # Call LLM with tool support
-    final_message, all_messages = chat(api_messages)
+    final_message, all_messages = chat(
+        api_messages,
+        model_override=pc.model,
+        fallback_model_override=pc.fallback_model,
+        tools_include=pc.tools_include,
+        tools_exclude=pc.tools_exclude,
+    )
 
     # Store all new messages from the interaction
     # Skip system message and messages we already have stored
@@ -159,8 +258,15 @@ def ask(user_message: str, personality: str | None = None) -> str:
     Returns:
         Assistant response text
     """
-    system_message = {"role": "system", "content": _build_system_prompt(personality)}
+    prompt, pc = _build_system_prompt(personality)
+    system_message = {"role": "system", "content": prompt}
     user_msg = {"role": "user", "content": user_message}
 
-    final_message, _ = chat([system_message, user_msg])
+    final_message, _ = chat(
+        [system_message, user_msg],
+        model_override=pc.model,
+        fallback_model_override=pc.fallback_model,
+        tools_include=pc.tools_include,
+        tools_exclude=pc.tools_exclude,
+    )
     return final_message.get("content", "")

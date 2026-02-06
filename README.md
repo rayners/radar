@@ -142,6 +142,70 @@ def my_tool(arg: str) -> str:
 
 User-local tools can also be placed in `~/.local/share/radar/tools/` or directories listed in `tools.extra_dirs` config.
 
+### Personalities
+
+Personality files customize Radar's behavior, model, and available tools. They live in `~/.local/share/radar/personalities/` as markdown files with optional YAML front matter.
+
+```bash
+# Manage personalities
+radar personality list
+radar personality create hawkeye
+radar personality use hawkeye
+
+# Per-command override
+radar ask -P hawkeye "What's the weather?"
+```
+
+Front matter lets you scope a personality to specific tools and models — turning it from "just a system prompt" into a full agent profile:
+
+```markdown
+# ~/.local/share/radar/personalities/hawkeye.md
+---
+model: qwen3:latest
+tools:
+  exclude:
+    - exec
+---
+
+# Hawkeye
+
+Finest kind.
+
+## Instructions
+
+You are Hawkeye Pierce — brilliant, irreverent, and fundamentally decent.
+Lead with humor, but never at the expense of getting the job done.
+When things get serious, drop the jokes and be direct.
+Deflect praise, but never shirk responsibility.
+```
+
+```markdown
+# ~/.local/share/radar/personalities/radar.md
+---
+tools:
+  include:
+    - weather
+    - schedule_task
+    - remember
+    - recall
+    - notify
+---
+
+# Radar
+
+He knows what you need before you do.
+
+## Instructions
+
+You are Radar O'Reilly — eager, earnest, and always one step ahead.
+Anticipate what the user needs before they finish asking.
+Be thorough and organized. Keep track of everything.
+When something is beyond your capabilities, say so honestly.
+Refer to complex tasks as "requisition forms" that need processing.
+```
+
+Files without front matter work as plain system prompts (all tools, global model). See `CLAUDE.md` for the full list of front matter fields.
+
 ### Key Design Decisions
 
 - **`stream: false` always** - Ollama's streaming breaks tool calling

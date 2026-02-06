@@ -50,9 +50,30 @@ def tool(
     return decorator
 
 
-def get_tools_schema() -> list[dict]:
-    """Return list of tool definitions for the API."""
+def get_tools_schema(
+    include: list[str] | None = None,
+    exclude: list[str] | None = None,
+) -> list[dict]:
+    """Return list of tool definitions for the API.
+
+    Args:
+        include: If set, only return tools with these names (allowlist).
+        exclude: If set, return all tools except these names (denylist).
+        Both None returns everything. Both set is caller error (returns all).
+    """
     ensure_external_tools_loaded()
+    if include is not None:
+        include_set = set(include)
+        return [
+            schema for name, (_, schema) in _registry.items()
+            if name in include_set
+        ]
+    if exclude is not None:
+        exclude_set = set(exclude)
+        return [
+            schema for name, (_, schema) in _registry.items()
+            if name not in exclude_set
+        ]
     return [schema for _, schema in _registry.values()]
 
 

@@ -8,7 +8,7 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (65 tests), `test_tool_discovery.py` (16 tests) — **146 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (65 tests), `test_tool_discovery.py` (16 tests), `test_personality_frontmatter.py` (27 tests) — **173 total**.
 
 - [ ] **Core agent tests** - context building, tool execution loop, message storage
 - [ ] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, error handling
@@ -126,7 +126,7 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 - [ ] Audit trail of tool executions (immutable log)
 - [ ] Proper path parsing for security checks
 - [ ] Tool "dry run" mode with simulated results
-- [ ] Per-profile tool permissions (allowlist/blocklist)
+- [x] Per-profile tool permissions (allowlist/blocklist) — personality front matter `tools.include`/`tools.exclude`
 
 ### Integrations Architecture
 - [ ] Common interface: `poll()` for pull-based, `handle_event()` for push-based
@@ -174,7 +174,7 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 ### Multi-Model Support
 - [ ] Vision model support for image-based PDF pages
 - [ ] Multiple model routing (fast model for triage, larger for complex tasks)
-- [ ] Per-task model selection
+- [x] Per-task model selection — personality front matter `model`/`fallback_model` overrides
 - [ ] MCP server support (integrate with other tools)
 
 ---
