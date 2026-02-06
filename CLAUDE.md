@@ -58,6 +58,15 @@ When completing work that relates to items in `docs/TODO.md`, update the file:
 - Update counts or descriptions that have become stale (e.g., test counts)
 - Do this as part of the same commit as the work itself
 
+## Testing
+
+Every new feature or bug fix must include tests. Run tests with `python -m pytest tests/ -v`.
+
+- New tools: test the function directly (bypass LLM)
+- New routes: use `starlette.testclient.TestClient` with mocked dependencies (see `tests/test_web_routes.py`)
+- New config/storage: use the `isolated_data_dir` fixture from `conftest.py`
+- Patch at the source module (e.g., `radar.agent.ask`), not the importing module, since routes use lazy imports inside function bodies
+
 ## Code Conventions
 
 - Tools are registered with the `@tool` decorator in `radar/tools/`
