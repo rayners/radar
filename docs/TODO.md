@@ -8,17 +8,17 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (65 tests), `test_tool_discovery.py` (16 tests), `test_personality_frontmatter.py` (27 tests) — **173 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (65 tests), `test_tool_discovery.py` (16 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (49 tests), `test_config.py` (28 tests), `test_memory.py` (22 tests), `test_llm.py` (28 tests), `test_agent.py` (19 tests) — **379 total**.
 
-- [ ] **Core agent tests** - context building, tool execution loop, message storage
-- [ ] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, error handling
+- [x] **Core agent tests** - personality loading, system prompt building, run/ask orchestration (19 tests)
+- [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, format conversion (28 tests)
 - [ ] **Tool framework tests** - registration, execution, parameter validation
-- [ ] **Security tests** - path blocklist, command validation, edge cases
-- [ ] **Memory tests** - JSONL operations, concurrent access, semantic search
-- [ ] **Config tests** - YAML loading, env var overrides, validation errors
+- [x] **Security tests** - path blocklist, command validation, write-only blocks, edge cases (49 tests)
+- [x] **Memory tests** - JSONL operations, display formatting, conversation listing (22 tests)
+- [x] **Config tests** - YAML loading, env var overrides, deprecated field migration, DataPaths (28 tests)
 - [ ] **Scheduler tests** - heartbeat ticks, quiet hours, event queuing
 - [ ] **Plugin tests** - code validation, sandboxed execution, version rollback
-- [x] **Web route tests** - FastAPI endpoints, HTMX responses (60 tests across all 9 route modules)
+- [x] **Web route tests** - FastAPI endpoints, HTMX responses (65 tests across all 9 route modules)
 - [ ] **Integration test harness** - full conversation flow with mock LLM
 
 ---

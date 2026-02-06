@@ -53,3 +53,19 @@ def isolated_config(isolated_data_dir):
     """
     from radar.config import get_config
     return get_config()
+
+
+@pytest.fixture
+def conversations_dir(isolated_data_dir):
+    """Return the conversations subdirectory inside isolated_data_dir."""
+    d = isolated_data_dir / "conversations"
+    d.mkdir(exist_ok=True)
+    return d
+
+
+@pytest.fixture
+def personalities_dir(isolated_data_dir):
+    """Return the personalities subdirectory inside isolated_data_dir."""
+    d = isolated_data_dir / "personalities"
+    d.mkdir(exist_ok=True)
+    return d
