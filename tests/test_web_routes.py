@@ -4,8 +4,9 @@ Verifies that the routes.py → routes/ package split preserved all
 endpoints with correct status codes and response content.
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
+import httpx
 import pytest
 from starlette.testclient import TestClient
 
@@ -567,3 +568,122 @@ class TestPluginRoutes:
         mock_loader.return_value = loader
         resp = client.post("/api/plugins/test_plugin/rollback/v99")
         assert resp.status_code == 400
+
+
+# ===== Health Routes =====
+
+
+class TestHealthRoutes:
+    """Tests for health.py routes."""
+
+    @patch("radar.logging.get_log_stats", return_value={"error_count": 0, "warn_count": 2, "api_calls": 42})
+    @patch("radar.logging.get_uptime", return_value="3d 14h")
+    def test_health_basic(self, mock_uptime, mock_stats, client):
+        """GET /health returns 200 with basic health info."""
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] in ("healthy", "degraded")
+        assert data["uptime"] == "3d 14h"
+        assert "scheduler" in data
+        assert "stats" in data
+        assert data["stats"]["warnings_24h"] == 2
+        assert data["stats"]["api_calls"] == 42
+        # Service sections should NOT appear without check_services
+        assert "llm" not in data
+        assert "embeddings" not in data
+        assert "database" not in data
+
+    @patch("radar.semantic._get_connection")
+    @patch("radar.web.routes.health.httpx.AsyncClient")
+    @patch("radar.logging.get_log_stats", return_value={"error_count": 0, "warn_count": 0, "api_calls": 0})
+    @patch("radar.logging.get_uptime", return_value="1h")
+    @patch("radar.scheduler.get_status", return_value={
+        "running": True, "last_heartbeat": None, "next_heartbeat": None,
+        "pending_events": 0, "quiet_hours": False,
+        "interval_minutes": 15, "quiet_hours_start": "23:00", "quiet_hours_end": "07:00",
+    })
+    def test_health_with_services(self, mock_sched, mock_uptime, mock_stats,
+                                  mock_httpx, mock_db_conn, client):
+        """GET /health?check_services=true includes llm, embeddings, database."""
+        # Mock httpx responses
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client_instance = AsyncMock()
+        mock_client_instance.get = AsyncMock(return_value=mock_response)
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_httpx.return_value = mock_client_instance
+
+        # Mock DB
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = [128]
+        mock_conn = MagicMock()
+        mock_conn.execute.return_value = mock_cursor
+        mock_db_conn.return_value = mock_conn
+
+        resp = client.get("/health?check_services=true")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "healthy"
+        assert "llm" in data
+        assert data["llm"]["status"] == "ok"
+        assert data["llm"]["provider"] == "ollama"
+        assert "embeddings" in data
+        assert "database" in data
+        assert data["database"]["status"] == "ok"
+        assert data["database"]["memory_count"] == 128
+
+    @patch("radar.web.routes.health.httpx.AsyncClient")
+    @patch("radar.logging.get_log_stats", return_value={"error_count": 0, "warn_count": 0, "api_calls": 0})
+    @patch("radar.logging.get_uptime", return_value="1h")
+    @patch("radar.scheduler.get_status", return_value={
+        "running": True, "last_heartbeat": None, "next_heartbeat": None,
+        "pending_events": 0, "quiet_hours": False,
+        "interval_minutes": 15, "quiet_hours_start": "23:00", "quiet_hours_end": "07:00",
+    })
+    def test_health_llm_unreachable(self, mock_sched, mock_uptime, mock_stats,
+                                    mock_httpx, client):
+        """LLM unreachable sets overall status to unhealthy."""
+        # Mock httpx to raise ConnectError
+        mock_client_instance = AsyncMock()
+        mock_client_instance.get = AsyncMock(side_effect=httpx.ConnectError("refused"))
+        mock_client_instance.__aenter__ = AsyncMock(return_value=mock_client_instance)
+        mock_client_instance.__aexit__ = AsyncMock(return_value=False)
+        mock_httpx.return_value = mock_client_instance
+
+        resp = client.get("/health?check_services=true")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["llm"]["status"] == "unreachable"
+        assert data["status"] == "unhealthy"
+
+    @patch("radar.logging.get_log_stats", return_value={"error_count": 3, "warn_count": 1, "api_calls": 10})
+    @patch("radar.logging.get_uptime", return_value="5h")
+    @patch("radar.scheduler.get_status", return_value={
+        "running": False, "last_heartbeat": None, "next_heartbeat": None,
+        "pending_events": 0, "quiet_hours": False,
+        "interval_minutes": 15, "quiet_hours_start": "23:00", "quiet_hours_end": "07:00",
+    })
+    def test_health_degraded(self, mock_sched, mock_uptime, mock_stats, client):
+        """Scheduler stopped + errors > 0 sets status to degraded."""
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "degraded"
+
+    @patch("radar.logging.get_log_stats", return_value={"error_count": 0, "warn_count": 0, "api_calls": 0})
+    @patch("radar.logging.get_uptime", return_value="1h")
+    def test_health_no_auth_required(self, mock_uptime, mock_stats, client):
+        """Health endpoint works even when auth is configured."""
+        cfg = _mock_config()
+        cfg.web.host = "0.0.0.0"
+        cfg.web.auth_token = "secret-token"
+        with (
+            patch("radar.config.get_config", return_value=cfg),
+            patch("radar.web._requires_auth", return_value=(True, "secret-token")),
+        ):
+            resp = client.get("/health")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert "status" in data

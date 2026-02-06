@@ -77,8 +77,8 @@ async def auth_middleware(request: Request, call_next):
     if request.url.path.startswith("/static"):
         return await call_next(request)
 
-    # Allow login page
-    if request.url.path == "/login":
+    # Allow login page and health check
+    if request.url.path in ("/login", "/health"):
         return await call_next(request)
 
     # Check auth
@@ -163,10 +163,11 @@ from radar.web.routes.config import router as config_router
 from radar.web.routes.logs import router as logs_router
 from radar.web.routes.personalities import router as personalities_router
 from radar.web.routes.plugins import router as plugins_router
+from radar.web.routes.health import router as health_router
 
 for _r in [auth_router, dashboard_router, chat_router, tasks_router,
            memory_router, config_router, logs_router, personalities_router,
-           plugins_router]:
+           plugins_router, health_router]:
     app.include_router(_r)
 
 

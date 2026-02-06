@@ -98,7 +98,7 @@ Test files: `test_feedback.py` (~16 tests), `test_scheduled_tasks.py` (~40 tests
 - [ ] Circuit breaker for flaky services
 - [ ] Retry logic for LLM/embedding calls
 - [ ] Detailed error logging with context
-- [ ] Health check endpoint (`/health`)
+- [x] Health check endpoint (`/health`) — basic + `?check_services=true` for LLM/embedding/DB pings
 
 ### Configuration
 - [ ] Pydantic validation for config schema
