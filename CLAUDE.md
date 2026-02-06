@@ -81,6 +81,7 @@ Every new feature or bug fix must include tests. Run tests with `python -m pytes
 - **JSONL conversations** - One file per conversation in `~/.local/share/radar/conversations/`
 - **SQLite semantic memory** - Embeddings stored in `~/.local/share/radar/memory.db`
 - **Tools are functions** - Decorated Python functions returning strings
+- **Wrap CLIs, don't import libraries** - Prefer wrapping existing CLI tools (e.g., `gh`, `khal`) via subprocess over pulling in libraries or writing custom code. The tool already handles the hard parts; we just need to parse its output.
 - **SQLite datetime format** - Use `strftime("%Y-%m-%d %H:%M:%S")` (space separator), NOT `.isoformat()` (T separator). ISO `T` breaks SQLite `datetime()` comparisons.
 
 ## Adding a New Tool

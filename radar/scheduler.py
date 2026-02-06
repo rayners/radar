@@ -85,6 +85,18 @@ def _heartbeat_tick() -> None:
     except Exception as e:
         _log_heartbeat("Scheduled task processing error", error=str(e))
 
+    # Calendar reminders
+    try:
+        from radar.tools.calendar import _get_reminders
+        reminder_text = _get_reminders(15)
+        if reminder_text:
+            add_event("calendar_reminder", {
+                "description": f"Upcoming calendar events:\n{reminder_text}",
+                "action": "Send a notification reminding the user about these upcoming calendar events",
+            })
+    except Exception:
+        pass
+
     # Collect pending events
     events = _event_queue.copy()
     _event_queue.clear()

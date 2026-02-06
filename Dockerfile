@@ -47,6 +47,8 @@ RUN useradd --create-home --uid 1000 --shell /bin/bash radar
 # Create data directories with correct ownership
 RUN mkdir -p /home/radar/.local/share/radar \
              /home/radar/.config/radar \
+             /home/radar/.config/khal \
+             /home/radar/.config/vdirsyncer \
              /workspace \
     && chown -R radar:radar /home/radar /workspace
 
@@ -58,6 +60,9 @@ WORKDIR /home/radar
 COPY --from=builder --chown=radar:radar /build/dist/*.whl /tmp/
 RUN pip install --no-cache-dir --user /tmp/*.whl \
     && rm /tmp/*.whl
+
+# Install khal + vdirsyncer for calendar integration
+RUN pip install --no-cache-dir --user khal vdirsyncer
 
 # Conditionally install local embeddings support
 RUN if [ "$LOCAL_EMBEDDINGS" = "true" ]; then \
