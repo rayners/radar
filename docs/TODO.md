@@ -8,7 +8,7 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (~16 tests), `test_scheduled_tasks.py` (~40 tests), `test_web_routes.py` (~60 tests).
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (65 tests) — **130 total**.
 
 - [ ] **Core agent tests** - context building, tool execution loop, message storage
 - [ ] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, error handling
@@ -246,11 +246,34 @@ Natural language task scheduling via chat:
 ## 10. Code Quality & Refactoring
 
 - [x] Split `routes.py` into domain modules (9 modules under `radar/web/routes/` using APIRouter)
-- [ ] Split `config.py` (400+ lines) - separate concerns
-- [ ] Split `plugins.py` (500+ lines) - validation, loading, testing
+- [ ] Split `config.py` (534 lines) - separate concerns
+- [ ] Split `plugins.py` (1012 lines) - validation, loading, testing
 - [ ] Consistent error handling patterns
 - [ ] API versioning strategy
 - [ ] Structured error responses (RFC 7807)
+
+---
+
+## 11. Extensibility & Plugin Architecture
+
+Reducing friction for adding new tools and plugins.
+
+### Tool Registration & Discovery
+- [ ] **Tool auto-discovery** — Scan `radar/tools/*.py` for `@tool` decorators instead of requiring manual imports in `__init__.py`. Adding a tool should just be "create the file."
+- [ ] **Tool config support** — Let tools declare config fields (stored under `tools.<name>:` in `radar.yaml`). Currently tools that need settings (e.g., API keys, preferences) have no standard pattern.
+- [ ] **Tool dependency validation** — Tools can declare required Python packages; checked at startup with clear error messages for missing deps.
+- [ ] **`static_tools` list maintenance** — `is_dynamic_tool()` uses a hardcoded list that must be manually kept in sync. Derive it from the registry automatically.
+
+### Plugin Lifecycle
+- [ ] **Plugin loading at startup** — Load all enabled plugins when daemon starts, not on first tool call. Currently a plugin created via chat isn't available until the tool registry is next queried.
+- [ ] **Plugin scaffolding CLI** — `radar plugin create <name>` to generate boilerplate file with `@tool` decorator, test cases, and manifest.
+- [ ] **Plugin persistent state** — Simple key-value store per plugin for cross-invocation state (e.g., a counter, last-run timestamp, cached data).
+- [ ] **Plugin event hooks** — Plugins can register for events like `on_heartbeat`, `on_conversation_start`, `on_tool_error` to participate in the system lifecycle without being explicitly called by the LLM.
+
+### Developer Experience
+- [ ] **Tool testing harness** — Run a tool's test cases from CLI (`radar tool test <name>`) without needing the full agent loop.
+- [ ] **Plugin hot-reload** — When a plugin file changes on disk, reload it without restarting the daemon.
+- [ ] **Better error context for plugins** — Include the full input/output and stack trace in error logs, not just the exception message.
 
 ---
 
@@ -270,7 +293,7 @@ Natural language task scheduling via chat:
 **High Priority (Foundational):**
 1. Test coverage for core components
 2. Config save functionality in web UI
-3. Task scheduling in web UI
+3. Tool auto-discovery and `static_tools` cleanup
 4. Error handling improvements
 
 **Medium Priority (Usability):**
