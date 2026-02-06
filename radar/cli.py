@@ -1,8 +1,11 @@
 """CLI interface for Radar."""
 
 import os
+import shutil
 import signal
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 import click
@@ -32,6 +35,28 @@ def _is_daemon_running() -> tuple[bool, int | None]:
         # PID file is stale
         pid_file.unlink(missing_ok=True)
         return False, None
+
+
+def _daemonize(log_file: Path) -> None:
+    """Double-fork to detach from terminal."""
+    # First fork
+    if os.fork() > 0:
+        sys.exit(0)  # Parent exits
+
+    os.setsid()  # New session leader
+
+    # Second fork
+    if os.fork() > 0:
+        sys.exit(0)  # First child exits
+
+    # Redirect stdin/stdout/stderr
+    sys.stdout.flush()
+    sys.stderr.flush()
+    devnull = open(os.devnull, "r")
+    log_fd = open(log_file, "a")
+    os.dup2(devnull.fileno(), sys.stdin.fileno())
+    os.dup2(log_fd.fileno(), sys.stdout.fileno())
+    os.dup2(log_fd.fileno(), sys.stderr.fileno())
 
 
 @click.group()
@@ -194,7 +219,8 @@ def history(limit: int):
 @cli.command()
 @click.option("--host", "-h", default=None, help="Host to bind to (default: from config or 127.0.0.1)")
 @click.option("--port", "-p", default=None, type=int, help="Port to bind to (default: from config or 8420)")
-def start(host: str | None, port: int | None):
+@click.option("--foreground", "-f", is_flag=True, help="Run in foreground (don't daemonize)")
+def start(host: str | None, port: int | None, foreground: bool):
     """Start Radar daemon (scheduler + web server)."""
     from radar.scheduler import start_scheduler
     from radar.watchers import start_watchers
@@ -236,15 +262,26 @@ def start(host: str | None, port: int | None):
         console.print(f"[yellow]Radar daemon already running (PID {pid})[/yellow]")
         raise SystemExit(1)
 
-    # Write PID file
+    if not foreground:
+        console.print(Panel.fit(
+            f"[bold blue]Radar[/bold blue] - Starting Daemon\n"
+            f"[dim]Web UI: http://{host}:{port}[/dim]",
+            border_style="blue",
+        ))
+        log_file = get_data_paths().log_file
+        console.print(f"[dim]Log file: {log_file}[/dim]")
+        _daemonize(log_file)
+
+    # Write PID file (now the daemon's PID after fork)
     pid_file = get_data_paths().pid_file
     pid_file.write_text(str(os.getpid()))
 
-    console.print(Panel.fit(
-        f"[bold blue]Radar[/bold blue] - Starting Daemon\n"
-        f"[dim]Web UI: http://{host}:{port}[/dim]",
-        border_style="blue",
-    ))
+    if foreground:
+        console.print(Panel.fit(
+            f"[bold blue]Radar[/bold blue] - Starting Daemon (foreground)\n"
+            f"[dim]Web UI: http://{host}:{port}[/dim]",
+            border_style="blue",
+        ))
 
     try:
         # Initialize logging
@@ -253,19 +290,25 @@ def start(host: str | None, port: int | None):
 
         # Start scheduler
         config = get_config()
-        console.print(f"[dim]Starting scheduler (heartbeat every {config.heartbeat.interval_minutes} min)[/dim]")
+        if foreground:
+            console.print(f"[dim]Starting scheduler (heartbeat every {config.heartbeat.interval_minutes} min)[/dim]")
         start_scheduler()
 
         # Start file watchers
         if config.watch_paths:
-            console.print(f"[dim]Starting file watchers ({len(config.watch_paths)} paths)[/dim]")
+            if foreground:
+                console.print(f"[dim]Starting file watchers ({len(config.watch_paths)} paths)[/dim]")
             start_watchers(config.watch_paths)
 
         # Run web server (blocking)
-        console.print(f"[green]Daemon started[/green]\n")
-        run_server(host=host, port=port)
+        if foreground:
+            console.print(f"[green]Daemon started[/green]\n")
+            run_server(host=host, port=port)
+        else:
+            run_server(host=host, port=port, log_level="warning")
     except KeyboardInterrupt:
-        console.print("\n[dim]Shutting down...[/dim]")
+        if foreground:
+            console.print("\n[dim]Shutting down...[/dim]")
     finally:
         from radar.scheduler import stop_scheduler
         from radar.watchers import stop_watchers
@@ -285,6 +328,13 @@ def stop():
     console.print(f"[dim]Stopping daemon (PID {pid})...[/dim]")
     try:
         os.kill(pid, signal.SIGTERM)
+        # Wait up to 5s for process to exit
+        for _ in range(50):
+            try:
+                os.kill(pid, 0)
+                time.sleep(0.1)
+            except ProcessLookupError:
+                break
         console.print("[green]Daemon stopped[/green]")
     except ProcessLookupError:
         console.print("[yellow]Process not found, removing stale PID file[/yellow]")
@@ -409,8 +459,6 @@ def personality_show(name: str):
 @click.argument("name", default="")
 def personality_edit(name: str):
     """Open a personality file in $EDITOR."""
-    import subprocess
-
     from radar.agent import get_personalities_dir, DEFAULT_PERSONALITY
 
     cfg = get_config()
@@ -497,6 +545,103 @@ def personality_use(name: str):
     else:
         console.print(f"[yellow]No config file found. Set via environment:[/yellow]")
         console.print(f"  export RADAR_PERSONALITY={name}")
+
+
+# ===== Service Commands =====
+
+SYSTEMD_UNIT_TEMPLATE = """\
+[Unit]
+Description=Radar AI Assistant
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={exec_start}
+Restart=on-failure
+RestartSec=5
+Environment=RADAR_DATA_DIR={data_dir}
+
+[Install]
+WantedBy=default.target
+"""
+
+
+def _get_unit_path() -> Path:
+    """Get the systemd user unit file path."""
+    return Path.home() / ".config" / "systemd" / "user" / "radar.service"
+
+
+@cli.group()
+def service():
+    """Manage systemd user service."""
+    pass
+
+
+@service.command("install")
+@click.option("--host", "-h", default=None, help="Host to bind to")
+@click.option("--port", "-p", default=None, type=int, help="Port to bind to")
+def service_install(host: str | None, port: int | None):
+    """Install and start systemd user service."""
+    radar_bin = shutil.which("radar")
+    if not radar_bin:
+        console.print("[red]Could not find 'radar' binary in PATH[/red]")
+        raise SystemExit(1)
+
+    config = get_config()
+    host = host or config.web.host
+    port = port or config.web.port
+    data_dir = get_data_paths().base
+
+    exec_start = f"{radar_bin} start --foreground -h {host} -p {port}"
+    unit_content = SYSTEMD_UNIT_TEMPLATE.format(
+        exec_start=exec_start,
+        data_dir=data_dir,
+    )
+
+    unit_path = _get_unit_path()
+    unit_path.parent.mkdir(parents=True, exist_ok=True)
+    unit_path.write_text(unit_content)
+    console.print(f"[dim]Wrote unit file: {unit_path}[/dim]")
+
+    # Reload, enable, start
+    subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+    subprocess.run(["systemctl", "--user", "enable", "radar.service"], check=True)
+    subprocess.run(["systemctl", "--user", "start", "radar.service"], check=True)
+
+    console.print("[green]Radar service installed and started[/green]")
+    console.print("[dim]Check with: radar service status[/dim]")
+
+
+@service.command("uninstall")
+def service_uninstall():
+    """Stop and remove systemd user service."""
+    unit_path = _get_unit_path()
+
+    if not unit_path.exists():
+        console.print("[yellow]Radar service is not installed[/yellow]")
+        raise SystemExit(1)
+
+    subprocess.run(["systemctl", "--user", "stop", "radar.service"], check=False)
+    subprocess.run(["systemctl", "--user", "disable", "radar.service"], check=False)
+    unit_path.unlink()
+    subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+
+    console.print("[green]Radar service uninstalled[/green]")
+
+
+@service.command("status")
+def service_status():
+    """Show systemd service status."""
+    result = subprocess.run(
+        ["systemctl", "--user", "status", "radar.service"],
+        capture_output=True,
+        text=True,
+    )
+    if result.stdout:
+        console.print(result.stdout.rstrip())
+    if result.stderr:
+        console.print(result.stderr.rstrip())
+    raise SystemExit(result.returncode)
 
 
 if __name__ == "__main__":

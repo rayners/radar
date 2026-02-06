@@ -171,8 +171,8 @@ for _r in [auth_router, dashboard_router, chat_router, tasks_router,
     app.include_router(_r)
 
 
-def run_server(host: str = "127.0.0.1", port: int = 8420):
+def run_server(host: str = "127.0.0.1", port: int = 8420, log_level: str = "info"):
     """Run the web server."""
     import uvicorn
 
-    uvicorn.run(app, host=host, port=port, log_level="info")
+    uvicorn.run(app, host=host, port=port, log_level=log_level)

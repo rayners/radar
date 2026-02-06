@@ -8,7 +8,7 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (65 tests), `test_tool_discovery.py` (16 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (49 tests), `test_config.py` (28 tests), `test_memory.py` (22 tests), `test_llm.py` (28 tests), `test_agent.py` (19 tests), `test_calendar.py` (45 tests) — **424 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (65 tests), `test_tool_discovery.py` (16 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (49 tests), `test_config.py` (28 tests), `test_memory.py` (22 tests), `test_llm.py` (28 tests), `test_agent.py` (19 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests) — **444 total**.
 
 - [x] **Core agent tests** - personality loading, system prompt building, run/ask orchestration (19 tests)
 - [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, format conversion (28 tests)
