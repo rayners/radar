@@ -725,9 +725,18 @@ class PluginLoader:
         tool_defs = self._get_tool_definitions(available_path, manifest)
 
         if manifest.trust_level == "local":
-            return self._register_local_plugin(name, code_file, tool_defs)
+            result = self._register_local_plugin(name, code_file, tool_defs)
         else:
-            return self._register_sandbox_plugin(name, available_path, code_file, tool_defs)
+            result = self._register_sandbox_plugin(name, available_path, code_file, tool_defs)
+
+        # Register hooks if plugin has 'hook' capability
+        if "hook" in manifest.capabilities:
+            plugin = self._plugins.get(name)
+            if plugin:
+                from radar.plugins.hooks import load_plugin_hooks
+                load_plugin_hooks(plugin)
+
+        return result
 
     def _register_sandbox_plugin(
         self,
@@ -796,8 +805,12 @@ class PluginLoader:
         return success
 
     def _unregister_plugin(self, name: str) -> bool:
-        """Unregister all tools belonging to a plugin."""
+        """Unregister all tools and hooks belonging to a plugin."""
         from radar.tools import unregister_plugin_tools, unregister_tool
+
+        # Unregister hooks
+        from radar.plugins.hooks import unload_plugin_hooks
+        unload_plugin_hooks(name)
 
         # Try the tracked plugin tools first
         removed = unregister_plugin_tools(name)

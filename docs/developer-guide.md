@@ -11,12 +11,13 @@ plugins, web routes, or contribute to the core codebase.
 2. [Development Setup](#development-setup)
 3. [Tutorial: Your First Radar Tool](#tutorial-your-first-radar-tool)
 4. [Tutorial: Your First Radar Plugin](#tutorial-your-first-radar-plugin)
-5. [Tutorial: User-Local Tools](#tutorial-user-local-tools)
-6. [Adding Config Sections](#adding-config-sections)
-7. [Web Routes](#web-routes)
-8. [Testing Patterns](#testing-patterns)
-9. [Security Considerations](#security-considerations)
-10. [Design Philosophy](#design-philosophy)
+5. [Tutorial: Hook System](#tutorial-hook-system)
+6. [Tutorial: User-Local Tools](#tutorial-user-local-tools)
+7. [Adding Config Sections](#adding-config-sections)
+8. [Web Routes](#web-routes)
+9. [Testing Patterns](#testing-patterns)
+10. [Security Considerations](#security-considerations)
+11. [Design Philosophy](#design-philosophy)
 
 ---
 
@@ -51,12 +52,15 @@ radar/
 │   ├── read_file.py    # File reading
 │   ├── write_file.py   # File writing
 │   └── ...             # Add a .py file here and it is auto-discovered
+├── hooks.py            # Hook system (pre/post tool call, filter tools)
+├── hooks_builtin.py    # Config-driven hook builders (block patterns, time restrict, etc.)
 ├── plugins/            # Dynamic plugin system
 │   ├── __init__.py     # get_plugin_loader() singleton
 │   ├── models.py       # PluginManifest, ToolDefinition, TestCase, ToolError, Plugin
 │   ├── validator.py    # AST-based code validation (CodeValidator)
 │   ├── runner.py       # Sandboxed test execution (TestRunner)
 │   ├── versions.py     # Version history management
+│   ├── hooks.py        # Plugin hook loading (load/unload plugin hooks)
 │   └── loader.py       # Plugin lifecycle (PluginLoader)
 └── web/                # FastAPI + HTMX web dashboard
     ├── __init__.py     # FastAPI app, auth middleware, common context
@@ -88,7 +92,9 @@ User Input (CLI or Web)
        │                Always stream: false
        │
        ├──── Tool calls? ──► tools/__init__.py  ← execute_tool(name, args)
+       │         │                                  Runs pre-tool hooks (can block)
        │         │                                  Dispatches to registered function
+       │         │                                  Runs post-tool hooks (observe)
        │         │                                  Returns string result
        │         ▼
        │    Tool results added to messages
@@ -443,6 +449,7 @@ The `capabilities` field controls what the plugin provides:
 - `widget` -- renders a Jinja2 template on the dashboard
 - `personality` -- bundles personality `.md` files
 - `prompt_variables` -- contributes dynamic values to personality templates
+- `hook` -- registers hook functions that intercept tool execution
 
 ### Step 2: Create a Plugin Manually
 
@@ -856,6 +863,63 @@ prompt_variables:
     description: Machine hostname
 ```
 
+### Advanced: Plugin Hooks
+
+Plugins with the `hook` capability can intercept tool execution. This is useful
+for adding custom security policies, audit logging, or conditional tool filtering
+without modifying Radar's source code.
+
+**Manifest with hooks:**
+
+```yaml
+# security_hooks/manifest.yaml
+name: security_hooks
+version: "1.0.0"
+description: "Custom security hooks"
+trust_level: local
+capabilities:
+  - hook
+hooks:
+  - hook_point: pre_tool_call
+    function: check_file_ownership
+    priority: 20
+    description: "Block writes to files not owned by user"
+```
+
+**Code with matching functions:**
+
+```python
+# security_hooks/tool.py
+import os
+from pathlib import Path
+from radar.hooks import HookResult
+
+def check_file_ownership(tool_name, arguments):
+    if tool_name != "write_file":
+        return HookResult()
+    path = Path(arguments.get("path", "")).expanduser().resolve()
+    if path.exists() and path.stat().st_uid != os.getuid():
+        return HookResult(blocked=True, message=f"Cannot write to '{path}': not owned by you")
+    return HookResult()
+```
+
+Each function name must match a `function` in the `hooks` list. Hook functions
+receive different arguments depending on the hook point:
+
+| Hook Point | Signature | Return |
+|---|---|---|
+| `pre_tool_call` | `(tool_name, arguments)` | `HookResult` (blocked, message) |
+| `post_tool_call` | `(tool_name, arguments, result, success)` | `None` |
+| `filter_tools` | `(tools)` | `list[dict]` (filtered tool list) |
+
+**Trust levels for hooks:** Sandbox hooks get `HookResult` injected into their
+namespace so they can return blocks. Local-trust hooks load via `importlib`
+with full Python access and can import `HookResult` directly.
+
+**Hook loading/unloading:** When a plugin with the `hook` capability is
+registered (via `_register_plugin()`), its hooks are loaded automatically.
+When unregistered, its hooks are removed via `unload_plugin_hooks()`.
+
 ### Plugin Configuration
 
 In `radar.yaml`:
@@ -869,6 +933,110 @@ plugins:
   test_timeout_seconds: 10         # Timeout for running tests
   max_code_size_bytes: 10000       # Max code size for generated plugins
 ```
+
+---
+
+## Tutorial: Hook System
+
+Hooks provide a configurable layer for intercepting tool execution and filtering
+tool availability. They sit on top of the hardcoded security in `radar/security.py`
+and run **before** the tool function is even called.
+
+### Hook Points
+
+| Hook Point | Fires When | Can Block? |
+|---|---|---|
+| `pre_tool_call` | Before `execute_tool()` runs the tool function | Yes |
+| `post_tool_call` | After `execute_tool()` completes | No (observe only) |
+| `filter_tools` | When `get_tools_schema()` builds the tool list | N/A (transforms list) |
+
+### Two Sources of Hooks
+
+**1. Config-driven rules** -- Simple YAML rules in `radar.yaml`, no Python needed:
+
+```yaml
+hooks:
+  enabled: true
+  rules:
+    - name: block_rm
+      hook_point: pre_tool_call
+      type: block_command_pattern
+      patterns: ["rm "]
+      tools: ["exec"]
+      message: "rm commands are not allowed"
+      priority: 10
+
+    - name: nighttime_safety
+      hook_point: filter_tools
+      type: time_restrict
+      start_hour: 22
+      end_hour: 8
+      tools: ["exec", "write_file"]
+
+    - name: audit_log
+      hook_point: post_tool_call
+      type: log
+      log_level: info
+```
+
+Config rule types:
+- `block_command_pattern` -- Block exec commands matching substring patterns
+- `block_path_pattern` -- Block file tools accessing paths under configured directories
+- `block_tool` -- Block specific tools entirely
+- `time_restrict` -- Remove tools during a time window
+- `allowlist` / `denylist` -- Static tool filtering
+- `log` -- Log tool execution
+
+**2. Plugin hooks** -- Python functions from plugins with `hook` capability.
+See [Advanced: Plugin Hooks](#advanced-plugin-hooks) in the plugin tutorial.
+
+### Core Module: `radar/hooks.py`
+
+Key types:
+- `HookPoint` enum: `PRE_TOOL_CALL`, `POST_TOOL_CALL`, `FILTER_TOOLS`
+- `HookResult` dataclass: `blocked: bool`, `message: str`
+- `HookRegistration` dataclass: `name`, `hook_point`, `callback`, `priority`,
+  `source`, `description`
+
+Key functions:
+- `register_hook()` / `unregister_hook()` -- Add/remove hooks
+- `run_pre_tool_hooks()` -- Returns `HookResult` (short-circuits on first block)
+- `run_post_tool_hooks()` -- Fire-and-forget observation
+- `run_filter_tools_hooks()` -- Chain-filters the tool list
+- `clear_all_hooks()` -- Reset (useful for testing)
+- `list_hooks()` -- Introspection
+
+### Design Details
+
+- **Fast path**: `run_*` functions check `if not hooks: return` before iterating
+  (zero overhead when no hooks are registered)
+- **Priority ordering**: Lower numbers run first. Config hooks default to 50,
+  plugin hooks to 100
+- **Error isolation**: Failing hooks are logged and skipped, never crash the tool
+- **Lazy imports**: Hook functions in `execute_tool()` and `get_tools_schema()`
+  use lazy imports from `radar.hooks` to avoid circular imports
+
+### Testing Hooks
+
+Use the `clear_all_hooks()` function in an autouse fixture for test isolation:
+
+```python
+import pytest
+from radar.hooks import clear_all_hooks
+
+@pytest.fixture(autouse=True)
+def clean_hooks():
+    clear_all_hooks()
+    yield
+    clear_all_hooks()
+```
+
+When testing config-driven hooks, patch `radar.config.get_config` (the source
+module), not `radar.hooks_builtin.get_config`, because `get_config` is imported
+lazily inside `load_config_hooks()`.
+
+When testing the `log` callback, patch `radar.logging.log` (the source module),
+not `radar.hooks_builtin.log`.
 
 ---
 

@@ -20,6 +20,7 @@ This guide covers everything you need to get started and make the most of Radar 
 - [Notifications](#notifications)
 - [Web Search](#web-search)
 - [Plugin System](#plugin-system)
+- [Hook System](#hook-system)
 - [Security](#security)
 - [Troubleshooting](#troubleshooting)
 
@@ -1149,6 +1150,10 @@ plugins:
   max_code_size_bytes: 10000          # Max generated code size
 ```
 
+### Plugin Hooks
+
+Plugins can also register hooks that intercept tool execution. See the [Hook System](#hook-system) section for details.
+
 ### Security
 
 Plugin safety is enforced through multiple layers:
@@ -1158,6 +1163,82 @@ Plugin safety is enforced through multiple layers:
 - **Sandboxed execution** -- sandbox plugin tests run with restricted builtins
 - **Human review** -- default requires manual approval via the web UI; local trust always requires it
 - **Version history** -- roll back to a previous working version at any time
+
+---
+
+## Hook System
+
+Hooks let you intercept tool execution and filter which tools are available -- without modifying Radar's source code. They provide a configurable policy layer on top of the built-in security checks in `radar/security.py`.
+
+### Why Hooks?
+
+The built-in security (path blocklists, command pattern blocking) is hardcoded and always active. Hooks let you add **your own policies** on top:
+
+- Block specific command patterns (e.g., prevent `rm` commands)
+- Restrict tools during certain hours (e.g., no `exec` at night)
+- Audit-log every tool call
+- Use plugin hooks for custom security checks
+
+### Configuration
+
+Add a `hooks` section to your `radar.yaml`:
+
+```yaml
+hooks:
+  enabled: true    # Set to false to disable all hooks
+  rules:
+    - name: block_rm
+      hook_point: pre_tool_call
+      type: block_command_pattern
+      patterns: ["rm "]
+      tools: ["exec"]
+      message: "rm commands are not allowed"
+      priority: 10
+
+    - name: nighttime_safety
+      hook_point: filter_tools
+      type: time_restrict
+      start_hour: 22
+      end_hour: 8
+      tools: ["exec", "write_file"]
+
+    - name: audit_log
+      hook_point: post_tool_call
+      type: log
+      log_level: info
+```
+
+### Rule Types
+
+**Pre-tool rules** (can block tool calls before they execute):
+
+| Type | Description | Key Fields |
+|------|-------------|------------|
+| `block_command_pattern` | Block exec commands matching substring patterns | `patterns`, `tools`, `message` |
+| `block_path_pattern` | Block file tools accessing paths under configured directories | `patterns`, `tools`, `message` |
+| `block_tool` | Block specific tools entirely | `tools`, `message` |
+
+**Filter rules** (modify which tools are visible to the LLM):
+
+| Type | Description | Key Fields |
+|------|-------------|------------|
+| `time_restrict` | Remove tools during a time window | `start_hour`, `end_hour`, `tools` |
+| `allowlist` | Only allow listed tools | `tools` |
+| `denylist` | Remove listed tools | `tools` |
+
+**Post-tool rules** (observe tool calls after they complete, cannot block):
+
+| Type | Description | Key Fields |
+|------|-------------|------------|
+| `log` | Log tool execution | `log_level` |
+
+### Hook Priority
+
+Rules with lower `priority` numbers run first. If you omit `priority`, config rules default to 50. For pre-tool hooks, the first rule that blocks stops execution -- later rules do not run.
+
+### Plugin Hooks
+
+Plugins with the `hook` capability can register Python hook functions for more complex logic (e.g., checking file ownership, querying external systems). These require `trust_level: local` for full Python access. See the Developer Guide for details on creating plugin hooks.
 
 ---
 

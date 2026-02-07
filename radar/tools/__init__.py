@@ -63,21 +63,28 @@ def get_tools_schema(
         include: If set, only return tools with these names (allowlist).
         exclude: If set, return all tools except these names (denylist).
         Both None returns everything. Both set is caller error (returns all).
+
+    After building the base list, filter hooks are applied.
     """
     ensure_external_tools_loaded()
     if include is not None:
         include_set = set(include)
-        return [
+        tools = [
             schema for name, (_, schema) in _registry.items()
             if name in include_set
         ]
-    if exclude is not None:
+    elif exclude is not None:
         exclude_set = set(exclude)
-        return [
+        tools = [
             schema for name, (_, schema) in _registry.items()
             if name not in exclude_set
         ]
-    return [schema for _, schema in _registry.values()]
+    else:
+        tools = [schema for _, schema in _registry.values()]
+
+    # Apply filter hooks (lazy import to avoid circular imports)
+    from radar.hooks import run_filter_tools_hooks
+    return run_filter_tools_hooks(tools)
 
 
 def _log_tool_execution(name: str, success: bool, error: str | None = None) -> None:
@@ -96,19 +103,34 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> str:
     """Execute a tool by name with given arguments.
 
     Returns the tool's string result or error message.
+    Pre-tool hooks can block execution; post-tool hooks observe the result.
     """
     if name not in _registry:
         _log_tool_execution(name, False, "Unknown tool")
         return f"Error: Unknown tool '{name}'"
 
+    # Run pre-tool hooks (lazy import to avoid circular imports)
+    from radar.hooks import run_pre_tool_hooks, run_post_tool_hooks
+
+    hook_result = run_pre_tool_hooks(name, arguments)
+    if hook_result.blocked:
+        msg = hook_result.message or f"Tool '{name}' blocked by hook"
+        _log_tool_execution(name, False, msg)
+        run_post_tool_hooks(name, arguments, msg, False)
+        return f"Error: {msg}"
+
     func, _ = _registry[name]
     try:
         result = func(**arguments)
+        result_str = str(result)
         _log_tool_execution(name, True)
-        return str(result)
+        run_post_tool_hooks(name, arguments, result_str, True)
+        return result_str
     except Exception as e:
+        error_msg = f"Error executing {name}: {e}"
         _log_tool_execution(name, False, str(e))
-        return f"Error executing {name}: {e}"
+        run_post_tool_hooks(name, arguments, error_msg, False)
+        return error_msg
 
 
 def get_tool_names() -> list[str]:

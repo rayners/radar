@@ -124,6 +124,14 @@ class PluginsConfig:
 
 
 @dataclass
+class HooksConfig:
+    """Hook system configuration."""
+
+    enabled: bool = True
+    rules: list[dict] = field(default_factory=list)
+
+
+@dataclass
 class PersonalityEvolutionConfig:
     """Personality evolution/feedback configuration."""
 
@@ -164,6 +172,7 @@ class Config:
     plugins: PluginsConfig = field(default_factory=PluginsConfig)
     personality_evolution: PersonalityEvolutionConfig = field(default_factory=PersonalityEvolutionConfig)
     search: WebSearchConfig = field(default_factory=WebSearchConfig)
+    hooks: HooksConfig = field(default_factory=HooksConfig)
     system_prompt: str = ""
     max_tool_iterations: int = 10
     watch_paths: list[dict] = field(default_factory=list)
@@ -188,6 +197,7 @@ class Config:
         plugins_data = data.get("plugins", {})
         personality_evolution_data = data.get("personality_evolution", {})
         search_data = data.get("search", {})
+        hooks_data = data.get("hooks", {})
 
         # Backward compatibility: if 'ollama' section exists but not 'llm', migrate
         if ollama_data and not llm_data:
@@ -274,6 +284,10 @@ class Config:
                 searxng_url=search_data.get("searxng_url", WebSearchConfig.searxng_url),
                 max_results=search_data.get("max_results", WebSearchConfig.max_results),
                 safe_search=search_data.get("safe_search", WebSearchConfig.safe_search),
+            ),
+            hooks=HooksConfig(
+                enabled=hooks_data.get("enabled", HooksConfig.enabled),
+                rules=hooks_data.get("rules", []),
             ),
             system_prompt=data.get("system_prompt", ""),
             max_tool_iterations=data.get("max_tool_iterations", 10),

@@ -1,0 +1,1002 @@
+"""Tests for the hook system."""
+
+import pytest
+
+from radar.hooks import (
+    HookPoint,
+    HookRegistration,
+    HookResult,
+    clear_all_hooks,
+    list_hooks,
+    register_hook,
+    run_filter_tools_hooks,
+    run_post_tool_hooks,
+    run_pre_tool_hooks,
+    unregister_hook,
+    unregister_hooks_by_source,
+)
+
+
+@pytest.fixture(autouse=True)
+def clean_hooks():
+    """Ensure hooks are clean before and after each test."""
+    clear_all_hooks()
+    yield
+    clear_all_hooks()
+
+
+# ---- Core Hook Manager ----
+
+
+class TestHookRegistration:
+    """Test register/unregister/list operations."""
+
+    def test_register_hook(self):
+        register_hook(HookRegistration(
+            name="test_hook",
+            hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=lambda tn, args: HookResult(),
+        ))
+        hooks = list_hooks()
+        assert len(hooks) == 1
+        assert hooks[0]["name"] == "test_hook"
+        assert hooks[0]["hook_point"] == "pre_tool_call"
+
+    def test_unregister_hook(self):
+        register_hook(HookRegistration(
+            name="test_hook",
+            hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=lambda tn, args: HookResult(),
+        ))
+        assert unregister_hook("test_hook") is True
+        assert list_hooks() == []
+
+    def test_unregister_nonexistent(self):
+        assert unregister_hook("nonexistent") is False
+
+    def test_unregister_hooks_by_source(self):
+        register_hook(HookRegistration(
+            name="a", hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=lambda tn, args: HookResult(), source="config",
+        ))
+        register_hook(HookRegistration(
+            name="b", hook_point=HookPoint.POST_TOOL_CALL,
+            callback=lambda tn, args, r, s: None, source="config",
+        ))
+        register_hook(HookRegistration(
+            name="c", hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=lambda tn, args: HookResult(), source="plugin:foo",
+        ))
+        count = unregister_hooks_by_source("config")
+        assert count == 2
+        hooks = list_hooks()
+        assert len(hooks) == 1
+        assert hooks[0]["name"] == "c"
+
+    def test_clear_all_hooks(self):
+        register_hook(HookRegistration(
+            name="a", hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=lambda tn, args: HookResult(),
+        ))
+        register_hook(HookRegistration(
+            name="b", hook_point=HookPoint.FILTER_TOOLS,
+            callback=lambda tools: tools,
+        ))
+        clear_all_hooks()
+        assert list_hooks() == []
+
+    def test_priority_ordering(self):
+        """Hooks should be sorted by priority (lower first)."""
+        calls = []
+
+        def make_cb(name):
+            def cb(tn, args):
+                calls.append(name)
+                return HookResult()
+            return cb
+
+        register_hook(HookRegistration(
+            name="high", hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=make_cb("high"), priority=100,
+        ))
+        register_hook(HookRegistration(
+            name="low", hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=make_cb("low"), priority=10,
+        ))
+        register_hook(HookRegistration(
+            name="mid", hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=make_cb("mid"), priority=50,
+        ))
+
+        run_pre_tool_hooks("test", {})
+        assert calls == ["low", "mid", "high"]
+
+    def test_list_hooks_includes_metadata(self):
+        register_hook(HookRegistration(
+            name="test", hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=lambda tn, args: HookResult(),
+            priority=42, source="config", description="A test hook",
+        ))
+        hooks = list_hooks()
+        assert hooks[0]["priority"] == 42
+        assert hooks[0]["source"] == "config"
+        assert hooks[0]["description"] == "A test hook"
+
+
+# ---- Pre-Tool Hooks ----
+
+
+class TestPreToolHooks:
+    """Test pre-tool-call hook running."""
+
+    def test_no_hooks_allows(self):
+        result = run_pre_tool_hooks("any_tool", {})
+        assert result.blocked is False
+
+    def test_allowing_hook(self):
+        register_hook(HookRegistration(
+            name="allow", hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=lambda tn, args: HookResult(),
+        ))
+        result = run_pre_tool_hooks("tool_a", {"command": "ls"})
+        assert result.blocked is False
+
+    def test_blocking_hook(self):
+        register_hook(HookRegistration(
+            name="block", hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=lambda tn, args: HookResult(blocked=True, message="nope"),
+        ))
+        result = run_pre_tool_hooks("tool_a", {"command": "rm -rf /"})
+        assert result.blocked is True
+        assert result.message == "nope"
+
+    def test_short_circuit_on_block(self):
+        """First blocking hook stops running of subsequent hooks."""
+        calls = []
+
+        def hook_a(tn, args):
+            calls.append("a")
+            return HookResult(blocked=True, message="blocked by a")
+
+        def hook_b(tn, args):
+            calls.append("b")
+            return HookResult()
+
+        register_hook(HookRegistration(
+            name="a", hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=hook_a, priority=10,
+        ))
+        register_hook(HookRegistration(
+            name="b", hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=hook_b, priority=20,
+        ))
+
+        result = run_pre_tool_hooks("tool_a", {})
+        assert result.blocked is True
+        assert calls == ["a"]  # b never called
+
+    def test_exception_isolation(self):
+        """A failing hook should not prevent other hooks from running."""
+        def bad_hook(tn, args):
+            raise RuntimeError("hook crashed")
+
+        calls = []
+
+        def good_hook(tn, args):
+            calls.append("good")
+            return HookResult()
+
+        register_hook(HookRegistration(
+            name="bad", hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=bad_hook, priority=10,
+        ))
+        register_hook(HookRegistration(
+            name="good", hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=good_hook, priority=20,
+        ))
+
+        result = run_pre_tool_hooks("tool_a", {})
+        assert result.blocked is False
+        assert calls == ["good"]
+
+    def test_non_hookresult_return_ignored(self):
+        """If a hook returns something that isn't HookResult, it's ignored."""
+        register_hook(HookRegistration(
+            name="weird", hook_point=HookPoint.PRE_TOOL_CALL,
+            callback=lambda tn, args: "not a HookResult",
+        ))
+        result = run_pre_tool_hooks("tool_a", {})
+        assert result.blocked is False
+
+
+# ---- Post-Tool Hooks ----
+
+
+class TestPostToolHooks:
+    """Test post-tool-call hook running."""
+
+    def test_no_hooks(self):
+        # Should not raise
+        run_post_tool_hooks("tool_a", {"command": "ls"}, "output", True)
+
+    def test_post_hook_fires(self):
+        calls = []
+
+        def observer(tn, args, result, success):
+            calls.append((tn, success))
+
+        register_hook(HookRegistration(
+            name="obs", hook_point=HookPoint.POST_TOOL_CALL,
+            callback=observer,
+        ))
+
+        run_post_tool_hooks("tool_a", {}, "ok", True)
+        run_post_tool_hooks("tool_a", {}, "error", False)
+        assert calls == [("tool_a", True), ("tool_a", False)]
+
+    def test_post_hook_exception_isolated(self):
+        """Failing post-hook should not raise."""
+        def bad_post(tn, args, result, success):
+            raise RuntimeError("post crash")
+
+        register_hook(HookRegistration(
+            name="bad_post", hook_point=HookPoint.POST_TOOL_CALL,
+            callback=bad_post,
+        ))
+
+        # Should not raise
+        run_post_tool_hooks("tool_a", {}, "ok", True)
+
+
+# ---- Filter Hooks ----
+
+
+class TestFilterToolsHooks:
+    """Test filter-tools hook running."""
+
+    def _make_tool(self, name: str) -> dict:
+        return {"type": "function", "function": {"name": name, "description": ""}}
+
+    def test_no_hooks_passthrough(self):
+        tools = [self._make_tool("a"), self._make_tool("b")]
+        result = run_filter_tools_hooks(tools)
+        assert len(result) == 2
+
+    def test_filter_removes_tools(self):
+        def deny_b(tools):
+            return [t for t in tools if t["function"]["name"] != "b"]
+
+        register_hook(HookRegistration(
+            name="deny_b", hook_point=HookPoint.FILTER_TOOLS,
+            callback=deny_b,
+        ))
+
+        tools = [self._make_tool("a"), self._make_tool("b"), self._make_tool("c")]
+        result = run_filter_tools_hooks(tools)
+        names = [t["function"]["name"] for t in result]
+        assert names == ["a", "c"]
+
+    def test_filter_chain(self):
+        """Multiple filter hooks are chained."""
+        def deny_a(tools):
+            return [t for t in tools if t["function"]["name"] != "a"]
+
+        def deny_b(tools):
+            return [t for t in tools if t["function"]["name"] != "b"]
+
+        register_hook(HookRegistration(
+            name="deny_a", hook_point=HookPoint.FILTER_TOOLS,
+            callback=deny_a, priority=10,
+        ))
+        register_hook(HookRegistration(
+            name="deny_b", hook_point=HookPoint.FILTER_TOOLS,
+            callback=deny_b, priority=20,
+        ))
+
+        tools = [self._make_tool("a"), self._make_tool("b"), self._make_tool("c")]
+        result = run_filter_tools_hooks(tools)
+        names = [t["function"]["name"] for t in result]
+        assert names == ["c"]
+
+    def test_filter_exception_isolated(self):
+        """Failing filter hook should pass through unchanged."""
+        def bad_filter(tools):
+            raise RuntimeError("filter crash")
+
+        register_hook(HookRegistration(
+            name="bad", hook_point=HookPoint.FILTER_TOOLS,
+            callback=bad_filter,
+        ))
+
+        tools = [self._make_tool("a")]
+        result = run_filter_tools_hooks(tools)
+        assert len(result) == 1
+
+    def test_filter_returning_non_list_ignored(self):
+        """If a filter returns non-list, original list is preserved."""
+        register_hook(HookRegistration(
+            name="bad_return", hook_point=HookPoint.FILTER_TOOLS,
+            callback=lambda tools: "not a list",
+        ))
+
+        tools = [self._make_tool("a")]
+        result = run_filter_tools_hooks(tools)
+        assert len(result) == 1
+
+
+# ---- Config-Driven Rules ----
+
+
+class TestConfigDrivenHooks:
+    """Test hooks built from config rules via hooks_builtin."""
+
+    def test_block_command_pattern(self):
+        from radar.hooks_builtin import _build_hook
+
+        rule = {
+            "name": "block_rm",
+            "hook_point": "pre_tool_call",
+            "type": "block_command_pattern",
+            "patterns": ["rm "],
+            "tools": ["exec_command"],
+            "message": "rm not allowed",
+        }
+        reg = _build_hook(rule)
+        assert reg is not None
+
+        # Should block
+        result = reg.callback("exec_command", {"command": "rm -rf /tmp"})
+        assert result.blocked is True
+        assert result.message == "rm not allowed"
+
+        # Should allow
+        result = reg.callback("exec_command", {"command": "ls -la"})
+        assert result.blocked is False
+
+        # Wrong tool
+        result = reg.callback("read_file", {"command": "rm stuff"})
+        assert result.blocked is False
+
+    def test_block_path_pattern(self, tmp_path):
+        from radar.hooks_builtin import _build_hook
+
+        rule = {
+            "name": "block_ssh",
+            "hook_point": "pre_tool_call",
+            "type": "block_path_pattern",
+            "paths": [str(tmp_path / "secret")],
+            "tools": ["write_file"],
+            "message": "secret dir blocked",
+        }
+        reg = _build_hook(rule)
+        assert reg is not None
+
+        # Should block
+        result = reg.callback("write_file", {"path": str(tmp_path / "secret" / "key")})
+        assert result.blocked is True
+
+        # Should allow
+        result = reg.callback("write_file", {"path": str(tmp_path / "public" / "file")})
+        assert result.blocked is False
+
+        # Wrong tool
+        result = reg.callback("read_file", {"path": str(tmp_path / "secret" / "key")})
+        assert result.blocked is False
+
+    def test_block_tool(self):
+        from radar.hooks_builtin import _build_hook
+
+        rule = {
+            "name": "block_tools",
+            "hook_point": "pre_tool_call",
+            "type": "block_tool",
+            "tools": ["exec_command", "write_file"],
+            "message": "tool disabled",
+        }
+        reg = _build_hook(rule)
+        assert reg is not None
+
+        result = reg.callback("exec_command", {})
+        assert result.blocked is True
+
+        result = reg.callback("write_file", {})
+        assert result.blocked is True
+
+        result = reg.callback("read_file", {})
+        assert result.blocked is False
+
+    def test_log_callback(self):
+        from unittest.mock import patch
+
+        from radar.hooks_builtin import _build_hook
+
+        rule = {
+            "name": "audit",
+            "hook_point": "post_tool_call",
+            "type": "log",
+            "log_level": "info",
+        }
+        reg = _build_hook(rule)
+        assert reg is not None
+
+        with patch("radar.logging.log") as mock_log:
+            reg.callback("exec_command", {"command": "ls"}, "output", True)
+            mock_log.assert_called_once()
+            args = mock_log.call_args
+            assert args[0][0] == "info"
+            assert "exec_command" in args[0][1]
+            assert "success" in args[0][1]
+
+    def test_time_restrict_in_window(self):
+        from unittest.mock import patch
+
+        from radar.hooks_builtin import _build_hook
+
+        rule = {
+            "name": "night_restrict",
+            "hook_point": "filter_tools",
+            "type": "time_restrict",
+            "start_hour": 22,
+            "end_hour": 8,
+            "tools": ["exec_command"],
+        }
+        reg = _build_hook(rule)
+        assert reg is not None
+
+        tools = [
+            {"function": {"name": "exec_command"}},
+            {"function": {"name": "read_file"}},
+        ]
+
+        # At 23:00 (in window) - exec_command should be removed
+        from datetime import datetime
+
+        with patch("radar.hooks_builtin.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2024, 1, 1, 23, 0)
+            result = reg.callback(tools)
+            names = [t["function"]["name"] for t in result]
+            assert "exec_command" not in names
+            assert "read_file" in names
+
+    def test_time_restrict_outside_window(self):
+        from unittest.mock import patch
+
+        from radar.hooks_builtin import _build_hook
+
+        rule = {
+            "name": "night_restrict",
+            "hook_point": "filter_tools",
+            "type": "time_restrict",
+            "start_hour": 22,
+            "end_hour": 8,
+            "tools": ["exec_command"],
+        }
+        reg = _build_hook(rule)
+
+        tools = [
+            {"function": {"name": "exec_command"}},
+            {"function": {"name": "read_file"}},
+        ]
+
+        # At 14:00 (outside window) - all tools present
+        from datetime import datetime
+
+        with patch("radar.hooks_builtin.datetime") as mock_dt:
+            mock_dt.now.return_value = datetime(2024, 1, 1, 14, 0)
+            result = reg.callback(tools)
+            assert len(result) == 2
+
+    def test_allowlist(self):
+        from radar.hooks_builtin import _build_hook
+
+        rule = {
+            "name": "only_safe",
+            "hook_point": "filter_tools",
+            "type": "allowlist",
+            "tools": ["read_file", "weather"],
+        }
+        reg = _build_hook(rule)
+
+        tools = [
+            {"function": {"name": "exec_command"}},
+            {"function": {"name": "read_file"}},
+            {"function": {"name": "weather"}},
+        ]
+        result = reg.callback(tools)
+        names = [t["function"]["name"] for t in result]
+        assert names == ["read_file", "weather"]
+
+    def test_denylist(self):
+        from radar.hooks_builtin import _build_hook
+
+        rule = {
+            "name": "deny_exec",
+            "hook_point": "filter_tools",
+            "type": "denylist",
+            "tools": ["exec_command"],
+        }
+        reg = _build_hook(rule)
+
+        tools = [
+            {"function": {"name": "exec_command"}},
+            {"function": {"name": "read_file"}},
+        ]
+        result = reg.callback(tools)
+        names = [t["function"]["name"] for t in result]
+        assert names == ["read_file"]
+
+    def test_unknown_hook_point(self):
+        from radar.hooks_builtin import _build_hook
+
+        rule = {
+            "name": "bad",
+            "hook_point": "nonexistent",
+            "type": "block_tool",
+        }
+        reg = _build_hook(rule)
+        assert reg is None
+
+    def test_unknown_rule_type(self):
+        from radar.hooks_builtin import _build_hook
+
+        rule = {
+            "name": "bad",
+            "hook_point": "pre_tool_call",
+            "type": "nonexistent_type",
+        }
+        reg = _build_hook(rule)
+        assert reg is None
+
+    def test_load_config_hooks(self, monkeypatch):
+        """Test loading hooks from config."""
+        from radar.config.schema import Config, HooksConfig
+
+        mock_config = Config()
+        mock_config.hooks = HooksConfig(
+            enabled=True,
+            rules=[
+                {
+                    "name": "block_rm",
+                    "hook_point": "pre_tool_call",
+                    "type": "block_command_pattern",
+                    "patterns": ["rm "],
+                    "tools": ["exec_command"],
+                    "message": "rm blocked",
+                },
+                {
+                    "name": "deny_exec",
+                    "hook_point": "filter_tools",
+                    "type": "denylist",
+                    "tools": ["exec_command"],
+                },
+            ],
+        )
+
+        # Patch at source module since hooks_builtin does lazy import inside function body
+        monkeypatch.setattr("radar.config.get_config", lambda: mock_config)
+
+        from radar.hooks_builtin import load_config_hooks
+        count = load_config_hooks()
+        assert count == 2
+
+        hooks = list_hooks()
+        assert len(hooks) == 2
+
+    def test_load_config_hooks_disabled(self, monkeypatch):
+        """When hooks.enabled is False, no hooks are loaded."""
+        from radar.config.schema import Config, HooksConfig
+
+        mock_config = Config()
+        mock_config.hooks = HooksConfig(enabled=False, rules=[
+            {"name": "x", "hook_point": "pre_tool_call", "type": "block_tool", "tools": ["exec_command"]},
+        ])
+
+        # Patch at source module since hooks_builtin does lazy import inside function body
+        monkeypatch.setattr("radar.config.get_config", lambda: mock_config)
+
+        from radar.hooks_builtin import load_config_hooks
+        count = load_config_hooks()
+        assert count == 0
+
+    def test_custom_priority(self):
+        from radar.hooks_builtin import _build_hook
+
+        rule = {
+            "name": "custom",
+            "hook_point": "pre_tool_call",
+            "type": "block_tool",
+            "tools": ["exec_command"],
+            "priority": 5,
+        }
+        reg = _build_hook(rule)
+        assert reg.priority == 5
+
+
+# ---- Plugin Hooks ----
+
+
+class TestPluginHooks:
+    """Test loading hooks from plugins."""
+
+    def _make_plugin(self, tmp_path, code, hooks, trust_level="sandbox"):
+        """Helper to create a minimal Plugin for hook testing."""
+        from radar.plugins.models import Plugin, PluginManifest
+
+        plugin_dir = tmp_path / "test_hook_plugin"
+        plugin_dir.mkdir(exist_ok=True)
+        (plugin_dir / "tool.py").write_text(code)
+
+        manifest = PluginManifest(
+            name="test_hook_plugin",
+            trust_level=trust_level,
+            capabilities=["hook"],
+            hooks=hooks,
+        )
+
+        return Plugin(
+            name="test_hook_plugin",
+            manifest=manifest,
+            code=code,
+            path=plugin_dir,
+        )
+
+    def test_sandbox_pre_hook(self, tmp_path):
+        """Sandbox plugin hook can block a tool call using injected HookResult."""
+        code = (
+            "def block_tool_a(tool_name, arguments):\n"
+            "    if tool_name == 'tool_a':\n"
+            "        return HookResult(blocked=True, message='blocked by sandbox')\n"
+            "    return HookResult()\n"
+        )
+        hooks = [{
+            "hook_point": "pre_tool_call",
+            "function": "block_tool_a",
+            "priority": 50,
+            "description": "Block tool_a",
+        }]
+        plugin = self._make_plugin(tmp_path, code, hooks)
+
+        from radar.plugins.hooks import load_plugin_hooks
+        count = load_plugin_hooks(plugin)
+        assert count == 1
+
+        result = run_pre_tool_hooks("tool_a", {})
+        assert result.blocked is True
+        assert "sandbox" in result.message
+
+    def test_sandbox_post_hook(self, tmp_path):
+        """Sandbox plugin post-hook observes tool results."""
+        code = (
+            "observed = []\n"
+            "def observe_tool(tool_name, arguments, result, success):\n"
+            "    observed.append(tool_name)\n"
+        )
+        hooks = [{
+            "hook_point": "post_tool_call",
+            "function": "observe_tool",
+            "priority": 50,
+        }]
+        plugin = self._make_plugin(tmp_path, code, hooks)
+
+        from radar.plugins.hooks import load_plugin_hooks
+        count = load_plugin_hooks(plugin)
+        assert count == 1
+
+        # Post hook fires but we can't easily check the sandbox's `observed` list
+        # since it lives in a separate namespace. Just verify it doesn't crash.
+        run_post_tool_hooks("tool_a", {}, "output", True)
+
+    def test_local_trust_hook(self, tmp_path):
+        """Local-trust plugin hook loaded via importlib."""
+        code = (
+            "from radar.hooks import HookResult\n"
+            "\n"
+            "def check_tool(tool_name, arguments):\n"
+            "    if tool_name == 'write_file':\n"
+            "        return HookResult(blocked=True, message='blocked by local hook')\n"
+            "    return HookResult()\n"
+        )
+        hooks = [{
+            "hook_point": "pre_tool_call",
+            "function": "check_tool",
+            "priority": 20,
+        }]
+        plugin = self._make_plugin(tmp_path, code, hooks, trust_level="local")
+
+        from radar.plugins.hooks import load_plugin_hooks
+        count = load_plugin_hooks(plugin)
+        assert count == 1
+
+        result = run_pre_tool_hooks("write_file", {})
+        assert result.blocked is True
+        assert "local hook" in result.message
+
+    def test_unload_plugin_hooks(self, tmp_path):
+        """Unloading plugin hooks removes them."""
+        code = (
+            "def noop(tool_name, arguments):\n"
+            "    return HookResult()\n"
+        )
+        hooks = [{
+            "hook_point": "pre_tool_call",
+            "function": "noop",
+        }]
+        plugin = self._make_plugin(tmp_path, code, hooks)
+
+        from radar.plugins.hooks import load_plugin_hooks, unload_plugin_hooks
+        load_plugin_hooks(plugin)
+        assert len(list_hooks()) == 1
+
+        count = unload_plugin_hooks("test_hook_plugin")
+        assert count == 1
+        assert list_hooks() == []
+
+    def test_missing_function(self, tmp_path):
+        """Hook referencing nonexistent function is skipped."""
+        code = (
+            "def existing(tool_name, arguments):\n"
+            "    return HookResult()\n"
+        )
+        hooks = [{
+            "hook_point": "pre_tool_call",
+            "function": "nonexistent_func",
+        }]
+        plugin = self._make_plugin(tmp_path, code, hooks)
+
+        from radar.plugins.hooks import load_plugin_hooks
+        count = load_plugin_hooks(plugin)
+        assert count == 0
+
+    def test_invalid_hook_point(self, tmp_path):
+        """Hook with invalid hook_point is skipped."""
+        code = (
+            "def my_hook(tool_name, arguments):\n"
+            "    return HookResult()\n"
+        )
+        hooks = [{
+            "hook_point": "invalid_point",
+            "function": "my_hook",
+        }]
+        plugin = self._make_plugin(tmp_path, code, hooks)
+
+        from radar.plugins.hooks import load_plugin_hooks
+        count = load_plugin_hooks(plugin)
+        assert count == 0
+
+    def test_no_hook_capability(self, tmp_path):
+        """Plugin without 'hook' capability is skipped."""
+        from radar.plugins.models import Plugin, PluginManifest
+
+        plugin_dir = tmp_path / "no_hook"
+        plugin_dir.mkdir()
+        (plugin_dir / "tool.py").write_text("def foo(): pass")
+
+        manifest = PluginManifest(
+            name="no_hook",
+            capabilities=["tool"],
+            hooks=[{"hook_point": "pre_tool_call", "function": "foo"}],
+        )
+        plugin = Plugin(name="no_hook", manifest=manifest, code="", path=plugin_dir)
+
+        from radar.plugins.hooks import load_plugin_hooks
+        count = load_plugin_hooks(plugin)
+        assert count == 0
+
+
+# ---- Integration with execute_tool and get_tools_schema ----
+
+
+class TestToolIntegration:
+    """Test hooks wired into the tool registry."""
+
+    def test_execute_tool_blocked_by_hook(self):
+        """Pre-hook blocks tool running, tool function never called."""
+        from radar.tools import _registry, execute_tool
+
+        # Register a simple test tool
+        call_log = []
+
+        def my_tool(x: str = "") -> str:
+            call_log.append("called")
+            return "result"
+
+        schema = {
+            "type": "function",
+            "function": {
+                "name": "test_tool",
+                "description": "test",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            },
+        }
+        _registry["test_tool"] = (my_tool, schema)
+
+        try:
+            # Register a blocking hook
+            register_hook(HookRegistration(
+                name="blocker",
+                hook_point=HookPoint.PRE_TOOL_CALL,
+                callback=lambda tn, args: HookResult(blocked=True, message="blocked"),
+            ))
+
+            result = execute_tool("test_tool", {})
+            assert "blocked" in result
+            assert call_log == []  # Function was never called
+        finally:
+            del _registry["test_tool"]
+
+    def test_execute_tool_allowed_by_hook(self):
+        """Pre-hook allows tool, tool runs normally."""
+        from radar.tools import _registry, execute_tool
+
+        def my_tool() -> str:
+            return "success"
+
+        schema = {
+            "type": "function",
+            "function": {
+                "name": "test_tool2",
+                "description": "test",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            },
+        }
+        _registry["test_tool2"] = (my_tool, schema)
+
+        try:
+            register_hook(HookRegistration(
+                name="allower",
+                hook_point=HookPoint.PRE_TOOL_CALL,
+                callback=lambda tn, args: HookResult(),
+            ))
+
+            result = execute_tool("test_tool2", {})
+            assert result == "success"
+        finally:
+            del _registry["test_tool2"]
+
+    def test_execute_tool_post_hook_fires(self):
+        """Post-hook fires after successful tool running."""
+        from radar.tools import _registry, execute_tool
+
+        def my_tool() -> str:
+            return "ok"
+
+        schema = {
+            "type": "function",
+            "function": {
+                "name": "test_tool3",
+                "description": "test",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            },
+        }
+        _registry["test_tool3"] = (my_tool, schema)
+
+        post_calls = []
+
+        try:
+            register_hook(HookRegistration(
+                name="post_obs",
+                hook_point=HookPoint.POST_TOOL_CALL,
+                callback=lambda tn, args, r, s: post_calls.append((tn, s)),
+            ))
+
+            execute_tool("test_tool3", {})
+            assert post_calls == [("test_tool3", True)]
+        finally:
+            del _registry["test_tool3"]
+
+    def test_get_tools_schema_with_filter_hook(self):
+        """Filter hook removes tools from schema."""
+        from radar.tools import _registry, get_tools_schema
+
+        def dummy() -> str:
+            return ""
+
+        schema_a = {
+            "type": "function",
+            "function": {
+                "name": "filter_test_a",
+                "description": "a",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            },
+        }
+        schema_b = {
+            "type": "function",
+            "function": {
+                "name": "filter_test_b",
+                "description": "b",
+                "parameters": {"type": "object", "properties": {}, "required": []},
+            },
+        }
+        _registry["filter_test_a"] = (dummy, schema_a)
+        _registry["filter_test_b"] = (dummy, schema_b)
+
+        try:
+            register_hook(HookRegistration(
+                name="deny_b",
+                hook_point=HookPoint.FILTER_TOOLS,
+                callback=lambda tools: [
+                    t for t in tools
+                    if t.get("function", {}).get("name") != "filter_test_b"
+                ],
+            ))
+
+            tools = get_tools_schema(include=["filter_test_a", "filter_test_b"])
+            names = [t["function"]["name"] for t in tools]
+            assert "filter_test_a" in names
+            assert "filter_test_b" not in names
+        finally:
+            del _registry["filter_test_a"]
+            del _registry["filter_test_b"]
+
+
+# ---- Config Schema ----
+
+
+class TestConfigSchema:
+    """Test HooksConfig in the config schema."""
+
+    def test_default_hooks_config(self):
+        from radar.config.schema import Config
+        config = Config()
+        assert config.hooks.enabled is True
+        assert config.hooks.rules == []
+
+    def test_hooks_from_dict(self):
+        from radar.config.schema import Config
+        data = {
+            "hooks": {
+                "enabled": False,
+                "rules": [
+                    {"name": "test", "hook_point": "pre_tool_call", "type": "block_tool"},
+                ],
+            },
+        }
+        config = Config.from_dict(data)
+        assert config.hooks.enabled is False
+        assert len(config.hooks.rules) == 1
+        assert config.hooks.rules[0]["name"] == "test"
+
+    def test_missing_hooks_section(self):
+        from radar.config.schema import Config
+        config = Config.from_dict({})
+        assert config.hooks.enabled is True
+        assert config.hooks.rules == []
+
+
+# ---- Plugin Manifest ----
+
+
+class TestPluginManifestHooks:
+    """Test hooks field in PluginManifest."""
+
+    def test_manifest_with_hooks(self):
+        from radar.plugins.models import PluginManifest
+
+        data = {
+            "name": "my_plugin",
+            "capabilities": ["hook"],
+            "hooks": [
+                {"hook_point": "pre_tool_call", "function": "check_tool", "priority": 20},
+            ],
+        }
+        manifest = PluginManifest.from_dict(data)
+        assert len(manifest.hooks) == 1
+        assert manifest.hooks[0]["function"] == "check_tool"
+
+    def test_manifest_without_hooks(self):
+        from radar.plugins.models import PluginManifest
+
+        data = {"name": "basic_plugin"}
+        manifest = PluginManifest.from_dict(data)
+        assert manifest.hooks == []
+
+    def test_manifest_to_dict_includes_hooks(self):
+        from radar.plugins.models import PluginManifest
+
+        manifest = PluginManifest(
+            name="test",
+            hooks=[{"hook_point": "pre_tool_call", "function": "check"}],
+        )
+        d = manifest.to_dict()
+        assert "hooks" in d
+        assert len(d["hooks"]) == 1

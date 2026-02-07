@@ -73,6 +73,7 @@ class PluginManifest:
     scripts: list[str] = field(default_factory=list)  # filenames
     tools: list[ToolDefinition] = field(default_factory=list)
     prompt_variables: list[PromptVariableDefinition] = field(default_factory=list)
+    hooks: list[dict] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict) -> "PluginManifest":
@@ -96,6 +97,7 @@ class PluginManifest:
             scripts=data.get("scripts", []),
             tools=tools,
             prompt_variables=prompt_variables,
+            hooks=data.get("hooks", []),
         )
 
     def to_dict(self) -> dict:
@@ -115,6 +117,7 @@ class PluginManifest:
             "scripts": self.scripts,
             "tools": [t.to_dict() for t in self.tools],
             "prompt_variables": [pv.to_dict() for pv in self.prompt_variables],
+            "hooks": self.hooks,
         }
 
 

@@ -51,6 +51,8 @@ RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API
 - `radar/config.py` - YAML config with env var overrides
 - `radar/tools/` - Tool modules registered via `@tool` decorator
 - `radar/plugins.py` - Dynamic plugin system for LLM-generated tools
+- `radar/hooks.py` - Hook system for intercepting tool execution and filtering tool lists
+- `radar/hooks_builtin.py` - Config-driven hook builders (block patterns, time restrict, etc.)
 - `radar/scheduler.py` - APScheduler heartbeat with quiet hours + event queue
 - Heartbeat flow: `_heartbeat_tick()` checks due scheduled tasks → injects them as events via `add_event("scheduled_task", ...)` → also checks calendar reminders → runs `agent.run()` with the compiled event message + active personality context
 - `radar/scheduled_tasks.py` - Scheduled task CRUD (DB in `memory.db`, table `scheduled_tasks`)
@@ -789,6 +791,104 @@ Navigate to `/plugins` to:
 - Review pending plugins at `/plugins/review`
 - View plugin details, code, versions, and errors
 - Manually edit plugin code
+
+## Hook System
+
+Hooks intercept tool execution and tool list building. They provide a configurable policy layer on top of the hardcoded security in `radar/security.py`. Hooks run **before** the tool function is called, so a hook block prevents the tool's own security checks from needing to fire.
+
+Two sources of hooks:
+- **Config-driven rules** in `radar.yaml` (no Python needed)
+- **Plugin hooks** from plugins with a `hook` capability
+
+### Hook Points
+
+| Hook Point | Fires When | Can Block? |
+|---|---|---|
+| `pre_tool_call` | Before `execute_tool()` runs the tool function | Yes |
+| `post_tool_call` | After `execute_tool()` completes | No (observe only) |
+| `filter_tools` | When `get_tools_schema()` builds the tool list | N/A (transforms list) |
+
+### Configuration
+
+```yaml
+hooks:
+  enabled: true
+  rules:
+    - name: block_rm
+      hook_point: pre_tool_call
+      type: block_command_pattern
+      patterns: ["rm "]
+      tools: ["exec"]
+      message: "rm commands are not allowed"
+      priority: 10
+
+    - name: nighttime_safety
+      hook_point: filter_tools
+      type: time_restrict
+      start_hour: 22
+      end_hour: 8
+      tools: ["exec", "write_file"]
+
+    - name: audit_log
+      hook_point: post_tool_call
+      type: log
+      log_level: info
+```
+
+### Config Rule Types
+
+**Pre-tool rules** (block tool calls):
+- `block_command_pattern` -- Block exec commands matching substring patterns
+- `block_path_pattern` -- Block file tools accessing paths under configured directories
+- `block_tool` -- Block specific tools entirely
+
+**Filter rules** (modify tool list):
+- `time_restrict` -- Remove tools during a time window (e.g., 22:00-08:00)
+- `allowlist` / `denylist` -- Static tool filtering
+
+**Post-tool rules** (observe only):
+- `log` -- Log tool execution via `radar.logging`
+
+### Plugin Hooks
+
+Plugins with the `hook` capability can register Python hook functions:
+
+```yaml
+# manifest.yaml
+name: security_hooks
+version: 1.0.0
+description: "Custom security hooks"
+trust_level: local
+capabilities: [hook]
+hooks:
+  - hook_point: pre_tool_call
+    function: check_file_ownership
+    priority: 20
+    description: "Block writes to files not owned by user"
+```
+
+```python
+# tool.py
+import os
+from pathlib import Path
+from radar.hooks import HookResult
+
+def check_file_ownership(tool_name, arguments):
+    if tool_name != "write_file":
+        return HookResult()
+    path = Path(arguments.get("path", "")).expanduser().resolve()
+    if path.exists() and path.stat().st_uid != os.getuid():
+        return HookResult(blocked=True, message=f"Cannot write to '{path}': not owned by you")
+    return HookResult()
+```
+
+### Design Details
+
+- **Fast path**: Each `run_*` function checks `if not hooks: return` before iterating (zero overhead when unused)
+- **Priority ordering**: Lower numbers run first. Config hooks default to 50, plugin hooks to 100
+- **Error isolation**: Failing hooks are logged and skipped, never crash the tool call
+- **Pre-hooks short-circuit**: First `HookResult(blocked=True)` stops execution
+- Hooks are loaded on daemon startup (`load_config_hooks()` in `radar/cli.py`)
 
 ## Security
 

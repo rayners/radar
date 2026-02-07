@@ -109,6 +109,7 @@ class TestPluginManifest:
             "scripts": [],
             "tools": [],
             "prompt_variables": [],
+            "hooks": [],
         }
         m = PluginManifest.from_dict(data)
         assert m.to_dict() == data
@@ -1262,6 +1263,7 @@ class TestMultiToolManifest:
                 {"name": "upper", "description": "Uppercase", "parameters": {"text": {"type": "string"}}},
             ],
             "prompt_variables": [],
+            "hooks": [],
         }
         m = PluginManifest.from_dict(data)
         assert m.to_dict() == data
@@ -1692,6 +1694,7 @@ class TestPromptVariableDefinition:
             "prompt_variables": [
                 {"name": "hostname", "description": "Host"},
             ],
+            "hooks": [],
         }
         m = PluginManifest.from_dict(data)
         assert m.to_dict() == data

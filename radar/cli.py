@@ -288,6 +288,12 @@ def start(host: str | None, port: int | None, foreground: bool):
         from radar.logging import setup_logging
         setup_logging()
 
+        # Load config-driven hooks
+        from radar.hooks_builtin import load_config_hooks
+        hook_count = load_config_hooks()
+        if foreground and hook_count:
+            console.print(f"[dim]Loaded {hook_count} hook(s) from config[/dim]")
+
         # Start scheduler
         config = get_config()
         if foreground:

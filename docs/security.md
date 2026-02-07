@@ -234,6 +234,26 @@ ollama:
 | Calendar data exposure | Read-only access by default |
 | Meeting injection | Don't auto-accept invites |
 
+## Hook System (Configurable Security Layer)
+
+The hook system (`radar/hooks.py`, `radar/hooks_builtin.py`) provides a configurable
+policy layer that runs **on top of** the hardcoded security checks in `radar/security.py`.
+Hooks intercept tool calls before the tool function is even invoked, and can also
+filter which tools are visible to the LLM.
+
+This addresses several recommendations below (audit logging, tool restrictions) without
+requiring source code changes:
+
+- **Audit logging**: A `log` hook rule logs every tool call, including arguments and results
+- **Command blocking**: `block_command_pattern` rules can block exec commands matching patterns
+- **Path blocking**: `block_path_pattern` rules can restrict file access to configured directories
+- **Time-based restrictions**: `time_restrict` rules can remove tools during off-hours
+- **Tool allowlists/denylists**: Static filtering of which tools are available
+
+The baseline security in `radar/security.py` remains as an always-on safety net. Hooks
+add stricter policies without weakening the baseline. See the User Guide for configuration
+details.
+
 ## Recommendations by Priority
 
 ### Immediate (Before Public Use)
@@ -242,7 +262,7 @@ ollama:
 3. ~~Add web UI authentication when binding to non-localhost~~ - Done: token-based auth
 
 ### Short Term
-4. Implement audit logging of all tool calls
+4. ~~Implement audit logging of all tool calls~~ - Done: configurable via hook system (`type: log` rule)
 5. Sanitize memory content before prompt injection
 6. Escape all dynamic HTML content
 
