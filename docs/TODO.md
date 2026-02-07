@@ -8,7 +8,7 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (73 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (87 tests), `test_config.py` (40 tests), `test_memory.py` (33 tests), `test_llm.py` (34 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (181 tests), `test_scheduler.py` (42 tests), `test_integration.py` (7 tests) — **721 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (73 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (87 tests), `test_config.py` (40 tests), `test_memory.py` (33 tests), `test_llm.py` (34 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (169 tests), `test_scheduler.py` (42 tests), `test_integration.py` (7 tests) — **721 total**.
 
 - [x] **Core agent tests** - personality loading, system prompt building, Jinja2 template rendering, plugin prompt variables, run/ask orchestration (31 tests)
 - [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, format conversion (34 tests)
@@ -17,7 +17,7 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 - [x] **Memory tests** - JSONL operations, display formatting, conversation listing, tool call counting, activity feed (33 tests)
 - [x] **Config tests** - YAML loading, env var overrides, deprecated field migration, DataPaths (40 tests)
 - [x] **Scheduler tests** - heartbeat ticks, quiet hours, event queuing (42 tests)
-- [x] **Plugin tests** - code validation, sandboxed execution, version rollback, manifest capabilities, widgets, personality bundling, helper scripts, multi-tool registration, local trust, plugin install CLI, prompt variables (181 tests across all 5 modules)
+- [x] **Plugin tests** - code validation, sandboxed execution, version rollback, manifest capabilities, widgets, personality bundling, helper scripts, multi-tool registration, local trust, plugin install CLI, prompt variables (169 tests across all 5 modules)
 - [x] **Web route tests** - FastAPI endpoints, HTMX responses, config save, activity API (73 tests across all 9 route modules)
 - [x] **Integration test harness** - full conversation flow with mock LLM (7 tests)
 
@@ -84,6 +84,7 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 - [ ] **System info** - CPU, memory, disk usage
 - [ ] **Process management** - list/kill processes
 - [ ] **Browser automation** - Playwright for web form filling, scraping
+- [ ] **Jinja2 template tester** - validate personality template syntax and preview rendered output from CLI
 
 ### Pipelines (Multi-tool Workflows)
 - [ ] **PDF/comic metadata extraction** - extract info → search APIs → update metadata
@@ -276,12 +277,21 @@ Reducing friction for adding new tools and plugins.
 - [x] **Trust levels** — `sandbox` (restricted, LLM-generated) vs `local` (full Python via importlib, human-reviewed). LLM always forced to sandbox; local trust never auto-approved.
 - [x] **CLI plugin install** — `radar plugin install <dir>`, `radar plugin list`, `radar plugin approve <name>` for installing and managing plugins from the command line.
 - [x] **Plugin-to-tools tracking** — `_plugin_tools` dict maps plugin names to their registered tool names for clean multi-tool unregistration.
+- [ ] **Remote plugin repository** — install plugins from git URLs or an HTTP registry (`radar plugin install https://...`)
+- [ ] **Plugin dependency declarations** — plugins declare dependencies on other plugins or Python packages
+
+### Personality Template Engine
+- [ ] **Conditional template sections** — Jinja2 `{% if %}`/`{% for %}` blocks in personality files (e.g., day-specific instructions, context-aware behavior)
+- [ ] **Template includes** — `{% include "fragment.md" %}` for reusable personality components across multiple personalities
+- [ ] **Built-in prompt variable expansion** — more built-in variables beyond time: `active_personality`, `tool_count`, `memory_count`, `uptime`
+- [ ] **Template syntax validation** — warn on Jinja2 syntax errors in personality files at load time instead of silently failing
 
 ### Plugin Lifecycle
 - [ ] **Plugin loading at startup** — Load all enabled plugins when daemon starts, not on first tool call. Currently a plugin created via chat isn't available until the tool registry is next queried.
 - [ ] **Plugin scaffolding CLI** — `radar plugin create <name>` to generate boilerplate file with `@tool` decorator, test cases, and manifest.
 - [ ] **Plugin persistent state** — Simple key-value store per plugin for cross-invocation state (e.g., a counter, last-run timestamp, cached data).
 - [ ] **Plugin event hooks** — Plugins can register for events like `on_heartbeat`, `on_conversation_start`, `on_tool_error` to participate in the system lifecycle without being explicitly called by the LLM.
+- [ ] **Prompt variable caching** — optional TTL-based caching for expensive prompt variable functions (e.g., API calls), with cache-bust on demand
 
 ### Developer Experience
 - [ ] **Tool testing harness** — Run a tool's test cases from CLI (`radar tool test <name>`) without needing the full agent loop.
@@ -294,33 +304,36 @@ Reducing friction for adding new tools and plugins.
 
 - How to handle rate limits on external APIs?
 - Should integrations have their own heartbeat intervals?
-- How to test integrations without real accounts?
+- How to test integrations without real accounts? *(partially answered — `MockLLMResponder` exists for LLM, but no mock for external services like GitHub/calendar)*
 - OAuth flow for services that require it?
-- Plugin sandboxing - how much isolation?
+- ~~Plugin sandboxing - how much isolation?~~ *(answered — sandbox vs local trust levels, restricted builtins for sandbox)*
 - Multi-user support or single-user only?
+- Should personality templates support Jinja2 control flow (`{% if %}`, `{% for %}`) or just variable substitution?
+- Plugin prompt variables vs built-in prompt variables — where's the boundary? Should things like hostname be built-in?
 
 ---
 
 ## Priority Suggestions
 
 **High Priority (Foundational):**
-1. Test coverage for core components
-2. Config save functionality in web UI
-3. ~~Tool auto-discovery and `static_tools` cleanup~~ (done)
-4. Error handling improvements
+1. ~~Test coverage~~ (done — 721 tests)
+2. ~~Config save in web UI~~ (done)
+3. ~~Tool auto-discovery~~ (done)
+4. Error handling improvements (still relevant)
+5. Conversation search/history (web UI gap)
 
 **Medium Priority (Usability):**
-1. Conversation search/export
-2. Token/cost tracking
-3. Additional notification channels
-4. Tool confirmation modes
-5. RSS feed reader (simple, high value)
-6. Webhooks (enables many services via Zapier/n8n)
+1. Plugin scaffolding CLI (`radar plugin create`)
+2. Template syntax validation for personality files
+3. Token/cost tracking
+4. RSS feed reader
+5. Plugin event hooks (`on_heartbeat`, etc.)
+6. Conversation export (markdown, JSON)
 
 **Lower Priority (Nice to Have):**
-1. Theme support
-2. Mobile app
-3. Voice input
+1. Remote plugin repository
+2. Conditional personality templates
+3. Theme support
 4. Knowledge graphs
 5. Multi-user support
 
@@ -328,7 +341,7 @@ Reducing friction for adding new tools and plugins.
 
 ## Notes
 
-- Project is at "Phase 2 (Daemon + Web Dashboard)"
+- Project is at "Phase 2 (Daemon + Web Dashboard)" — though the plugin system, Jinja2 templating, and trust-level architecture have pushed well into Phase 3 territory in practice
 - Local-first design is core principle - maintain offline capability
 - Security-conscious approach should continue for new features
 - Remote Ollama already supported via `RADAR_LLM_BASE_URL`
