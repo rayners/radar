@@ -61,7 +61,7 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 
 ### Input Sources
 - [ ] **RSS/Atom feed reader** - monitor blogs, releases, news; filter by keywords
-- [ ] **IMAP email monitor** - summarize inbox, flag important, extract action items
+- [ ] **IMAP email monitor** - read-only inbox access for summarization, bill tracking, inbox watch, package tracking (see `docs/scenarios.md` for prompt injection mitigations)
 - [ ] **Webhook receiver** - generic endpoint for GitHub, Stripe, Zapier, n8n
 - [x] **CalDAV calendar** - khal CLI wrapper with JSON output, caching, heartbeat reminders (45 tests)
 - [ ] **Notes vault integration** - Obsidian wiki links, tags, semantic search
@@ -69,7 +69,7 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 ### Output Actions
 - [ ] **SMTP email sender** - compose and send emails (with confirmation)
 - [ ] **Task manager integration** - Todoist, Things, Apple Reminders
-- [ ] **Home Assistant** - smart home control via REST API
+- [ ] **Home Assistant** - smart home control via REST API (unlocks: weather-triggered actions, climate, security — see `docs/scenarios.md`)
 - [ ] **Messaging** - Slack, Discord, Matrix posting
 - [ ] **Git operations** - auto-commit, branch creation, PR opening
 
@@ -84,7 +84,8 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 - [ ] **Clipboard access** - read/write system clipboard
 - [ ] **System info** - CPU, memory, disk usage
 - [ ] **Process management** - list/kill processes
-- [ ] **Browser automation** - Playwright for web form filling, scraping
+- [ ] **Browser automation** - Playwright for web form filling, scraping (unlocks: appointments, forms, price monitoring — see `docs/scenarios.md`)
+- [ ] **Web page diff/monitor** - fetch a URL periodically, diff against previous fetch, report changes (unlocks: changelog tracking, price drops, government notices)
 - [ ] **Jinja2 template tester** - validate personality template syntax and preview rendered output from CLI
 
 ### Pipelines (Multi-tool Workflows)
@@ -134,7 +135,7 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 - [ ] Common interface: `poll()` for pull-based, `handle_event()` for push-based
 - [ ] Events flow into same queue as file watchers
 - [ ] Config under `integrations:` key in radar.yaml
-- [ ] Separate secrets file for credentials
+- [ ] Separate secrets file for credentials (`~/.config/radar/secrets.yaml` or OS keyring) — prerequisite for IMAP and browser auth
 - [ ] OAuth flow support for services that require it
 
 ---
@@ -301,6 +302,31 @@ Reducing friction for adding new tools and plugins.
 
 ---
 
+## 12. Scenarios & Recipes
+
+Ready-to-use configurations that demonstrate Radar's autonomous capabilities. See `docs/scenarios.md` for the full scenario inventory and capability gap analysis.
+
+### Validated Recipes (`docs/recipes/`)
+- [x] **Daily Briefing** — Morning notification with calendar, weather, GitHub, deadlines (`docs/recipes/daily-briefing.md`, personality: Colonel Potter)
+- [x] **Homelab Monitor** — System health checks with threshold alerting and dedup (`docs/recipes/homelab-monitor.md`, personality: Klinger)
+- [x] **Research Monitor** — Scheduled web searches with memory-based dedup (`docs/recipes/research-monitor.md`, personality: Father Mulcahy)
+
+### Scenarios Needing Validation
+- [ ] **Meeting prep assistant** — recall person context + GitHub activity before calendar events
+- [ ] **Bill tracker from PDFs** — file watcher on Downloads + pdf_extract + schedule reminders
+- [ ] **Writing/journaling coach** — daily evening summary of conversations + journaling reminders
+
+### Capability Gaps (ranked by scenario unlock count)
+| # | Gap | Scenarios unlocked | Difficulty |
+|---|-----|--------------------|------------|
+| 1 | IMAP email (read-only) | Briefings, bill tracking, inbox watch, package tracking | Medium |
+| 2 | Browser automation (Playwright) | Appointments, forms, price monitoring, article reading | High |
+| 3 | Web page diff/monitor | Changelog tracking, price drops, government notices | Low |
+| 4 | Home Assistant API | Smart home, climate, security | Medium |
+| 5 | Secure credential store | Foundation for email + browser auth | Low-Medium |
+
+---
+
 ## Open Questions
 
 - How to handle rate limits on external APIs?
@@ -317,26 +343,31 @@ Reducing friction for adding new tools and plugins.
 ## Priority Suggestions
 
 **High Priority (Foundational):**
-1. ~~Test coverage~~ (done — 721 tests)
+1. ~~Test coverage~~ (done — 741 tests)
 2. ~~Config save in web UI~~ (done)
 3. ~~Tool auto-discovery~~ (done)
 4. Error handling improvements (still relevant)
 5. ~~Conversation search/history~~ (done — `/api/history` with filter, search, pagination)
+6. End-to-end validation of recipe scenarios (daily briefing, homelab, research)
 
 **Medium Priority (Usability):**
-1. Plugin scaffolding CLI (`radar plugin create`)
-2. Template syntax validation for personality files
-3. Token/cost tracking
-4. RSS feed reader
-5. Plugin event hooks (`on_heartbeat`, etc.)
-6. Conversation export (markdown, JSON)
+1. IMAP email (read-only) — highest scenario unlock count, enables briefing + bill tracking + inbox watch
+2. Web page diff/monitor tool — low effort, enables changelog tracking and price monitoring
+3. Plugin scaffolding CLI (`radar plugin create`)
+4. Template syntax validation for personality files
+5. Token/cost tracking
+6. RSS feed reader
+7. Plugin event hooks (`on_heartbeat`, etc.)
+8. Conversation export (markdown, JSON)
 
 **Lower Priority (Nice to Have):**
-1. Remote plugin repository
-2. Conditional personality templates
-3. Theme support
-4. Knowledge graphs
-5. Multi-user support
+1. Browser automation (Playwright) — high impact but complex to build safely
+2. Home Assistant API
+3. Remote plugin repository
+4. Conditional personality templates
+5. Theme support
+6. Knowledge graphs
+7. Multi-user support
 
 ---
 
