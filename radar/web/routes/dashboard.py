@@ -115,11 +115,79 @@ async def history(request: Request):
     from radar.memory import get_recent_conversations
 
     context = get_common_context(request, "history")
-    conversations = get_recent_conversations(20)
+    conversations = get_recent_conversations(limit=20)
     context["conversations"] = conversations
     context["has_more"] = len(conversations) >= 20
-    context["offset"] = 0
+    context["offset"] = 20
     return templates.TemplateResponse("history.html", context)
+
+
+@router.get("/api/history", response_class=HTMLResponse)
+async def api_history(
+    filter: str = "all",
+    offset: int = 0,
+    limit: int = 20,
+    search: str = "",
+):
+    """Return HTML fragment of conversation rows for HTMX."""
+    from html import escape
+
+    from radar.memory import get_recent_conversations
+
+    type_filter = filter if filter != "all" else None
+    conversations = get_recent_conversations(
+        limit=limit,
+        offset=offset,
+        type_filter=type_filter,
+        search=search or None,
+    )
+
+    if not conversations:
+        return HTMLResponse(
+            '<tr><td colspan="5" class="text-muted" style="text-align: center; '
+            'padding: var(--space-xl);">No conversations found</td></tr>'
+        )
+
+    html_parts = []
+    for conv in conversations:
+        ts = escape(conv.get("timestamp", ""))
+        conv_type = escape(conv.get("type", "chat"))
+        summary = escape(conv.get("summary", ""))
+        if len(summary) > 80:
+            summary = summary[:80] + "..."
+        tool_count = conv.get("tool_count", 0)
+        conv_id = escape(conv.get("id", ""))
+        html_parts.append(
+            f"<tr>"
+            f'<td><span style="font-variant-numeric: tabular-nums;">{ts}</span></td>'
+            f'<td><span class="activity-log__type activity-log__type--{conv_type}">{conv_type}</span></td>'
+            f"<td>{summary}</td>"
+            f'<td style="text-align: center;">{tool_count}</td>'
+            f'<td><a href="/chat?continue={conv_id}" class="btn btn--ghost" '
+            f'style="padding: 2px 8px; font-size: 0.7rem;">Continue</a></td>'
+            f"</tr>"
+        )
+
+    # Append Load More row if there may be more results
+    if len(conversations) == limit:
+        next_offset = offset + limit
+        # Build query params preserving filter and search
+        params = f"offset={next_offset}"
+        if filter != "all":
+            params += f"&filter={escape(filter)}"
+        if search:
+            params += f"&search={escape(search)}"
+        html_parts.append(
+            f'<tr id="load-more-row"><td colspan="5" style="text-align: center;">'
+            f'<button class="btn btn--ghost" '
+            f'hx-get="/api/history?{params}" '
+            f'hx-target="#history-table tbody" '
+            f'hx-swap="beforeend" '
+            f'hx-on::before-request="this.closest(\'tr\').remove()">'
+            f"Load More</button></td></tr>"
+        )
+
+    return HTMLResponse("".join(html_parts))
 
 
 @router.get("/memory", response_class=HTMLResponse)

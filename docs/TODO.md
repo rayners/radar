@@ -8,17 +8,17 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (73 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (87 tests), `test_config.py` (40 tests), `test_memory.py` (33 tests), `test_llm.py` (34 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (169 tests), `test_scheduler.py` (42 tests), `test_integration.py` (7 tests) — **721 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (81 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (87 tests), `test_config.py` (40 tests), `test_memory.py` (45 tests), `test_llm.py` (34 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (169 tests), `test_scheduler.py` (42 tests), `test_integration.py` (7 tests) — **741 total**.
 
 - [x] **Core agent tests** - personality loading, system prompt building, Jinja2 template rendering, plugin prompt variables, run/ask orchestration (31 tests)
 - [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, format conversion (34 tests)
 - [x] **Tool framework tests** - registration, execution, parameter validation (31 tests)
 - [x] **Security tests** - path blocklist, command validation, write-only blocks, edge cases (87 tests)
-- [x] **Memory tests** - JSONL operations, display formatting, conversation listing, tool call counting, activity feed (33 tests)
+- [x] **Memory tests** - JSONL operations, display formatting, conversation listing, tool call counting, activity feed, enriched history (45 tests)
 - [x] **Config tests** - YAML loading, env var overrides, deprecated field migration, DataPaths (40 tests)
 - [x] **Scheduler tests** - heartbeat ticks, quiet hours, event queuing (42 tests)
 - [x] **Plugin tests** - code validation, sandboxed execution, version rollback, manifest capabilities, widgets, personality bundling, helper scripts, multi-tool registration, local trust, plugin install CLI, prompt variables (169 tests across all 5 modules)
-- [x] **Web route tests** - FastAPI endpoints, HTMX responses, config save, activity API (73 tests across all 9 route modules)
+- [x] **Web route tests** - FastAPI endpoints, HTMX responses, config save, activity API, history API (81 tests across all 9 route modules)
 - [x] **Integration test harness** - full conversation flow with mock LLM (7 tests)
 
 ---
@@ -44,8 +44,9 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 - [ ] Cron expression support for task scheduling
 
 ### History Page
-- [ ] `/api/history` with filter/pagination
-- [ ] Conversation search (full-text + semantic)
+- [x] `/api/history` with filter/pagination — HTMX endpoint with type filter, search, offset/limit pagination
+- [x] Conversation search (full-text) — case-insensitive substring search across message content
+- [ ] Conversation search (semantic) — embedding-based search
 - [ ] Export conversations as markdown/JSON
 - [ ] Conversation archival/deletion
 
@@ -320,7 +321,7 @@ Reducing friction for adding new tools and plugins.
 2. ~~Config save in web UI~~ (done)
 3. ~~Tool auto-discovery~~ (done)
 4. Error handling improvements (still relevant)
-5. Conversation search/history (web UI gap)
+5. ~~Conversation search/history~~ (done — `/api/history` with filter, search, pagination)
 
 **Medium Priority (Usability):**
 1. Plugin scaffolding CLI (`radar plugin create`)

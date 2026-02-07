@@ -7,10 +7,18 @@
     <div class="card__header">
         <span class="card__title">Conversation History</span>
         <div class="flex gap-md">
+            <input type="text" class="input" name="search" placeholder="Search conversations..."
+                   style="width: 200px; padding: 4px 8px; font-size: 0.8rem;"
+                   hx-get="/api/history"
+                   hx-target="#history-table tbody"
+                   hx-swap="innerHTML"
+                   hx-trigger="input changed delay:300ms, search"
+                   hx-include="[name='filter']">
             <select class="input" style="width: auto; padding: 4px 8px; font-size: 0.8rem;"
                     hx-get="/api/history"
-                    hx-target="#history-table"
+                    hx-target="#history-table tbody"
                     hx-swap="innerHTML"
+                    hx-include="[name='search']"
                     name="filter">
                 <option value="all">All</option>
                 <option value="chat">Interactive</option>
@@ -63,7 +71,8 @@
         <button class="btn btn--ghost"
                 hx-get="/api/history?offset={{ offset }}"
                 hx-target="#history-table tbody"
-                hx-swap="beforeend">
+                hx-swap="beforeend"
+                hx-include="[name='filter'],[name='search']">
             Load More
         </button>
     </div>

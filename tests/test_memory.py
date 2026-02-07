@@ -158,6 +158,124 @@ class TestGetRecentConversations:
         assert len(convs[0]["preview"]) == 100
 
 
+class TestGetRecentConversationsEnriched:
+    """Enriched get_recent_conversations: type, tool_count, search, pagination."""
+
+    def test_returns_type_chat_by_default(self, isolated_data_dir):
+        cid = create_conversation()
+        add_message(cid, "user", "hello")
+        convs = get_recent_conversations()
+        assert convs[0]["type"] == "chat"
+
+    def test_returns_type_heartbeat_when_id_matches(self, isolated_data_dir):
+        cid = create_conversation()
+        add_message(cid, "user", "heartbeat check")
+        # Write heartbeat_conversation file
+        hb_file = isolated_data_dir / "heartbeat_conversation"
+        hb_file.write_text(cid)
+        convs = get_recent_conversations()
+        assert convs[0]["type"] == "heartbeat"
+
+    def test_tool_count_from_tool_calls(self, isolated_data_dir):
+        cid = create_conversation()
+        add_message(cid, "user", "check weather")
+        add_message(cid, "assistant", None, tool_calls=[
+            {"function": {"name": "weather", "arguments": {}}, "id": "c1"},
+        ])
+        add_message(cid, "assistant", None, tool_calls=[
+            {"function": {"name": "search", "arguments": {}}, "id": "c2"},
+            {"function": {"name": "recall", "arguments": {}}, "id": "c3"},
+        ])
+        convs = get_recent_conversations()
+        assert convs[0]["tool_count"] == 3
+
+    def test_summary_is_first_user_message(self, isolated_data_dir):
+        cid = create_conversation()
+        add_message(cid, "system", "you are a bot")
+        add_message(cid, "user", "What is the weather?")
+        add_message(cid, "user", "Second question")
+        convs = get_recent_conversations()
+        assert convs[0]["summary"] == "What is the weather?"
+
+    def test_timestamp_formatted_for_display(self, isolated_data_dir):
+        cid = create_conversation()
+        add_message(cid, "user", "hi")
+        convs = get_recent_conversations()
+        ts = convs[0]["timestamp"]
+        # Should be space-separated, not T
+        assert "T" not in ts
+        assert " " in ts
+
+    def test_offset_pagination(self, isolated_data_dir):
+        ids = []
+        for i in range(5):
+            cid = create_conversation()
+            add_message(cid, "user", f"msg {i}")
+            ids.append(cid)
+            time.sleep(0.05)
+        # ids are in creation order; get_recent returns newest first
+        convs = get_recent_conversations(limit=2, offset=2)
+        assert len(convs) == 2
+        # offset=2 skips the 2 newest, returns the 3rd and 4th newest
+        assert convs[0]["id"] == ids[2]
+        assert convs[1]["id"] == ids[1]
+
+    def test_type_filter_chat_excludes_heartbeat(self, isolated_data_dir):
+        cid_chat = create_conversation()
+        add_message(cid_chat, "user", "regular chat")
+        cid_hb = create_conversation()
+        add_message(cid_hb, "user", "heartbeat msg")
+        hb_file = isolated_data_dir / "heartbeat_conversation"
+        hb_file.write_text(cid_hb)
+        convs = get_recent_conversations(type_filter="chat")
+        ids = [c["id"] for c in convs]
+        assert cid_chat in ids
+        assert cid_hb not in ids
+
+    def test_type_filter_heartbeat_only(self, isolated_data_dir):
+        cid_chat = create_conversation()
+        add_message(cid_chat, "user", "regular chat")
+        cid_hb = create_conversation()
+        add_message(cid_hb, "user", "heartbeat msg")
+        hb_file = isolated_data_dir / "heartbeat_conversation"
+        hb_file.write_text(cid_hb)
+        convs = get_recent_conversations(type_filter="heartbeat")
+        assert len(convs) == 1
+        assert convs[0]["id"] == cid_hb
+
+    def test_search_matches_content_case_insensitive(self, isolated_data_dir):
+        cid1 = create_conversation()
+        add_message(cid1, "user", "Tell me about Python")
+        cid2 = create_conversation()
+        add_message(cid2, "user", "What is the weather?")
+        convs = get_recent_conversations(search="python")
+        assert len(convs) == 1
+        assert convs[0]["id"] == cid1
+
+    def test_search_returns_empty_when_no_match(self, isolated_data_dir):
+        cid = create_conversation()
+        add_message(cid, "user", "hello world")
+        convs = get_recent_conversations(search="zzzznotfound")
+        assert convs == []
+
+    def test_backward_compat_fields_present(self, isolated_data_dir):
+        cid = create_conversation()
+        add_message(cid, "user", "test message")
+        convs = get_recent_conversations()
+        conv = convs[0]
+        assert "id" in conv
+        assert "created_at" in conv
+        assert "preview" in conv
+        assert conv["preview"] == conv["summary"]
+
+    def test_tool_count_zero_when_no_tool_calls(self, isolated_data_dir):
+        cid = create_conversation()
+        add_message(cid, "user", "just chatting")
+        add_message(cid, "assistant", "hello there")
+        convs = get_recent_conversations()
+        assert convs[0]["tool_count"] == 0
+
+
 class TestMessagesToApiFormat:
     """messages_to_api_format strips extra fields."""
 

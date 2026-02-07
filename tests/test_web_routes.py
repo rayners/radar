@@ -158,6 +158,81 @@ class TestDashboardRoutes:
         assert resp.status_code == 200
 
 
+class TestApiHistory:
+    """Tests for /api/history endpoint."""
+
+    @patch("radar.memory.get_recent_conversations", return_value=[
+        {"id": "abc-123", "created_at": "2025-01-15T10:30:00", "timestamp": "2025-01-15 10:30",
+         "type": "chat", "summary": "Hello world", "tool_count": 2, "preview": "Hello world"},
+    ])
+    def test_returns_html_tr_elements(self, mock_convs, client):
+        resp = client.get("/api/history")
+        assert resp.status_code == 200
+        assert "<tr>" in resp.text
+        assert "Hello world" in resp.text
+        assert "abc-123" in resp.text
+
+    @patch("radar.memory.get_recent_conversations")
+    def test_filter_param_passed_through(self, mock_convs, client):
+        mock_convs.return_value = []
+        client.get("/api/history?filter=heartbeat")
+        mock_convs.assert_called_once_with(
+            limit=20, offset=0, type_filter="heartbeat", search=None,
+        )
+
+    @patch("radar.memory.get_recent_conversations")
+    def test_offset_param_passed_through(self, mock_convs, client):
+        mock_convs.return_value = []
+        client.get("/api/history?offset=40")
+        mock_convs.assert_called_once_with(
+            limit=20, offset=40, type_filter=None, search=None,
+        )
+
+    @patch("radar.memory.get_recent_conversations")
+    def test_search_param_passed_through(self, mock_convs, client):
+        mock_convs.return_value = []
+        client.get("/api/history?search=weather")
+        mock_convs.assert_called_once_with(
+            limit=20, offset=0, type_filter=None, search="weather",
+        )
+
+    @patch("radar.memory.get_recent_conversations", return_value=[])
+    def test_empty_state_message(self, mock_convs, client):
+        resp = client.get("/api/history")
+        assert resp.status_code == 200
+        assert "No conversations found" in resp.text
+
+    @patch("radar.memory.get_recent_conversations")
+    def test_load_more_present_when_results_equal_limit(self, mock_convs, client):
+        # Return exactly 20 results (== limit) to trigger Load More
+        mock_convs.return_value = [
+            {"id": f"id-{i}", "created_at": "", "timestamp": "", "type": "chat",
+             "summary": f"msg {i}", "tool_count": 0, "preview": f"msg {i}"}
+            for i in range(20)
+        ]
+        resp = client.get("/api/history")
+        assert "Load More" in resp.text
+        assert "offset=20" in resp.text
+
+    @patch("radar.memory.get_recent_conversations")
+    def test_no_load_more_when_results_less_than_limit(self, mock_convs, client):
+        mock_convs.return_value = [
+            {"id": "id-1", "created_at": "", "timestamp": "", "type": "chat",
+             "summary": "msg", "tool_count": 0, "preview": "msg"},
+        ]
+        resp = client.get("/api/history")
+        assert "Load More" not in resp.text
+
+    @patch("radar.memory.get_recent_conversations", return_value=[
+        {"id": "c1", "created_at": "2025-01-15T10:30:00", "timestamp": "2025-01-15 10:30",
+         "type": "chat", "summary": "Test", "tool_count": 0, "preview": "Test"},
+    ])
+    def test_history_page_uses_enriched_data(self, mock_convs, client):
+        resp = client.get("/history")
+        assert resp.status_code == 200
+        assert "2025-01-15 10:30" in resp.text
+
+
 # ===== Chat API Routes =====
 
 

@@ -88,10 +88,30 @@ def get_messages(conversation_id: str, limit: int | None = None) -> list[dict[st
     return messages
 
 
-def get_recent_conversations(limit: int = 5) -> list[dict[str, Any]]:
-    """Get recent conversations with their first message preview.
+def _get_heartbeat_conversation_id() -> str | None:
+    """Read the heartbeat conversation ID from the data directory."""
+    heartbeat_file = get_data_paths().base / "heartbeat_conversation"
+    if heartbeat_file.exists():
+        return heartbeat_file.read_text().strip()
+    return None
 
-    Returns list of dicts with id, created_at, preview.
+
+def get_recent_conversations(
+    limit: int = 20,
+    offset: int = 0,
+    type_filter: str | None = None,
+    search: str | None = None,
+) -> list[dict[str, Any]]:
+    """Get recent conversations with enriched metadata.
+
+    Args:
+        limit: Maximum number of conversations to return.
+        offset: Number of conversations to skip (for pagination).
+        type_filter: Filter by type ("chat" or "heartbeat").
+        search: Case-insensitive substring search across message content.
+
+    Returns list of dicts with id, created_at, preview, timestamp, type,
+    summary, and tool_count.
     """
     conv_dir = get_data_paths().conversations
 
@@ -100,34 +120,70 @@ def get_recent_conversations(limit: int = 5) -> list[dict[str, Any]]:
         conv_dir.glob("*.jsonl"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
-    )[:limit]
+    )
+
+    heartbeat_id = _get_heartbeat_conversation_id()
 
     conversations = []
     for conv_path in conv_files:
         conversation_id = conv_path.stem
         preview = ""
         created_at = None
+        tool_count = 0
+        search_matched = search is None
 
-        # Read first few lines to get created_at and first user message
+        # Determine type
+        conv_type = "heartbeat" if conversation_id == heartbeat_id else "chat"
+
+        # Apply type filter early
+        if type_filter and conv_type != type_filter:
+            continue
+
+        # Scan all messages
         with open(conv_path) as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
-                msg = json.loads(line)
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
                 if created_at is None:
                     created_at = msg.get("timestamp")
-                if msg.get("role") == "user" and msg.get("content"):
+
+                if not preview and msg.get("role") == "user" and msg.get("content"):
                     preview = msg["content"][:100]
-                    break
+
+                if msg.get("role") == "assistant" and msg.get("tool_calls"):
+                    tool_count += len(msg["tool_calls"])
+
+                if search and not search_matched:
+                    content = msg.get("content") or ""
+                    if search.lower() in content.lower():
+                        search_matched = True
+
+        if not search_matched:
+            continue
+
+        # Format timestamp for display
+        timestamp = ""
+        if created_at:
+            timestamp = created_at[:16].replace("T", " ")
 
         conversations.append({
             "id": conversation_id,
             "created_at": created_at,
-            "preview": preview,
+            "timestamp": timestamp,
+            "type": conv_type,
+            "summary": preview,
+            "tool_count": tool_count,
+            "preview": preview,  # backward compat
         })
 
-    return conversations
+    # Apply offset and limit
+    return conversations[offset:offset + limit]
 
 
 def messages_to_api_format(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
