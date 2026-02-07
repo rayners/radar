@@ -116,10 +116,29 @@ class TestAuthRoutes:
 class TestDashboardRoutes:
     """Tests for dashboard.py routes."""
 
+    @patch("radar.memory.get_recent_activity", return_value=[])
+    @patch("radar.memory.count_tool_calls_today", return_value=0)
     @patch("radar.memory.get_recent_conversations", return_value=[])
-    def test_dashboard_page(self, mock_convs, client):
+    def test_dashboard_page(self, mock_convs, mock_tc, mock_activity, client):
         resp = client.get("/")
         assert resp.status_code == 200
+
+    @patch("radar.memory.get_recent_activity", return_value=[
+        {"time": "2025-01-01T12:00", "message": "hello", "type": "chat"},
+        {"time": "2025-01-01T12:01", "message": "Called weather", "type": "tool"},
+    ])
+    def test_api_activity_returns_html(self, mock_activity, client):
+        resp = client.get("/api/activity")
+        assert resp.status_code == 200
+        assert "hello" in resp.text
+        assert "Called weather" in resp.text
+        assert "activity-log__item" in resp.text
+
+    @patch("radar.memory.get_recent_activity", return_value=[])
+    def test_api_activity_empty(self, mock_activity, client):
+        resp = client.get("/api/activity")
+        assert resp.status_code == 200
+        assert "No recent activity" in resp.text
 
     def test_chat_page(self, client):
         resp = client.get("/chat")
@@ -340,6 +359,78 @@ class TestConfigRoutes:
         resp = client.get("/api/config/test")
         assert resp.status_code == 200
         assert "Connection failed" in resp.text
+
+    @patch("radar.config.reload_config")
+    @patch("radar.config.get_config_path")
+    def test_config_save_basic(self, mock_path, mock_reload, tmp_path, client):
+        config_file = tmp_path / "radar.yaml"
+        config_file.write_text("llm:\n  provider: ollama\n")
+        mock_path.return_value = config_file
+        resp = client.post("/api/config", data={
+            "llm.provider": "ollama",
+            "llm.model": "qwen3:latest",
+        })
+        assert resp.status_code == 200
+        assert "saved" in resp.text.lower()
+        mock_reload.assert_called_once()
+
+    @patch("radar.config.reload_config")
+    @patch("radar.config.get_config_path", return_value=None)
+    def test_config_save_creates_file_if_missing(self, mock_path, mock_reload, tmp_path, client, monkeypatch):
+        # Point home to tmp_path so it creates config there
+        monkeypatch.setenv("HOME", str(tmp_path))
+        resp = client.post("/api/config", data={
+            "llm.provider": "ollama",
+            "llm.model": "test-model",
+        })
+        assert resp.status_code == 200
+        config_file = tmp_path / ".config" / "radar" / "radar.yaml"
+        assert config_file.exists()
+
+    @patch("radar.config.reload_config")
+    @patch("radar.config.get_config_path")
+    def test_config_save_preserves_existing_fields(self, mock_path, mock_reload, tmp_path, client):
+        import yaml
+        config_file = tmp_path / "radar.yaml"
+        config_file.write_text("llm:\n  provider: ollama\n  base_url: http://localhost:11434\nembedding:\n  provider: none\n")
+        mock_path.return_value = config_file
+        # Only update the model, should preserve base_url and embedding
+        resp = client.post("/api/config", data={"llm.model": "new-model"})
+        assert resp.status_code == 200
+        saved = yaml.safe_load(config_file.read_text())
+        assert saved["llm"]["base_url"] == "http://localhost:11434"
+        assert saved["llm"]["model"] == "new-model"
+        assert saved["embedding"]["provider"] == "none"
+
+    def test_config_save_invalid_provider(self, client):
+        with patch("radar.config.get_config_path", return_value=None):
+            resp = client.post("/api/config", data={"llm.provider": "invalid"})
+            assert resp.status_code == 400
+            assert "Invalid LLM provider" in resp.text
+
+    def test_config_save_invalid_numeric(self, client):
+        with patch("radar.config.get_config_path", return_value=None):
+            resp = client.post("/api/config", data={"tools.max_file_size": "not-a-number"})
+            assert resp.status_code == 400
+            assert "Invalid value" in resp.text
+
+    @patch("radar.config.reload_config")
+    @patch("radar.config.get_config_path")
+    def test_config_save_coerces_numeric_types(self, mock_path, mock_reload, tmp_path, client):
+        import yaml
+        config_file = tmp_path / "radar.yaml"
+        config_file.write_text("")
+        mock_path.return_value = config_file
+        resp = client.post("/api/config", data={
+            "tools.max_file_size": "200000",
+            "tools.exec_timeout": "60",
+            "max_tool_iterations": "20",
+        })
+        assert resp.status_code == 200
+        saved = yaml.safe_load(config_file.read_text())
+        assert saved["tools"]["max_file_size"] == 200000
+        assert saved["tools"]["exec_timeout"] == 60
+        assert saved["max_tool_iterations"] == 20
 
 
 # ===== Logs Routes =====

@@ -7,6 +7,32 @@ from typing import Callable
 
 
 @dataclass
+class ToolDefinition:
+    """A tool definition within a multi-tool plugin."""
+
+    name: str
+    description: str = ""
+    parameters: dict = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "ToolDefinition":
+        """Create tool definition from dictionary."""
+        return cls(
+            name=data.get("name", ""),
+            description=data.get("description", ""),
+            parameters=data.get("parameters", {}),
+        )
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary."""
+        return {
+            "name": self.name,
+            "description": self.description,
+            "parameters": self.parameters,
+        }
+
+
+@dataclass
 class PluginManifest:
     """Plugin manifest describing a tool."""
 
@@ -14,14 +40,21 @@ class PluginManifest:
     version: str = "1.0.0"
     description: str = ""
     author: str = "unknown"
-    trust_level: str = "sandbox"  # "sandbox" or "trusted"
+    trust_level: str = "sandbox"  # "sandbox" or "local"
     permissions: list[str] = field(default_factory=list)
     created_at: str = ""
     updated_at: str = ""
+    capabilities: list[str] = field(default_factory=lambda: ["tool"])
+    widget: dict | None = None  # {title, template, position, refresh_interval}
+    personalities: list[str] = field(default_factory=list)  # filenames
+    scripts: list[str] = field(default_factory=list)  # filenames
+    tools: list[ToolDefinition] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict) -> "PluginManifest":
         """Create manifest from dictionary."""
+        tools_data = data.get("tools", [])
+        tools = [ToolDefinition.from_dict(t) for t in tools_data]
         return cls(
             name=data.get("name", "unknown"),
             version=data.get("version", "1.0.0"),
@@ -31,6 +64,11 @@ class PluginManifest:
             permissions=data.get("permissions", []),
             created_at=data.get("created_at", ""),
             updated_at=data.get("updated_at", ""),
+            capabilities=data.get("capabilities", ["tool"]),
+            widget=data.get("widget"),
+            personalities=data.get("personalities", []),
+            scripts=data.get("scripts", []),
+            tools=tools,
         )
 
     def to_dict(self) -> dict:
@@ -44,6 +82,11 @@ class PluginManifest:
             "permissions": self.permissions,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "capabilities": self.capabilities,
+            "widget": self.widget,
+            "personalities": self.personalities,
+            "scripts": self.scripts,
+            "tools": [t.to_dict() for t in self.tools],
         }
 
 
@@ -126,6 +169,7 @@ class Plugin:
     manifest: PluginManifest
     code: str
     function: Callable | None = None
+    functions: dict[str, Callable] = field(default_factory=dict)
     enabled: bool = True
     path: Path | None = None
     test_cases: list[TestCase] = field(default_factory=list)

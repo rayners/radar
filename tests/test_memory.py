@@ -8,9 +8,11 @@ import pytest
 
 from radar.memory import (
     add_message,
+    count_tool_calls_today,
     create_conversation,
     get_messages,
     get_messages_for_display,
+    get_recent_activity,
     get_recent_conversations,
     messages_to_api_format,
 )
@@ -226,3 +228,84 @@ class TestGetMessagesForDisplay:
         assert display[0]["role"] == "user"
         assert display[0]["content"] == "hello"
         assert "id" in display[0]
+
+
+class TestCountToolCallsToday:
+    """count_tool_calls_today scans today's conversations."""
+
+    def test_empty_no_conversations(self, isolated_data_dir):
+        assert count_tool_calls_today() == 0
+
+    def test_with_tool_calls(self, isolated_data_dir):
+        cid = create_conversation()
+        add_message(cid, "user", "hello")
+        add_message(cid, "assistant", None, tool_calls=[
+            {"function": {"name": "weather", "arguments": {"city": "NYC"}}, "id": "call_1"},
+        ])
+        add_message(cid, "assistant", None, tool_calls=[
+            {"function": {"name": "search", "arguments": {"q": "test"}}, "id": "call_2"},
+            {"function": {"name": "recall", "arguments": {"q": "mem"}}, "id": "call_3"},
+        ])
+        assert count_tool_calls_today() == 3
+
+    def test_ignores_yesterday(self, isolated_data_dir):
+        cid = create_conversation()
+        # Write a message with yesterday's timestamp directly
+        conv_path = isolated_data_dir / "conversations" / f"{cid}.jsonl"
+        old_msg = json.dumps({
+            "timestamp": "2020-01-01T10:00:00",
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{"function": {"name": "weather", "arguments": {}}}],
+            "tool_call_id": None,
+        })
+        with open(conv_path, "w") as f:
+            f.write(old_msg + "\n")
+        # File was modified today but the timestamp in the message is old
+        assert count_tool_calls_today() == 0
+
+
+class TestGetRecentActivity:
+    """get_recent_activity returns a unified timeline."""
+
+    def test_mixed_types(self, isolated_data_dir):
+        cid = create_conversation()
+        add_message(cid, "user", "What is the weather?")
+        add_message(cid, "assistant", None, tool_calls=[
+            {"function": {"name": "weather", "arguments": {"city": "NYC"}}, "id": "call_1"},
+        ])
+        add_message(cid, "tool", "72F sunny", tool_call_id="call_1")
+        add_message(cid, "assistant", "It's sunny!")
+
+        activity = get_recent_activity()
+        types = [a["type"] for a in activity]
+        assert "chat" in types
+        assert "tool" in types
+        # User message should have content preview
+        chat_items = [a for a in activity if a["type"] == "chat"]
+        assert chat_items[0]["message"] == "What is the weather?"
+        # Tool call should have name
+        tool_items = [a for a in activity if a["type"] == "tool"]
+        assert "weather" in tool_items[0]["message"]
+
+    def test_limit(self, isolated_data_dir):
+        cid = create_conversation()
+        for i in range(15):
+            add_message(cid, "user", f"message {i}")
+        activity = get_recent_activity(limit=5)
+        assert len(activity) == 5
+
+    def test_empty_no_conversations(self, isolated_data_dir):
+        assert get_recent_activity() == []
+
+    def test_sorted_descending(self, isolated_data_dir):
+        cid = create_conversation()
+        # Write messages with explicit timestamps to ensure different minutes
+        conv_path = isolated_data_dir / "conversations" / f"{cid}.jsonl"
+        with open(conv_path, "w") as f:
+            f.write(json.dumps({"timestamp": "2025-06-01T10:00:00", "role": "user", "content": "first", "tool_calls": None, "tool_call_id": None}) + "\n")
+            f.write(json.dumps({"timestamp": "2025-06-01T11:00:00", "role": "user", "content": "second", "tool_calls": None, "tool_call_id": None}) + "\n")
+        activity = get_recent_activity()
+        # Should be sorted by time descending (second message has later timestamp)
+        assert activity[0]["message"] == "second"
+        assert activity[1]["message"] == "first"

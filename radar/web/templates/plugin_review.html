@@ -36,6 +36,18 @@
         </div>
     </div>
     <div class="card__body">
+        {% if p.trust_level == 'local' %}
+        <div style="padding: var(--space-md); margin-bottom: var(--space-md); background: rgba(255, 180, 0, 0.1); border: 1px solid var(--amber); border-radius: 4px;">
+            <div style="color: var(--amber); font-weight: 600; margin-bottom: var(--space-sm);">
+                LOCAL TRUST PLUGIN
+            </div>
+            <div class="text-muted" style="font-size: 0.85rem;">
+                This plugin requests <strong style="color: var(--amber);">local</strong> trust.
+                It will have full Python access including imports, filesystem, and network.
+                Review the code carefully before approving.
+            </div>
+        </div>
+        {% endif %}
         <p class="text-muted mb-md">{{ p.description or 'No description' }}</p>
 
         <!-- Code preview -->

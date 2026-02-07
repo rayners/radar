@@ -104,6 +104,27 @@
         </div>
     </div>
 
+    <!-- Plugin Widgets -->
+    {% for widget in widgets | default([]) %}
+    <div class="card" id="plugin-widget-{{ widget.name }}">
+        <div class="card__header" style="display: flex; justify-content: space-between; align-items: center;">
+            <span class="card__title">{{ widget.title }}</span>
+            {% if widget.refresh_interval %}
+            <button class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;"
+                    hx-get="/api/plugins/{{ widget.name }}/widget"
+                    hx-target="#plugin-widget-content-{{ widget.name }}"
+                    hx-swap="innerHTML"
+                    hx-trigger="every {{ widget.refresh_interval }}s, click">
+                Refresh
+            </button>
+            {% endif %}
+        </div>
+        <div class="card__body" id="plugin-widget-content-{{ widget.name }}">
+            {{ widget.rendered }}
+        </div>
+    </div>
+    {% endfor %}
+
     <!-- Quick Chat -->
     <div class="card dashboard-grid__full">
         <div class="card__header">

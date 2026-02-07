@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from radar.plugins.models import Plugin, PluginManifest, TestCase, ToolError
+from radar.plugins.models import Plugin, PluginManifest, TestCase, ToolDefinition, ToolError
 from radar.plugins.runner import TestRunner
 from radar.plugins.validator import CodeValidator
 from radar.plugins.versions import VersionManager
@@ -102,6 +102,11 @@ class TestPluginManifest:
             "permissions": ["fs"],
             "created_at": "c",
             "updated_at": "u",
+            "capabilities": ["tool"],
+            "widget": None,
+            "personalities": [],
+            "scripts": [],
+            "tools": [],
         }
         m = PluginManifest.from_dict(data)
         assert m.to_dict() == data
@@ -810,3 +815,816 @@ class TestPluginLoaderLoadAndList:
         assert result[0]["description"] == "Pending plugin"
         assert result[0]["code"] != ""
         assert "path" in result[0]
+
+
+# ===========================================================================
+# 6. Plugin Manifest Capabilities (Phase 4A)
+# ===========================================================================
+
+
+class TestPluginManifestCapabilities:
+    def test_default_capabilities(self):
+        m = PluginManifest.from_dict({"name": "test"})
+        assert m.capabilities == ["tool"]
+
+    def test_custom_capabilities(self):
+        m = PluginManifest.from_dict({"name": "test", "capabilities": ["tool", "widget"]})
+        assert m.capabilities == ["tool", "widget"]
+
+    def test_widget_field(self):
+        widget = {"title": "Monitor", "template": "w.html", "position": "default", "refresh_interval": 30}
+        m = PluginManifest.from_dict({"name": "test", "widget": widget})
+        assert m.widget == widget
+
+    def test_widget_field_default_none(self):
+        m = PluginManifest.from_dict({"name": "test"})
+        assert m.widget is None
+
+    def test_personalities_field(self):
+        m = PluginManifest.from_dict({"name": "test", "personalities": ["sci.md"]})
+        assert m.personalities == ["sci.md"]
+
+    def test_personalities_default_empty(self):
+        m = PluginManifest.from_dict({"name": "test"})
+        assert m.personalities == []
+
+    def test_scripts_field(self):
+        m = PluginManifest.from_dict({"name": "test", "scripts": ["helpers.py"]})
+        assert m.scripts == ["helpers.py"]
+
+    def test_scripts_default_empty(self):
+        m = PluginManifest.from_dict({"name": "test"})
+        assert m.scripts == []
+
+    def test_round_trip_with_new_fields(self):
+        data = {
+            "name": "t",
+            "version": "1.0.0",
+            "description": "desc",
+            "author": "alice",
+            "trust_level": "sandbox",
+            "permissions": [],
+            "created_at": "c",
+            "updated_at": "u",
+            "capabilities": ["tool", "widget"],
+            "widget": {"title": "W"},
+            "personalities": ["p.md"],
+            "scripts": ["s.py"],
+        }
+        m = PluginManifest.from_dict(data)
+        d = m.to_dict()
+        assert d["capabilities"] == ["tool", "widget"]
+        assert d["widget"] == {"title": "W"}
+        assert d["personalities"] == ["p.md"]
+        assert d["scripts"] == ["s.py"]
+
+    def test_backward_compat_no_capabilities(self):
+        m = PluginManifest.from_dict({"name": "old", "version": "0.1"})
+        assert m.capabilities == ["tool"]
+        assert m.widget is None
+        assert m.personalities == []
+        assert m.scripts == []
+
+    def test_to_dict_includes_new_fields(self):
+        m = PluginManifest(name="test")
+        d = m.to_dict()
+        assert "capabilities" in d
+        assert "widget" in d
+        assert "personalities" in d
+        assert "scripts" in d
+
+
+# ===========================================================================
+# 7. Plugin Widgets (Phase 4B)
+# ===========================================================================
+
+
+def _make_widget_plugin(loader, name="monitor", template_content="<p>Widget</p>"):
+    """Create an enabled plugin with widget capability."""
+    d = loader.available_dir / name
+    d.mkdir(parents=True, exist_ok=True)
+
+    manifest = {
+        "name": name,
+        "version": "1.0.0",
+        "description": "Widget plugin",
+        "author": "test",
+        "trust_level": "sandbox",
+        "capabilities": ["tool", "widget"],
+        "widget": {
+            "title": "Test Monitor",
+            "template": "widget.html",
+            "position": "default",
+            "refresh_interval": 30,
+        },
+    }
+    (d / "manifest.yaml").write_text(yaml.dump(manifest))
+    (d / "tool.py").write_text(VALID_PLUGIN_CODE)
+    schema = {"name": name, "description": "Widget plugin", "parameters": {}}
+    (d / "schema.yaml").write_text(yaml.dump(schema))
+    (d / "widget.html").write_text(template_content)
+
+    # Enable via symlink
+    (loader.enabled_dir / name).symlink_to(d)
+    return d
+
+
+class TestPluginWidgets:
+    def test_get_widgets_returns_widget_plugins(self, plugin_loader):
+        _make_widget_plugin(plugin_loader, "monitor")
+        widgets = plugin_loader.get_widgets()
+        assert len(widgets) == 1
+        assert widgets[0]["name"] == "monitor"
+        assert widgets[0]["title"] == "Test Monitor"
+        assert widgets[0]["template_content"] == "<p>Widget</p>"
+        assert widgets[0]["position"] == "default"
+        assert widgets[0]["refresh_interval"] == 30
+
+    def test_get_widgets_excludes_non_widget_plugins(self, plugin_loader):
+        # Plugin without widget capability
+        _make_plugin_dir(plugin_loader.available_dir, "plain_tool")
+        (plugin_loader.enabled_dir / "plain_tool").symlink_to(
+            plugin_loader.available_dir / "plain_tool"
+        )
+        widgets = plugin_loader.get_widgets()
+        assert len(widgets) == 0
+
+    def test_get_widgets_multiple(self, plugin_loader):
+        _make_widget_plugin(plugin_loader, "widget_a", "<p>A</p>")
+        _make_widget_plugin(plugin_loader, "widget_b", "<p>B</p>")
+        widgets = plugin_loader.get_widgets()
+        assert len(widgets) == 2
+        names = {w["name"] for w in widgets}
+        assert names == {"widget_a", "widget_b"}
+
+    def test_get_widgets_missing_template_file(self, plugin_loader):
+        _make_widget_plugin(plugin_loader, "broken")
+        # Remove the template file
+        (plugin_loader.available_dir / "broken" / "widget.html").unlink()
+        widgets = plugin_loader.get_widgets()
+        assert len(widgets) == 1
+        assert widgets[0]["template_content"] == ""
+
+
+class TestPluginWidgetRendering:
+    def test_widget_template_autoescape(self):
+        """Widget rendering should autoescape HTML."""
+        import jinja2
+        env = jinja2.Environment(autoescape=True)
+        template = env.from_string("<p>{{ value }}</p>")
+        result = template.render(value="<script>alert('xss')</script>")
+        assert "<script>" not in result
+        assert "&lt;script&gt;" in result
+
+    def test_widget_template_no_script_injection(self):
+        """Template itself containing script tags should render as-is (not executed)."""
+        import jinja2
+        env = jinja2.Environment(autoescape=True)
+        # The template content is the raw template, not user data, so it renders directly
+        template = env.from_string("<p>Status: OK</p>")
+        result = template.render()
+        assert "Status: OK" in result
+
+
+# ===========================================================================
+# 8. Plugin Bundled Personalities (Phase 4C)
+# ===========================================================================
+
+
+def _make_personality_plugin(loader, name="sci_plugin", personality_name="scientist", personality_content="# Scientist\n\nThink like a scientist."):
+    """Create an enabled plugin with bundled personality."""
+    d = loader.available_dir / name
+    d.mkdir(parents=True, exist_ok=True)
+
+    manifest = {
+        "name": name,
+        "version": "1.0.0",
+        "description": "Plugin with personality",
+        "author": "test",
+        "trust_level": "sandbox",
+        "capabilities": ["tool", "personality"],
+        "personalities": [f"{personality_name}.md"],
+    }
+    (d / "manifest.yaml").write_text(yaml.dump(manifest))
+    (d / "tool.py").write_text(VALID_PLUGIN_CODE)
+    schema = {"name": name, "description": "test", "parameters": {}}
+    (d / "schema.yaml").write_text(yaml.dump(schema))
+
+    # Create personalities subdirectory
+    personalities_dir = d / "personalities"
+    personalities_dir.mkdir()
+    (personalities_dir / f"{personality_name}.md").write_text(personality_content)
+
+    # Enable via symlink
+    (loader.enabled_dir / name).symlink_to(d)
+    return d
+
+
+class TestPluginBundledPersonalities:
+    def test_get_bundled_personalities(self, plugin_loader):
+        _make_personality_plugin(plugin_loader)
+        personalities = plugin_loader.get_bundled_personalities()
+        assert len(personalities) == 1
+        assert personalities[0]["name"] == "scientist"
+        assert "Think like a scientist" in personalities[0]["content"]
+        assert personalities[0]["plugin_name"] == "sci_plugin"
+
+    def test_get_bundled_personalities_empty_when_no_dir(self, plugin_loader):
+        # Plugin without personalities dir
+        _make_plugin_dir(plugin_loader.available_dir, "no_personality")
+        (plugin_loader.enabled_dir / "no_personality").symlink_to(
+            plugin_loader.available_dir / "no_personality"
+        )
+        personalities = plugin_loader.get_bundled_personalities()
+        assert len(personalities) == 0
+
+    def test_get_bundled_personalities_multiple(self, plugin_loader):
+        d = _make_personality_plugin(plugin_loader, "multi", "alpha", "# Alpha")
+        # Add a second personality
+        (d / "personalities" / "beta.md").write_text("# Beta")
+        personalities = plugin_loader.get_bundled_personalities()
+        assert len(personalities) == 2
+        names = {p["name"] for p in personalities}
+        assert names == {"alpha", "beta"}
+
+    def test_load_personality_from_plugin(self, plugin_loader):
+        """load_personality should find plugin personalities."""
+        _make_personality_plugin(plugin_loader, "myplugin", "researcher", "# Researcher\n\nResearch things.")
+        with patch("radar.plugins.get_plugin_loader", return_value=plugin_loader):
+            from radar.agent import load_personality
+            content = load_personality("researcher")
+        assert "Research things" in content
+
+    def test_load_personality_prefers_local_over_plugin(self, plugin_loader, isolated_data_dir):
+        """Personalities in the personalities dir should take precedence over plugins."""
+        _make_personality_plugin(plugin_loader, "myplugin", "custom", "# Plugin Custom")
+
+        # Create a local personality with same name
+        pdir = isolated_data_dir / "personalities"
+        pdir.mkdir(exist_ok=True)
+        (pdir / "custom.md").write_text("# Local Custom")
+
+        with patch("radar.plugins.get_plugin_loader", return_value=plugin_loader):
+            from radar.agent import load_personality
+            content = load_personality("custom")
+        assert "Local Custom" in content
+
+
+# ===========================================================================
+# 9. Plugin Helper Scripts (Phase 4D)
+# ===========================================================================
+
+
+class TestPluginHelperScripts:
+    def test_load_scripts_returns_functions(self, plugin_loader):
+        d = plugin_loader.available_dir / "with_scripts"
+        d.mkdir(parents=True)
+        scripts_dir = d / "scripts"
+        scripts_dir.mkdir()
+        (scripts_dir / "helpers.py").write_text('def double(x):\n    return x * 2')
+        namespace = plugin_loader._load_plugin_scripts(d)
+        assert "double" in namespace
+        assert namespace["double"](3) == 6
+
+    def test_load_scripts_skips_invalid(self, plugin_loader):
+        d = plugin_loader.available_dir / "bad_scripts"
+        d.mkdir(parents=True)
+        scripts_dir = d / "scripts"
+        scripts_dir.mkdir()
+        # This import is forbidden by CodeValidator
+        (scripts_dir / "bad.py").write_text('import os\ndef bad(): pass')
+        namespace = plugin_loader._load_plugin_scripts(d)
+        assert "bad" not in namespace
+
+    def test_load_scripts_skips_private_functions(self, plugin_loader):
+        d = plugin_loader.available_dir / "private"
+        d.mkdir(parents=True)
+        scripts_dir = d / "scripts"
+        scripts_dir.mkdir()
+        (scripts_dir / "helpers.py").write_text('def _internal(): pass\ndef public(): return 1')
+        namespace = plugin_loader._load_plugin_scripts(d)
+        assert "_internal" not in namespace
+        assert "public" in namespace
+
+    def test_load_scripts_no_scripts_dir(self, plugin_loader):
+        d = plugin_loader.available_dir / "no_scripts"
+        d.mkdir(parents=True)
+        namespace = plugin_loader._load_plugin_scripts(d)
+        assert namespace == {}
+
+    def test_load_scripts_excludes_non_functions(self, plugin_loader):
+        d = plugin_loader.available_dir / "mixed"
+        d.mkdir(parents=True)
+        scripts_dir = d / "scripts"
+        scripts_dir.mkdir()
+        (scripts_dir / "helpers.py").write_text('MY_CONST = 42\ndef my_func(): return MY_CONST')
+        namespace = plugin_loader._load_plugin_scripts(d)
+        assert "my_func" in namespace
+        assert "MY_CONST" not in namespace
+
+    def test_register_plugin_injects_helpers(self, plugin_loader):
+        """_register_plugin should inject helper functions into the plugin namespace."""
+        # Create a plugin that uses a helper
+        d = plugin_loader.available_dir / "with_helper"
+        d.mkdir(parents=True)
+        (d / "manifest.yaml").write_text(yaml.dump({"name": "with_helper"}))
+        (d / "tool.py").write_text('def with_helper(x):\n    return double(x)')
+        (d / "schema.yaml").write_text(yaml.dump({
+            "name": "with_helper",
+            "description": "Uses helper",
+            "parameters": {"x": {"type": "integer"}},
+        }))
+        scripts_dir = d / "scripts"
+        scripts_dir.mkdir()
+        (scripts_dir / "helpers.py").write_text('def double(x):\n    return x * 2')
+
+        with patch("radar.tools.register_dynamic_tool", return_value=True) as mock_reg:
+            plugin_loader._register_plugin("with_helper")
+
+        # Verify extra_namespace was passed
+        mock_reg.assert_called_once()
+        call_kwargs = mock_reg.call_args
+        assert call_kwargs.kwargs.get("extra_namespace") is not None
+        assert "double" in call_kwargs.kwargs["extra_namespace"]
+
+
+# ===========================================================================
+# 10. Plugin Backward Compatibility
+# ===========================================================================
+
+
+class TestPluginBackwardCompatibility:
+    def test_old_manifest_defaults_to_tool_capability(self):
+        """Old manifests without capabilities should default to ["tool"]."""
+        m = PluginManifest.from_dict({
+            "name": "legacy",
+            "version": "0.5.0",
+            "description": "An old plugin",
+        })
+        assert m.capabilities == ["tool"]
+        assert m.widget is None
+        assert m.personalities == []
+        assert m.scripts == []
+
+    def test_old_manifest_round_trip_adds_new_fields(self):
+        """to_dict always includes new fields even for old manifests."""
+        m = PluginManifest.from_dict({"name": "old"})
+        d = m.to_dict()
+        assert d["capabilities"] == ["tool"]
+        assert d["widget"] is None
+        assert d["personalities"] == []
+        assert d["scripts"] == []
+        assert d["tools"] == []
+
+
+# ===========================================================================
+# 11. ToolDefinition
+# ===========================================================================
+
+
+class TestToolDefinition:
+    def test_from_dict_full(self):
+        data = {
+            "name": "upper",
+            "description": "Uppercase a string",
+            "parameters": {"text": {"type": "string", "description": "Input"}},
+        }
+        td = ToolDefinition.from_dict(data)
+        assert td.name == "upper"
+        assert td.description == "Uppercase a string"
+        assert td.parameters == {"text": {"type": "string", "description": "Input"}}
+
+    def test_from_dict_defaults(self):
+        td = ToolDefinition.from_dict({})
+        assert td.name == ""
+        assert td.description == ""
+        assert td.parameters == {}
+
+    def test_round_trip(self):
+        data = {
+            "name": "lower",
+            "description": "Lowercase",
+            "parameters": {"text": {"type": "string", "description": "Input"}},
+        }
+        td = ToolDefinition.from_dict(data)
+        assert td.to_dict() == data
+
+    def test_to_dict(self):
+        td = ToolDefinition(name="my_tool", description="desc", parameters={"x": {"type": "integer"}})
+        d = td.to_dict()
+        assert d["name"] == "my_tool"
+        assert d["description"] == "desc"
+        assert d["parameters"] == {"x": {"type": "integer"}}
+
+
+# ===========================================================================
+# 12. Multi-Tool Manifest
+# ===========================================================================
+
+
+class TestMultiToolManifest:
+    def test_manifest_with_tools(self):
+        data = {
+            "name": "multi",
+            "version": "1.0.0",
+            "tools": [
+                {"name": "upper", "description": "Uppercase", "parameters": {}},
+                {"name": "lower", "description": "Lowercase", "parameters": {}},
+            ],
+        }
+        m = PluginManifest.from_dict(data)
+        assert len(m.tools) == 2
+        assert m.tools[0].name == "upper"
+        assert m.tools[1].name == "lower"
+
+    def test_manifest_without_tools(self):
+        m = PluginManifest.from_dict({"name": "single"})
+        assert m.tools == []
+
+    def test_manifest_tools_round_trip(self):
+        data = {
+            "name": "multi",
+            "version": "1.0.0",
+            "description": "",
+            "author": "unknown",
+            "trust_level": "sandbox",
+            "permissions": [],
+            "created_at": "",
+            "updated_at": "",
+            "capabilities": ["tool"],
+            "widget": None,
+            "personalities": [],
+            "scripts": [],
+            "tools": [
+                {"name": "upper", "description": "Uppercase", "parameters": {"text": {"type": "string"}}},
+            ],
+        }
+        m = PluginManifest.from_dict(data)
+        assert m.to_dict() == data
+
+    def test_plugin_functions_field(self):
+        m = PluginManifest(name="p")
+        p = Plugin(name="p", manifest=m, code="pass")
+        assert p.functions == {}
+
+        p.functions["upper"] = lambda text: text.upper()
+        assert "upper" in p.functions
+
+
+# ===========================================================================
+# 13. Multi-Tool Registration (Sandbox)
+# ===========================================================================
+
+
+def _make_multi_tool_plugin(base, name, *, trust_level="sandbox"):
+    """Create a multi-tool plugin directory."""
+    d = base / name
+    d.mkdir(parents=True, exist_ok=True)
+
+    manifest = {
+        "name": name,
+        "version": "1.0.0",
+        "description": "Multi-tool plugin",
+        "author": "test",
+        "trust_level": trust_level,
+        "tools": [
+            {"name": "upper", "description": "Uppercase", "parameters": {"text": {"type": "string", "description": "Input"}}},
+            {"name": "lower", "description": "Lowercase", "parameters": {"text": {"type": "string", "description": "Input"}}},
+        ],
+    }
+    (d / "manifest.yaml").write_text(yaml.dump(manifest))
+    (d / "tool.py").write_text(
+        'def upper(text: str) -> str:\n    return text.upper()\n\n'
+        'def lower(text: str) -> str:\n    return text.lower()\n'
+    )
+    return d
+
+
+class TestMultiToolSandboxRegistration:
+    def test_register_multi_tool_sandbox_plugin(self, plugin_loader):
+        """Both tools from a sandbox multi-tool plugin should be registered."""
+        _make_multi_tool_plugin(plugin_loader.available_dir, "multi")
+        with patch("radar.tools.register_dynamic_tool", return_value=True) as mock_reg:
+            ok = plugin_loader._register_plugin("multi")
+        assert ok is True
+        assert mock_reg.call_count == 2
+        # Check both tools were registered
+        call_names = {c.kwargs.get("name", c.args[0] if c.args else None) for c in mock_reg.call_args_list}
+        assert "upper" in call_names
+        assert "lower" in call_names
+
+    def test_register_multi_tool_sandbox_callable(self, plugin_loader):
+        """Multi-tool sandbox plugins should produce callable tools."""
+        _make_multi_tool_plugin(plugin_loader.available_dir, "multi_exec")
+        # Don't mock -- let register_dynamic_tool actually run
+        from radar.tools import execute_tool, unregister_tool
+
+        plugin_loader._register_plugin("multi_exec")
+        try:
+            result = execute_tool("upper", {"text": "hello"})
+            assert result == "HELLO"
+            result = execute_tool("lower", {"text": "HELLO"})
+            assert result == "hello"
+        finally:
+            unregister_tool("upper")
+            unregister_tool("lower")
+
+
+# ===========================================================================
+# 14. Local Trust Registration
+# ===========================================================================
+
+
+class TestLocalTrustRegistration:
+    def test_register_local_trust_plugin(self, plugin_loader):
+        """Local trust plugins should be loaded via importlib."""
+        _make_multi_tool_plugin(plugin_loader.available_dir, "local_multi", trust_level="local")
+
+        from radar.tools import execute_tool, unregister_plugin_tools
+
+        plugin_loader._register_plugin("local_multi")
+        try:
+            result = execute_tool("upper", {"text": "hello"})
+            assert result == "HELLO"
+            result = execute_tool("lower", {"text": "WORLD"})
+            assert result == "world"
+        finally:
+            unregister_plugin_tools("local_multi")
+
+    def test_local_trust_has_full_python_access(self, plugin_loader):
+        """Local trust plugins can import standard library modules."""
+        d = plugin_loader.available_dir / "local_imports"
+        d.mkdir(parents=True, exist_ok=True)
+        manifest = {
+            "name": "local_imports",
+            "version": "1.0.0",
+            "trust_level": "local",
+            "tools": [
+                {"name": "get_json", "description": "Serialize to JSON", "parameters": {"data": {"type": "string"}}},
+            ],
+        }
+        (d / "manifest.yaml").write_text(yaml.dump(manifest))
+        (d / "tool.py").write_text(
+            'import json\n\n'
+            'def get_json(data: str) -> str:\n'
+            '    return json.dumps({"value": data})\n'
+        )
+
+        from radar.tools import execute_tool, unregister_plugin_tools
+
+        plugin_loader._register_plugin("local_imports")
+        try:
+            result = execute_tool("get_json", {"data": "test"})
+            assert '"value": "test"' in result
+        finally:
+            unregister_plugin_tools("local_imports")
+
+
+# ===========================================================================
+# 15. Local Trust Security
+# ===========================================================================
+
+
+class TestLocalTrustSecurity:
+    def test_create_plugin_forces_sandbox(self, plugin_loader):
+        """create_plugin always sets trust_level to sandbox."""
+        with patch("radar.config.get_config") as mock_cfg:
+            mock_cfg.return_value = MagicMock(plugins=MagicMock(max_code_size_bytes=10000))
+            ok, msg, err = plugin_loader.create_plugin(
+                name="greet",
+                description="Greet someone",
+                parameters={"name": {"type": "string"}},
+                code=VALID_PLUGIN_CODE,
+                test_cases=[{"name": "t1", "input_args": {"name": "World"}, "expected_output": "Hello, World!"}],
+            )
+        assert ok is True
+        # Check the manifest was written with sandbox trust
+        manifest_path = plugin_loader.pending_dir / "greet" / "manifest.yaml"
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        assert manifest["trust_level"] == "sandbox"
+
+    def test_create_plugin_includes_tools_in_manifest(self, plugin_loader):
+        """create_plugin should include tools list in manifest."""
+        with patch("radar.config.get_config") as mock_cfg:
+            mock_cfg.return_value = MagicMock(plugins=MagicMock(max_code_size_bytes=10000))
+            plugin_loader.create_plugin(
+                name="greet",
+                description="Greet someone",
+                parameters={"name": {"type": "string", "description": "Who"}},
+                code=VALID_PLUGIN_CODE,
+                test_cases=[],
+            )
+        manifest_path = plugin_loader.pending_dir / "greet" / "manifest.yaml"
+        with open(manifest_path) as f:
+            manifest = yaml.safe_load(f)
+        assert len(manifest["tools"]) == 1
+        assert manifest["tools"][0]["name"] == "greet"
+
+    def test_approve_local_trust_logs_warning(self, plugin_loader):
+        """Approving a local trust plugin should log a warning."""
+        d = plugin_loader.pending_dir / "local_tool"
+        d.mkdir(parents=True)
+        manifest = {"name": "local_tool", "trust_level": "local"}
+        (d / "manifest.yaml").write_text(yaml.dump(manifest))
+        (d / "tool.py").write_text('def local_tool(): return "ok"')
+        (d / "schema.yaml").write_text(yaml.dump({"name": "local_tool", "description": "", "parameters": {}}))
+
+        with patch("radar.tools.register_local_tool", return_value=True), \
+             patch("logging.getLogger") as mock_log:
+            mock_logger = MagicMock()
+            mock_log.return_value = mock_logger
+            ok, msg = plugin_loader.approve_plugin("local_tool")
+
+        assert ok is True
+        mock_logger.warning.assert_called_once()
+        assert "local-trust" in mock_logger.warning.call_args[0][0]
+
+
+# ===========================================================================
+# 16. Plugin Install
+# ===========================================================================
+
+
+class TestPluginInstall:
+    def test_install_from_directory(self, plugin_loader, tmp_path):
+        source = tmp_path / "my_plugin"
+        source.mkdir()
+        manifest = {"name": "my_plugin", "version": "1.0.0", "trust_level": "local"}
+        (source / "manifest.yaml").write_text(yaml.dump(manifest))
+        (source / "tool.py").write_text('def my_plugin(): return "ok"')
+
+        ok, msg = plugin_loader.install_plugin(str(source))
+        assert ok is True
+        assert "my_plugin" in msg
+        assert "pending review" in msg
+        assert (plugin_loader.pending_dir / "my_plugin" / "manifest.yaml").exists()
+        assert (plugin_loader.pending_dir / "my_plugin" / "tool.py").exists()
+
+    def test_install_missing_manifest(self, plugin_loader, tmp_path):
+        source = tmp_path / "bad"
+        source.mkdir()
+        (source / "tool.py").write_text('def f(): pass')
+        ok, msg = plugin_loader.install_plugin(str(source))
+        assert ok is False
+        assert "Missing manifest.yaml" in msg
+
+    def test_install_missing_tool(self, plugin_loader, tmp_path):
+        source = tmp_path / "bad"
+        source.mkdir()
+        (source / "manifest.yaml").write_text(yaml.dump({"name": "bad"}))
+        ok, msg = plugin_loader.install_plugin(str(source))
+        assert ok is False
+        assert "Missing tool.py" in msg
+
+    def test_install_not_a_directory(self, plugin_loader, tmp_path):
+        ok, msg = plugin_loader.install_plugin(str(tmp_path / "nonexistent"))
+        assert ok is False
+        assert "not a directory" in msg
+
+    def test_install_missing_name(self, plugin_loader, tmp_path):
+        source = tmp_path / "no_name"
+        source.mkdir()
+        (source / "manifest.yaml").write_text(yaml.dump({}))
+        (source / "tool.py").write_text('def f(): pass')
+        ok, msg = plugin_loader.install_plugin(str(source))
+        assert ok is False
+        assert "name" in msg.lower()
+
+    def test_install_conflicts_with_existing(self, plugin_loader, tmp_path):
+        # Create existing plugin
+        _make_plugin_dir(plugin_loader.available_dir, "existing")
+        # Try to install
+        source = tmp_path / "existing"
+        source.mkdir()
+        (source / "manifest.yaml").write_text(yaml.dump({"name": "existing"}))
+        (source / "tool.py").write_text('def f(): pass')
+        ok, msg = plugin_loader.install_plugin(str(source))
+        assert ok is False
+        assert "already exists" in msg
+
+    def test_install_multi_tool(self, plugin_loader, tmp_path):
+        source = tmp_path / "multi"
+        source.mkdir()
+        manifest = {
+            "name": "multi",
+            "trust_level": "local",
+            "tools": [
+                {"name": "a", "description": "Tool A"},
+                {"name": "b", "description": "Tool B"},
+            ],
+        }
+        (source / "manifest.yaml").write_text(yaml.dump(manifest))
+        (source / "tool.py").write_text('def a(): return "a"\ndef b(): return "b"')
+        ok, msg = plugin_loader.install_plugin(str(source))
+        assert ok is True
+        assert "2 tool(s)" in msg
+
+
+# ===========================================================================
+# 17. Multi-Tool Unregistration
+# ===========================================================================
+
+
+class TestMultiToolUnregistration:
+    def test_disable_multi_tool_removes_all(self, plugin_loader):
+        """Disabling a multi-tool plugin should remove all its tools."""
+        _make_multi_tool_plugin(plugin_loader.available_dir, "multi_unreg")
+
+        from radar.tools import _registry, unregister_plugin_tools
+
+        # Register the plugin (real registration)
+        plugin_loader._register_plugin("multi_unreg")
+        assert "upper" in _registry
+        assert "lower" in _registry
+
+        # Now disable
+        plugin_loader.enable_plugin("multi_unreg")  # ensure symlink exists
+        plugin_loader.disable_plugin("multi_unreg")
+
+        assert "upper" not in _registry
+        assert "lower" not in _registry
+
+
+# ===========================================================================
+# 18. Plugin-to-Tools Tracking
+# ===========================================================================
+
+
+class TestPluginToolsTracking:
+    def test_register_local_tool_tracks(self):
+        """register_local_tool should track the tool under the plugin name."""
+        from radar.tools import _plugin_tools, register_local_tool, unregister_plugin_tools
+
+        register_local_tool(
+            name="tracked_tool",
+            description="test",
+            parameters={},
+            func=lambda: "ok",
+            plugin_name="my_plugin",
+        )
+        try:
+            assert "tracked_tool" in _plugin_tools.get("my_plugin", set())
+        finally:
+            unregister_plugin_tools("my_plugin")
+
+    def test_unregister_plugin_tools_cleans_up(self):
+        """unregister_plugin_tools should remove all tracked tools."""
+        from radar.tools import _plugin_tools, _registry, register_local_tool, unregister_plugin_tools
+
+        register_local_tool("t1", "d", {}, lambda: "1", "cleanup_test")
+        register_local_tool("t2", "d", {}, lambda: "2", "cleanup_test")
+
+        assert "t1" in _registry
+        assert "t2" in _registry
+        assert len(_plugin_tools["cleanup_test"]) == 2
+
+        removed = unregister_plugin_tools("cleanup_test")
+        assert set(removed) == {"t1", "t2"}
+        assert "t1" not in _registry
+        assert "t2" not in _registry
+        assert "cleanup_test" not in _plugin_tools
+
+    def test_get_plugin_tool_names(self):
+        """get_plugin_tool_names should return tracked tool names."""
+        from radar.tools import get_plugin_tool_names, register_local_tool, unregister_plugin_tools
+
+        register_local_tool("gtn_a", "d", {}, lambda: "a", "gtn_plugin")
+        register_local_tool("gtn_b", "d", {}, lambda: "b", "gtn_plugin")
+        try:
+            names = get_plugin_tool_names("gtn_plugin")
+            assert names == {"gtn_a", "gtn_b"}
+        finally:
+            unregister_plugin_tools("gtn_plugin")
+
+
+# ===========================================================================
+# 19. Backward Compatibility with schema.yaml
+# ===========================================================================
+
+
+class TestBackwardCompatSchemaYaml:
+    def test_no_tools_falls_back_to_schema(self, plugin_loader):
+        """Plugin without manifest.tools should use schema.yaml for tool definitions."""
+        _make_plugin_dir(plugin_loader.available_dir, "legacy_plugin")
+        # Legacy plugin: no tools in manifest, has schema.yaml
+        with patch("radar.tools.register_dynamic_tool", return_value=True) as mock_reg:
+            ok = plugin_loader._register_plugin("legacy_plugin")
+        assert ok is True
+        mock_reg.assert_called_once()
+        # Tool name should come from schema.yaml
+        assert mock_reg.call_args.kwargs.get("name") == "legacy_plugin"
+
+    def test_list_plugins_tool_count_for_legacy(self, plugin_loader):
+        """Legacy single-tool plugins should show tool_count=1."""
+        _make_plugin_dir(plugin_loader.available_dir, "legacy")
+        result = plugin_loader.list_plugins()
+        assert len(result) == 1
+        assert result[0]["tool_count"] == 1
+
+    def test_list_plugins_tool_count_for_multi(self, plugin_loader):
+        """Multi-tool plugins should show correct tool_count."""
+        _make_multi_tool_plugin(plugin_loader.available_dir, "multi_count")
+        result = plugin_loader.list_plugins()
+        multi = next(p for p in result if p["name"] == "multi_count")
+        assert multi["tool_count"] == 2

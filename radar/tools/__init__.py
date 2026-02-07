@@ -12,6 +12,9 @@ _registry: dict[str, tuple[Callable, dict]] = {}
 _static_tools: set[str] = set()
 _external_tools: set[str] = set()
 
+# Plugin name -> set of tool names registered by that plugin
+_plugin_tools: dict[str, set[str]] = {}
+
 
 def tool(
     name: str,
@@ -118,6 +121,7 @@ def register_dynamic_tool(
     description: str,
     parameters: dict[str, Any],
     code: str,
+    extra_namespace: dict[str, Any] | None = None,
 ) -> bool:
     """Register a dynamically loaded tool.
 
@@ -126,6 +130,7 @@ def register_dynamic_tool(
         description: Human-readable description
         parameters: JSON Schema for parameters (properties dict)
         code: Python code containing the tool function
+        extra_namespace: Optional extra names to inject (e.g. helper functions)
 
     Returns:
         True if registration succeeded, False otherwise.
@@ -191,7 +196,12 @@ def register_dynamic_tool(
         "zip": zip,
     }
 
-    namespace = {"__builtins__": safe_builtins}
+    namespace: dict[str, Any] = {"__builtins__": safe_builtins}
+    if extra_namespace:
+        # Filter out dunder keys to prevent overriding __builtins__
+        namespace.update(
+            {k: v for k, v in extra_namespace.items() if not k.startswith("__")}
+        )
 
     try:
         # Execute the code to define the function
@@ -226,6 +236,77 @@ def unregister_tool(name: str) -> bool:
         del _registry[name]
         return True
     return False
+
+
+def register_local_tool(
+    name: str,
+    description: str,
+    parameters: dict[str, Any],
+    func: Callable,
+    plugin_name: str | None = None,
+) -> bool:
+    """Register a callable directly as a tool (no sandbox, no exec).
+
+    Used for local-trust plugins where importlib already loaded the module.
+
+    Args:
+        name: Tool name for the API
+        description: Human-readable description
+        parameters: JSON Schema for parameters (properties dict)
+        func: The callable to register
+        plugin_name: Optional plugin name for tracking
+
+    Returns:
+        True if registration succeeded.
+    """
+    schema = {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": parameters,
+                "required": [k for k, v in parameters.items() if not v.get("optional", False)],
+            },
+        },
+    }
+    _registry[name] = (func, schema)
+    if plugin_name:
+        _plugin_tools.setdefault(plugin_name, set()).add(name)
+    return True
+
+
+def unregister_plugin_tools(plugin_name: str) -> list[str]:
+    """Unregister all tools belonging to a plugin.
+
+    Args:
+        plugin_name: Name of the plugin whose tools should be removed
+
+    Returns:
+        List of tool names that were unregistered.
+    """
+    tool_names = _plugin_tools.pop(plugin_name, set())
+    removed = []
+    for name in tool_names:
+        if unregister_tool(name):
+            removed.append(name)
+    return removed
+
+
+def track_plugin_tool(plugin_name: str, tool_name: str) -> None:
+    """Track a tool name as belonging to a plugin.
+
+    Args:
+        plugin_name: The plugin that owns the tool
+        tool_name: The tool name to track
+    """
+    _plugin_tools.setdefault(plugin_name, set()).add(tool_name)
+
+
+def get_plugin_tool_names(plugin_name: str) -> set[str]:
+    """Get the set of tool names registered by a plugin."""
+    return _plugin_tools.get(plugin_name, set()).copy()
 
 
 def is_dynamic_tool(name: str) -> bool:
@@ -311,7 +392,11 @@ __all__ = [
     "execute_tool",
     "get_tool_names",
     "register_dynamic_tool",
+    "register_local_tool",
     "unregister_tool",
+    "unregister_plugin_tools",
+    "track_plugin_tool",
+    "get_plugin_tool_names",
     "is_dynamic_tool",
     "load_external_tools",
     "ensure_external_tools_loaded",

@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 
 from radar.config import get_data_paths
-from radar.plugins.models import Plugin, PluginManifest, TestCase, ToolError
+from radar.plugins.models import Plugin, PluginManifest, TestCase, ToolDefinition, ToolError
 from radar.plugins.runner import TestRunner
 from radar.plugins.validator import CodeValidator
 from radar.plugins.versions import VersionManager
@@ -123,6 +123,8 @@ class PluginLoader:
                         manifest = yaml.safe_load(f) or {}
                     # Check if enabled
                     enabled_link = self.enabled_dir / plugin_dir.name
+                    tools_list = manifest.get("tools", [])
+                    tool_count = len(tools_list) if tools_list else 1
                     plugins.append(
                         {
                             "name": manifest.get("name", plugin_dir.name),
@@ -132,6 +134,7 @@ class PluginLoader:
                             "trust_level": manifest.get("trust_level", "sandbox"),
                             "enabled": enabled_link.exists(),
                             "status": "available",
+                            "tool_count": tool_count,
                         }
                     )
 
@@ -143,6 +146,8 @@ class PluginLoader:
                     if manifest_file.exists():
                         with open(manifest_file) as f:
                             manifest = yaml.safe_load(f) or {}
+                        tools_list = manifest.get("tools", [])
+                        tool_count = len(tools_list) if tools_list else 1
                         plugins.append(
                             {
                                 "name": manifest.get("name", plugin_dir.name),
@@ -152,6 +157,7 @@ class PluginLoader:
                                 "trust_level": manifest.get("trust_level", "sandbox"),
                                 "enabled": False,
                                 "status": "pending",
+                                "tool_count": tool_count,
                             }
                         )
 
@@ -174,12 +180,17 @@ class PluginLoader:
                     if code_file.exists():
                         code = code_file.read_text()
 
+                    tools_list = manifest.get("tools", [])
+                    tool_count = len(tools_list) if tools_list else 1
+
                     pending.append(
                         {
                             "name": manifest.get("name", plugin_dir.name),
                             "description": manifest.get("description", ""),
                             "author": manifest.get("author", "unknown"),
                             "created_at": manifest.get("created_at", ""),
+                            "trust_level": manifest.get("trust_level", "sandbox"),
+                            "tool_count": tool_count,
                             "code": code,
                             "path": str(plugin_dir),
                         }
@@ -221,12 +232,15 @@ class PluginLoader:
         all_passed, test_results = self.test_runner.run_tests(code, tests, name)
 
         # Create manifest (needed whether tests pass or fail)
+        # LLM-generated plugins are always sandboxed
+        tool_def = ToolDefinition(name=name, description=description, parameters=parameters)
         manifest = PluginManifest(
             name=name,
             description=description,
             author="llm-generated",
             trust_level="sandbox",
             created_at=datetime.now().isoformat(),
+            tools=[tool_def],
         )
 
         if not all_passed:
@@ -297,10 +311,29 @@ class PluginLoader:
             return True, f"Plugin '{name}' created and pending review", None
 
     def approve_plugin(self, name: str) -> tuple[bool, str]:
-        """Approve a pending plugin."""
+        """Approve a pending plugin.
+
+        For local trust plugins, auto-approve settings are always ignored --
+        they must be explicitly approved by a human.
+        """
+        import logging
+
         pending_path = self.pending_dir / name
         if not pending_path.exists():
             return False, f"Plugin '{name}' not found in pending"
+
+        # Check trust level
+        manifest_file = pending_path / "manifest.yaml"
+        trust_level = "sandbox"
+        if manifest_file.exists():
+            with open(manifest_file) as f:
+                manifest_data = yaml.safe_load(f) or {}
+            trust_level = manifest_data.get("trust_level", "sandbox")
+
+        if trust_level == "local":
+            logging.getLogger("radar.plugins").warning(
+                "Approving local-trust plugin '%s' -- it will have full Python access", name
+            )
 
         # Move to available
         available_path = self.available_dir / name
@@ -331,6 +364,58 @@ class PluginLoader:
 
         return True, f"Plugin '{name}' rejected"
 
+    def install_plugin(self, source_dir: str | Path) -> tuple[bool, str]:
+        """Install a plugin from a local directory.
+
+        Copies the source directory to pending_review for human approval.
+
+        Args:
+            source_dir: Path to the plugin directory (must have manifest.yaml and tool.py)
+
+        Returns:
+            (success, message)
+        """
+        source = Path(source_dir).expanduser().resolve()
+
+        if not source.is_dir():
+            return False, f"Source is not a directory: {source}"
+
+        manifest_file = source / "manifest.yaml"
+        code_file = source / "tool.py"
+
+        if not manifest_file.exists():
+            return False, f"Missing manifest.yaml in {source}"
+        if not code_file.exists():
+            return False, f"Missing tool.py in {source}"
+
+        # Read manifest for name and trust level
+        with open(manifest_file) as f:
+            manifest_data = yaml.safe_load(f) or {}
+
+        plugin_name = manifest_data.get("name")
+        if not plugin_name:
+            return False, "Manifest must specify a 'name' field"
+
+        trust_level = manifest_data.get("trust_level", "sandbox")
+
+        # Check for conflicts
+        if (self.available_dir / plugin_name).exists():
+            return False, f"Plugin '{plugin_name}' already exists in available"
+
+        # Copy to pending_review
+        dest = self.pending_dir / plugin_name
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.copytree(str(source), str(dest))
+
+        tools_list = manifest_data.get("tools", [])
+        tool_count = len(tools_list) if tools_list else 1
+
+        return True, (
+            f"Plugin '{plugin_name}' ({trust_level} trust, {tool_count} tool(s)) "
+            f"installed to pending review"
+        )
+
     def enable_plugin(self, name: str) -> tuple[bool, str]:
         """Enable a plugin."""
         available_path = self.available_dir / name
@@ -359,33 +444,248 @@ class PluginLoader:
 
         return True, f"Plugin '{name}' disabled"
 
+    def get_widgets(self) -> list[dict]:
+        """Get widget configs from enabled plugins with widget capability.
+
+        Returns list of {name, title, template_content, position, refresh_interval}.
+        """
+        widgets = []
+
+        # Ensure plugins are loaded
+        if not self._plugins:
+            self.load_all()
+
+        for plugin in self._plugins.values():
+            if (
+                "widget" in plugin.manifest.capabilities
+                and plugin.manifest.widget
+                and plugin.path
+            ):
+                widget_cfg = plugin.manifest.widget
+                template_name = widget_cfg.get("template", "")
+                template_file = (plugin.path / template_name).resolve()
+                # Prevent path traversal — template must stay within plugin dir
+                if not str(template_file).startswith(str(plugin.path.resolve())):
+                    continue
+                template_content = ""
+                if template_file.exists():
+                    template_content = template_file.read_text()
+
+                widgets.append({
+                    "name": plugin.name,
+                    "title": widget_cfg.get("title", plugin.name),
+                    "template_content": template_content,
+                    "position": widget_cfg.get("position", "default"),
+                    "refresh_interval": widget_cfg.get("refresh_interval", 0),
+                })
+
+        return widgets
+
+    def get_bundled_personalities(self) -> list[dict]:
+        """Scan enabled plugins for bundled personality files.
+
+        Returns list of {name, content, plugin_name}.
+        """
+        personalities = []
+
+        # Ensure plugins are loaded
+        if not self._plugins:
+            self.load_all()
+
+        for plugin in self._plugins.values():
+            if not plugin.path:
+                continue
+            personalities_dir = plugin.path / "personalities"
+            if not personalities_dir.is_dir():
+                continue
+            for md_file in sorted(personalities_dir.glob("*.md")):
+                personalities.append({
+                    "name": md_file.stem,
+                    "content": md_file.read_text(),
+                    "plugin_name": plugin.name,
+                })
+
+        return personalities
+
+    def _load_plugin_scripts(self, plugin_dir: Path) -> dict:
+        """Load helper script modules from plugin's scripts/ directory.
+
+        Validates each script with CodeValidator and executes valid ones
+        in a restricted namespace with safe builtins (same restrictions as
+        register_dynamic_tool).
+        Returns merged namespace dict containing only functions.
+        """
+        import types
+
+        scripts_dir = plugin_dir / "scripts"
+        if not scripts_dir.is_dir():
+            return {}
+
+        # Same safe builtins used by register_dynamic_tool — no open/import/eval
+        safe_builtins = {
+            "True": True, "False": False, "None": None,
+            "abs": abs, "all": all, "any": any, "bool": bool, "chr": chr,
+            "dict": dict, "divmod": divmod, "enumerate": enumerate,
+            "filter": filter, "float": float, "format": format,
+            "frozenset": frozenset, "hash": hash, "hex": hex, "int": int,
+            "isinstance": isinstance, "issubclass": issubclass, "iter": iter,
+            "len": len, "list": list, "map": map, "max": max, "min": min,
+            "next": next, "oct": oct, "ord": ord, "pow": pow, "print": print,
+            "range": range, "repr": repr, "reversed": reversed, "round": round,
+            "set": set, "slice": slice, "sorted": sorted, "str": str,
+            "sum": sum, "tuple": tuple, "type": type, "zip": zip,
+        }
+
+        namespace = {}
+        for script_file in sorted(scripts_dir.glob("*.py")):
+            code = script_file.read_text()
+            is_valid, _issues = self.validator.validate(code)
+            if not is_valid:
+                continue
+
+            # Execute in restricted namespace with safe builtins only
+            script_ns: dict = {"__builtins__": safe_builtins}
+            try:
+                compiled = compile(code, str(script_file), "exec")
+                exec(compiled, script_ns)  # noqa: S102 — validated plugin code
+            except Exception:
+                continue
+
+            # Collect only functions (no dunder keys)
+            for key, value in script_ns.items():
+                if isinstance(value, types.FunctionType) and not key.startswith("_"):
+                    namespace[key] = value
+
+        return namespace
+
+    def _get_tool_definitions(
+        self, plugin_dir: Path, manifest: PluginManifest,
+    ) -> list[ToolDefinition]:
+        """Get tool definitions for a plugin.
+
+        If the manifest has a non-empty tools list, use it.
+        Otherwise fall back to reading schema.yaml (backward compat).
+        """
+        if manifest.tools:
+            return manifest.tools
+
+        # Fallback: read schema.yaml for single-tool plugins
+        schema_file = plugin_dir / "schema.yaml"
+        if schema_file.exists():
+            with open(schema_file) as f:
+                schema = yaml.safe_load(f) or {}
+            return [ToolDefinition(
+                name=schema.get("name", manifest.name),
+                description=schema.get("description", manifest.description),
+                parameters=schema.get("parameters", {}),
+            )]
+
+        # Last resort: use manifest name
+        return [ToolDefinition(
+            name=manifest.name,
+            description=manifest.description,
+        )]
+
     def _register_plugin(self, name: str) -> bool:
-        """Register a plugin as a tool."""
+        """Register a plugin's tools.
+
+        Dispatches based on trust level:
+        - sandbox: exec code in restricted namespace (current behavior)
+        - local: importlib load with full Python access
+        """
         available_path = self.available_dir / name
         code_file = available_path / "tool.py"
-        schema_file = available_path / "schema.yaml"
+        manifest_file = available_path / "manifest.yaml"
 
-        if not code_file.exists() or not schema_file.exists():
+        if not code_file.exists() or not manifest_file.exists():
             return False
 
+        with open(manifest_file) as f:
+            manifest_data = yaml.safe_load(f) or {}
+        manifest = PluginManifest.from_dict(manifest_data)
+
+        tool_defs = self._get_tool_definitions(available_path, manifest)
+
+        if manifest.trust_level == "local":
+            return self._register_local_plugin(name, code_file, tool_defs)
+        else:
+            return self._register_sandbox_plugin(name, available_path, code_file, tool_defs)
+
+    def _register_sandbox_plugin(
+        self,
+        plugin_name: str,
+        plugin_dir: Path,
+        code_file: Path,
+        tool_defs: list[ToolDefinition],
+    ) -> bool:
+        """Register sandbox-trust plugin tools via exec in restricted namespace."""
+        from radar.tools import register_dynamic_tool, track_plugin_tool
+
         code = code_file.read_text()
-        with open(schema_file) as f:
-            schema = yaml.safe_load(f) or {}
+        helpers = self._load_plugin_scripts(plugin_dir)
 
-        # Import the registration function
-        from radar.tools import register_dynamic_tool
+        success = True
+        for td in tool_defs:
+            ok = register_dynamic_tool(
+                name=td.name,
+                description=td.description,
+                parameters=td.parameters,
+                code=code,
+                extra_namespace=helpers if helpers else None,
+            )
+            if ok:
+                track_plugin_tool(plugin_name, td.name)
+            else:
+                success = False
+        return success
 
-        return register_dynamic_tool(
-            name=schema.get("name", name),
-            description=schema.get("description", ""),
-            parameters=schema.get("parameters", {}),
-            code=code,
+    def _register_local_plugin(
+        self,
+        plugin_name: str,
+        code_file: Path,
+        tool_defs: list[ToolDefinition],
+    ) -> bool:
+        """Register local-trust plugin tools via importlib (full Python access)."""
+        import importlib.util
+
+        from radar.tools import register_local_tool
+
+        spec = importlib.util.spec_from_file_location(
+            f"radar_plugin_{plugin_name}", code_file
         )
+        if not spec or not spec.loader:
+            return False
+
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except Exception:
+            return False
+
+        success = True
+        for td in tool_defs:
+            func = getattr(module, td.name, None)
+            if func is None:
+                success = False
+                continue
+            register_local_tool(
+                name=td.name,
+                description=td.description,
+                parameters=td.parameters,
+                func=func,
+                plugin_name=plugin_name,
+            )
+        return success
 
     def _unregister_plugin(self, name: str) -> bool:
-        """Unregister a plugin from tools."""
-        from radar.tools import unregister_tool
+        """Unregister all tools belonging to a plugin."""
+        from radar.tools import unregister_plugin_tools, unregister_tool
 
+        # Try the tracked plugin tools first
+        removed = unregister_plugin_tools(name)
+        if removed:
+            return True
+        # Fallback: single-tool plugin where name == tool name
         return unregister_tool(name)
 
     def rollback_plugin(self, name: str, version: str) -> tuple[bool, str]:

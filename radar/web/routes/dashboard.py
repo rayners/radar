@@ -11,7 +11,9 @@ router = APIRouter()
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """Dashboard page."""
-    from radar.memory import get_recent_conversations
+    from datetime import datetime
+
+    from radar.memory import count_tool_calls_today, get_recent_activity, get_recent_conversations
     from radar.scheduler import get_status
 
     context = get_common_context(request, "dashboard")
@@ -21,22 +23,76 @@ async def dashboard(request: Request):
     last_hb = sched_status.get("last_heartbeat")
     next_hb = sched_status.get("next_heartbeat")
 
-    # Get recent conversations for stats
+    # Get recent conversations and filter to today only
     conversations = get_recent_conversations(20)
+    today = datetime.now().strftime("%Y-%m-%d")
+    conversations_today = sum(
+        1 for c in conversations
+        if c.get("created_at", "").startswith(today)
+    )
 
     context.update(
         {
             "last_heartbeat": last_hb or "Never",
             "next_heartbeat": next_hb or "N/A",
-            "conversations_today": len(conversations),
-            "tool_calls_today": 0,  # Would need to scan conversations for tool calls
-            "activity": [
-                {"time": c["created_at"][:16] if c.get("created_at") else "", "message": c.get("preview", "")[:50], "type": "chat"}
-                for c in conversations[:5]
-            ],
+            "conversations_today": conversations_today,
+            "tool_calls_today": count_tool_calls_today(),
+            "activity": get_recent_activity(),
         }
     )
+
+    # Load plugin widgets and pre-render templates through sandboxed Jinja2
+    try:
+        import jinja2.sandbox
+        from markupsafe import Markup
+        from radar.plugins import get_plugin_loader
+
+        loader = get_plugin_loader()
+        widgets = loader.get_widgets()
+        env = jinja2.sandbox.SandboxedEnvironment(autoescape=True)
+        for w in widgets:
+            try:
+                template = env.from_string(w["template_content"])
+                w["rendered"] = Markup(template.render(plugin_name=w["name"]))
+            except Exception:
+                w["rendered"] = Markup('<span class="text-error">Widget render error</span>')
+        context["widgets"] = widgets
+    except Exception:
+        context["widgets"] = []
+
     return templates.TemplateResponse("dashboard.html", context)
+
+
+@router.get("/api/activity", response_class=HTMLResponse)
+async def api_activity():
+    """Return HTML fragment of recent activity for HTMX refresh."""
+    from html import escape
+
+    from radar.memory import get_recent_activity
+
+    activity = get_recent_activity()
+    if not activity:
+        return HTMLResponse(
+            '<div class="activity-log__item">'
+            '<span class="activity-log__time">--:--</span>'
+            '<span class="activity-log__message text-muted">No recent activity</span>'
+            '<span class="activity-log__type">idle</span>'
+            '</div>'
+        )
+
+    html_parts = []
+    for item in activity:
+        time = escape(item.get("time", ""))
+        message = escape(item.get("message", ""))
+        item_type = escape(item.get("type", ""))
+        html_parts.append(
+            f'<div class="activity-log__item">'
+            f'<span class="activity-log__time">{time}</span>'
+            f'<span class="activity-log__message">{message}</span>'
+            f'<span class="activity-log__type activity-log__type--{item_type}">{item_type}</span>'
+            f'</div>'
+        )
+    return HTMLResponse("".join(html_parts))
 
 
 @router.get("/chat", response_class=HTMLResponse)

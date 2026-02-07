@@ -143,6 +143,96 @@ def messages_to_api_format(messages: list[dict[str, Any]]) -> list[dict[str, Any
     return api_messages
 
 
+def count_tool_calls_today() -> int:
+    """Count tool calls made today across all conversations.
+
+    Scans JSONL files modified today and counts assistant messages
+    with non-empty tool_calls where the timestamp starts with today's date.
+    """
+    conv_dir = get_data_paths().conversations
+    today = datetime.now().strftime("%Y-%m-%d")
+    count = 0
+
+    for conv_path in conv_dir.glob("*.jsonl"):
+        # Only scan files modified today (optimization)
+        mtime = datetime.fromtimestamp(conv_path.stat().st_mtime)
+        if mtime.strftime("%Y-%m-%d") != today:
+            continue
+
+        with open(conv_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if (
+                    msg.get("role") == "assistant"
+                    and msg.get("tool_calls")
+                    and msg.get("timestamp", "").startswith(today)
+                ):
+                    count += len(msg["tool_calls"])
+
+    return count
+
+
+def get_recent_activity(limit: int = 10) -> list[dict[str, Any]]:
+    """Get recent activity across conversations.
+
+    Extracts user messages and tool calls into a unified timeline.
+
+    Returns list of dicts with time, message, type fields.
+    Types: "chat" for user messages, "tool" for tool calls.
+    Sorted by time descending.
+    """
+    conv_dir = get_data_paths().conversations
+
+    # Get recent conversation files by modification time
+    conv_files = sorted(
+        conv_dir.glob("*.jsonl"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )[:20]  # Scan at most 20 recent files
+
+    activity: list[dict[str, Any]] = []
+
+    for conv_path in conv_files:
+        with open(conv_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                timestamp = msg.get("timestamp", "")
+
+                if msg.get("role") == "user" and msg.get("content"):
+                    activity.append({
+                        "time": timestamp[:16] if timestamp else "",
+                        "message": msg["content"][:50],
+                        "type": "chat",
+                    })
+                elif msg.get("role") == "assistant" and msg.get("tool_calls"):
+                    for tc in msg["tool_calls"]:
+                        func = tc.get("function", {})
+                        name = func.get("name", "unknown")
+                        activity.append({
+                            "time": timestamp[:16] if timestamp else "",
+                            "message": f"Called {name}",
+                            "type": "tool",
+                        })
+
+    # Sort by time descending
+    activity.sort(key=lambda a: a["time"], reverse=True)
+
+    return activity[:limit]
+
+
 def get_messages_for_display(conversation_id: str) -> list[dict[str, Any]]:
     """Get messages formatted for web UI display.
 

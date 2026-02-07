@@ -8,33 +8,33 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (65 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (49 tests), `test_config.py` (28 tests), `test_memory.py` (22 tests), `test_llm.py` (28 tests), `test_agent.py` (19 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (96 tests), `test_scheduler.py` (42 tests) — **613 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (73 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (87 tests), `test_config.py` (40 tests), `test_memory.py` (33 tests), `test_llm.py` (34 tests), `test_agent.py` (19 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (155 tests), `test_scheduler.py` (42 tests), `test_integration.py` (7 tests) — **694 total**.
 
 - [x] **Core agent tests** - personality loading, system prompt building, run/ask orchestration (19 tests)
-- [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, format conversion (28 tests)
+- [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, format conversion (34 tests)
 - [x] **Tool framework tests** - registration, execution, parameter validation (31 tests)
-- [x] **Security tests** - path blocklist, command validation, write-only blocks, edge cases (49 tests)
-- [x] **Memory tests** - JSONL operations, display formatting, conversation listing (22 tests)
-- [x] **Config tests** - YAML loading, env var overrides, deprecated field migration, DataPaths (28 tests)
+- [x] **Security tests** - path blocklist, command validation, write-only blocks, edge cases (87 tests)
+- [x] **Memory tests** - JSONL operations, display formatting, conversation listing, tool call counting, activity feed (33 tests)
+- [x] **Config tests** - YAML loading, env var overrides, deprecated field migration, DataPaths (40 tests)
 - [x] **Scheduler tests** - heartbeat ticks, quiet hours, event queuing (42 tests)
-- [x] **Plugin tests** - code validation, sandboxed execution, version rollback (96 tests across all 5 modules)
-- [x] **Web route tests** - FastAPI endpoints, HTMX responses (65 tests across all 9 route modules)
-- [ ] **Integration test harness** - full conversation flow with mock LLM
+- [x] **Plugin tests** - code validation, sandboxed execution, version rollback, manifest capabilities, widgets, personality bundling, helper scripts, multi-tool registration, local trust, plugin install CLI (155 tests across all 5 modules)
+- [x] **Web route tests** - FastAPI endpoints, HTMX responses, config save, activity API (73 tests across all 9 route modules)
+- [x] **Integration test harness** - full conversation flow with mock LLM (7 tests)
 
 ---
 
 ## 2. Web UI Incomplete Features
 
 ### Dashboard Improvements
-- [ ] Real `tool_calls_today` counter (currently hardcoded to 0)
-- [ ] `/api/activity` endpoint for dashboard refresh
-- [ ] Live activity feed with real data
+- [x] Real `tool_calls_today` counter — scans JSONL conversations for tool calls with today's timestamp
+- [x] `/api/activity` endpoint for dashboard refresh — returns HTML fragment for HTMX
+- [x] Live activity feed with real data — unified timeline of chats and tool calls
 - [ ] Uptime/health metrics display
 
 ### Config Page
-- [ ] `POST /api/config` endpoint to save changes
-- [ ] Config validation before save
-- [ ] Config hot-reload without daemon restart
+- [x] `POST /api/config` endpoint to save changes — dot-notation form fields, deep-merge, YAML write
+- [x] Config validation before save — provider enums, numeric ranges
+- [x] Config hot-reload without daemon restart — calls `reload_config()` after save
 
 ### Tasks Page
 - [x] Custom scheduled task CRUD
@@ -221,13 +221,13 @@ Natural language task scheduling via chat:
 
 ## 8. Developer Experience
 
-- [ ] Mock Ollama server for testing
+- [x] Mock Ollama server for testing — `MockLLMResponder` in `tests/mock_llm.py` with `mock_llm` fixture
 - [ ] Conversation recording + playback
 - [ ] Development mode with hot reload
 - [ ] CLI tool scaffolding command
 - [ ] Architecture decision records (ADRs)
 - [ ] Contributing guide
-- [ ] Integration test harness without real accounts
+- [x] Integration test harness without real accounts — `tests/test_integration.py` with MockLLMResponder
 
 ---
 
@@ -263,6 +263,18 @@ Reducing friction for adding new tools and plugins.
 - [ ] **Tool config support** — Let tools declare config fields (stored under `tools.<name>:` in `radar.yaml`). Currently tools that need settings (e.g., API keys, preferences) have no standard pattern.
 - [ ] **Tool dependency validation** — Tools can declare required Python packages; checked at startup with clear error messages for missing deps.
 - [x] **`static_tools` list maintenance** — `_static_tools` set is now derived automatically from the registry during discovery. `is_dynamic_tool()` no longer uses a hardcoded list.
+
+### Plugin Capabilities & Extensibility
+- [x] **Plugin manifest capabilities** — `capabilities` field supports `["tool", "widget", "personality"]` with backward-compatible defaults
+- [x] **Dashboard widgets** — Plugins with `widget` capability render Jinja2 templates on the dashboard with auto-refresh
+- [x] **Personality bundling** — Plugins can bundle personality `.md` files in `personalities/` subdirectory
+- [x] **Helper script modules** — Plugins can include validated helper scripts in `scripts/` subdirectory
+
+### Plugin Distribution & Trust
+- [x] **Multi-tool plugins** — Single plugin can register multiple tools via `tools` list in manifest. Backward compatible with single-tool `schema.yaml` fallback.
+- [x] **Trust levels** — `sandbox` (restricted, LLM-generated) vs `local` (full Python via importlib, human-reviewed). LLM always forced to sandbox; local trust never auto-approved.
+- [x] **CLI plugin install** — `radar plugin install <dir>`, `radar plugin list`, `radar plugin approve <name>` for installing and managing plugins from the command line.
+- [x] **Plugin-to-tools tracking** — `_plugin_tools` dict maps plugin names to their registered tool names for clean multi-tool unregistration.
 
 ### Plugin Lifecycle
 - [ ] **Plugin loading at startup** — Load all enabled plugins when daemon starts, not on first tool call. Currently a plugin created via chat isn't available until the tool registry is next queried.

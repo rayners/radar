@@ -644,5 +644,90 @@ def service_status():
     raise SystemExit(result.returncode)
 
 
+# ===== Plugin Commands =====
+
+
+@cli.group()
+def plugin():
+    """Manage plugins."""
+    pass
+
+
+@plugin.command("install")
+@click.argument("source")
+def plugin_install(source: str):
+    """Install a plugin from a local directory."""
+    from radar.plugins import get_plugin_loader
+
+    loader = get_plugin_loader()
+    success, message = loader.install_plugin(source)
+
+    if success:
+        console.print(f"[green]{message}[/green]")
+        console.print()
+        console.print("Next steps:")
+        console.print("  Review at: [bold]http://localhost:8420/plugins/review[/bold]")
+        console.print(f"  Or run:    [bold]radar plugin approve {Path(source).name}[/bold]")
+    else:
+        console.print(f"[red]Error: {message}[/red]")
+        raise SystemExit(1)
+
+
+@plugin.command("list")
+@click.option("--pending", is_flag=True, help="Include pending plugins")
+def plugin_list(pending: bool):
+    """List installed plugins."""
+    from radar.plugins import get_plugin_loader
+
+    loader = get_plugin_loader()
+    plugins_list = loader.list_plugins(include_pending=pending)
+
+    if not plugins_list:
+        console.print("[dim]No plugins installed[/dim]")
+        return
+
+    console.print(Panel.fit("[bold]Installed Plugins[/bold]", border_style="blue"))
+    console.print()
+
+    for p in plugins_list:
+        status_icon = "[green]*[/green]" if p.get("enabled") else "[dim]-[/dim]"
+        trust = p.get("trust_level", "sandbox")
+        trust_color = "yellow" if trust == "local" else "dim"
+        tool_count = p.get("tool_count", 1)
+        tools_label = f"{tool_count} tool{'s' if tool_count != 1 else ''}"
+
+        console.print(
+            f"  {status_icon} [bold]{p['name']}[/bold] "
+            f"v{p.get('version', '?')} "
+            f"[{trust_color}]{trust}[/{trust_color}] "
+            f"[dim]({tools_label})[/dim]"
+        )
+        if p.get("description"):
+            desc = p["description"]
+            if len(desc) > 60:
+                desc = desc[:60] + "..."
+            console.print(f"      [dim]{desc}[/dim]")
+
+        status = p.get("status", "")
+        if status == "pending":
+            console.print(f"      [yellow]pending review[/yellow]")
+
+
+@plugin.command("approve")
+@click.argument("name")
+def plugin_approve(name: str):
+    """Approve a pending plugin."""
+    from radar.plugins import get_plugin_loader
+
+    loader = get_plugin_loader()
+    success, message = loader.approve_plugin(name)
+
+    if success:
+        console.print(f"[green]{message}[/green]")
+    else:
+        console.print(f"[red]Error: {message}[/red]")
+        raise SystemExit(1)
+
+
 if __name__ == "__main__":
     cli()

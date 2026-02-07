@@ -89,10 +89,14 @@ async def plugin_detail(request: Request, name: str):
     # Get errors
     errors = loader._load_errors(name)
 
+    # Get tools from manifest
+    tools_list = manifest.get("tools", [])
+
     context["plugin"] = manifest
     context["code"] = code
     context["versions"] = versions
     context["errors"] = [e.to_dict() for e in errors]
+    context["plugin_tools"] = tools_list
 
     return templates.TemplateResponse("plugin_detail.html", context)
 
@@ -249,3 +253,25 @@ async def api_plugin_rollback(name: str, version: str):
     if success:
         return HTMLResponse(f'<div class="text-phosphor">{escape(message)}</div>')
     return HTMLResponse(f'<div class="text-error">{escape(message)}</div>', status_code=400)
+
+
+@router.get("/api/plugins/{name}/widget")
+async def api_plugin_widget(name: str):
+    """Refresh a plugin's dashboard widget."""
+    import jinja2
+    from radar.plugins import get_plugin_loader
+
+    loader = get_plugin_loader()
+    widgets = loader.get_widgets()
+    widget = next((w for w in widgets if w["name"] == name), None)
+
+    if not widget:
+        return HTMLResponse(
+            f'<div class="text-error">Widget not found for plugin {escape(name)}</div>',
+            status_code=404,
+        )
+
+    env = jinja2.sandbox.SandboxedEnvironment(autoescape=True)
+    template = env.from_string(widget["template_content"])
+    rendered = template.render(plugin_name=name)
+    return HTMLResponse(rendered)

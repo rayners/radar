@@ -12,8 +12,8 @@
     </div>
     <div class="card__body">
         <form hx-post="/api/config"
-              hx-swap="none"
-              hx-on::after-request="alert('Configuration saved!')">
+              hx-target="#config-save-result"
+              hx-swap="innerHTML">
 
             <!-- LLM Section -->
             <div class="config-section">
@@ -183,6 +183,7 @@
                 </button>
             </div>
 
+            <div id="config-save-result" class="mt-md"></div>
             <div id="config-test-result" class="mt-md"></div>
         </form>
     </div>

@@ -140,6 +140,16 @@ def load_personality(name_or_path: str) -> str:
     if personality_file.exists():
         return personality_file.read_text()
 
+    # Check plugin bundled personalities
+    try:
+        from radar.plugins import get_plugin_loader
+        loader = get_plugin_loader()
+        for bp in loader.get_bundled_personalities():
+            if bp["name"] == name_or_path:
+                return bp["content"]
+    except Exception:
+        pass
+
     # Fall back to default
     return DEFAULT_PERSONALITY
 

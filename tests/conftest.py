@@ -69,3 +69,17 @@ def personalities_dir(isolated_data_dir):
     d = isolated_data_dir / "personalities"
     d.mkdir(exist_ok=True)
     return d
+
+
+@pytest.fixture
+def mock_llm(monkeypatch):
+    """Mock LLM responder for integration tests.
+
+    Patches httpx.post so the real chat() tool loop in radar/llm.py
+    executes but responses are scripted via add_response().
+    """
+    from tests.mock_llm import MockLLMResponder
+
+    responder = MockLLMResponder()
+    monkeypatch.setattr("httpx.post", responder.mock_post)
+    return responder

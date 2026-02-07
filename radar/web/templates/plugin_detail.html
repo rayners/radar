@@ -51,9 +51,11 @@
             <span>{{ plugin.author }}</span>
 
             <span class="text-muted">Trust Level:</span>
-            <span style="color: {{ 'var(--phosphor)' if plugin.trust_level == 'trusted' else 'var(--amber)' }};">
-                {{ plugin.trust_level }}
-            </span>
+            {% if plugin.trust_level == 'local' %}
+            <span style="color: var(--amber); font-weight: 600;">local (full Python access)</span>
+            {% else %}
+            <span class="text-muted">sandbox (restricted)</span>
+            {% endif %}
 
             <span class="text-muted">Status:</span>
             <span class="{{ 'text-phosphor' if plugin.enabled else 'text-muted' }}">
@@ -67,6 +69,31 @@
         </div>
     </div>
 </div>
+
+<!-- Tools -->
+{% if plugin_tools %}
+<div class="card mb-lg">
+    <div class="card__header">
+        <span class="card__title">Registered Tools ({{ plugin_tools | length }})</span>
+    </div>
+    <div class="card__body">
+        {% for t in plugin_tools %}
+        <div style="padding: var(--space-sm) 0; {% if not loop.last %}border-bottom: 1px solid var(--border);{% endif %}">
+            <div class="text-phosphor" style="font-weight: 600;">{{ t.name }}</div>
+            <div class="text-muted" style="font-size: 0.85rem;">{{ t.description or 'No description' }}</div>
+            {% if t.parameters %}
+            <div style="font-size: 0.75rem; margin-top: 4px;">
+                <span class="text-muted">Parameters:</span>
+                {% for pname, pinfo in t.parameters.items() %}
+                <code style="color: var(--amber); margin-left: 4px;">{{ pname }}</code>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 
 <!-- Code -->
 <div class="card mb-lg">

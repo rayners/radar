@@ -106,11 +106,19 @@
         </div>
         <div class="card__body">
             <p class="text-muted" style="font-size: 0.85rem;">{{ p.description or 'No description' }}</p>
-            <div style="margin-top: var(--space-sm); font-size: 0.75rem;">
-                <span class="text-muted">Trust:</span>
-                <span style="color: {{ 'var(--phosphor)' if p.trust_level == 'trusted' else 'var(--amber)' }};">
-                    {{ p.trust_level }}
-                </span>
+            <div style="margin-top: var(--space-sm); font-size: 0.75rem; display: flex; gap: var(--space-md);">
+                <div>
+                    <span class="text-muted">Trust:</span>
+                    {% if p.trust_level == 'local' %}
+                    <span style="color: var(--amber); font-weight: 600;">local</span>
+                    {% else %}
+                    <span class="text-muted">sandbox</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <span class="text-muted">Tools:</span>
+                    <span>{{ p.tool_count | default(1) }}</span>
+                </div>
             </div>
         </div>
     </div>

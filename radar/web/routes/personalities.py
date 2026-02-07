@@ -76,6 +76,24 @@ async def personalities(request: Request):
             "is_active": name == config.personality,
         })
 
+    # Add plugin bundled personalities
+    try:
+        from radar.plugins import get_plugin_loader
+        loader = get_plugin_loader()
+        for bp in loader.get_bundled_personalities():
+            info = _extract_personality_info(bp["content"])
+            personalities_list.append({
+                "name": bp["name"],
+                "description": info["description"],
+                "model": info.get("model"),
+                "tools_filter": info.get("tools_filter"),
+                "is_active": bp["name"] == config.personality,
+                "source": "plugin",
+                "plugin_name": bp["plugin_name"],
+            })
+    except Exception:
+        pass
+
     context["personalities"] = personalities_list
     context["active_personality"] = config.personality
 
@@ -115,6 +133,27 @@ async def api_personalities_list():
         if info.get("tools_filter"):
             entry["tools_filter"] = info["tools_filter"]
         result.append(entry)
+
+    # Add plugin bundled personalities
+    try:
+        from radar.plugins import get_plugin_loader
+        loader = get_plugin_loader()
+        for bp in loader.get_bundled_personalities():
+            info = _extract_personality_info(bp["content"])
+            entry = {
+                "name": bp["name"],
+                "description": info["description"],
+                "is_active": bp["name"] == config.personality,
+                "source": "plugin",
+                "plugin_name": bp["plugin_name"],
+            }
+            if info.get("model"):
+                entry["model"] = info["model"]
+            if info.get("tools_filter"):
+                entry["tools_filter"] = info["tools_filter"]
+            result.append(entry)
+    except Exception:
+        pass
 
     return {"personalities": result, "active": config.personality}
 
