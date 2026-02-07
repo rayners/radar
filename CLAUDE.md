@@ -52,10 +52,17 @@ RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API
 - `radar/tools/` - Tool modules registered via `@tool` decorator
 - `radar/plugins.py` - Dynamic plugin system for LLM-generated tools
 - `radar/scheduler.py` - APScheduler heartbeat with quiet hours + event queue
+- Heartbeat flow: `_heartbeat_tick()` checks due scheduled tasks → injects them as events via `add_event("scheduled_task", ...)` → also checks calendar reminders → runs `agent.run()` with the compiled event message + active personality context
 - `radar/scheduled_tasks.py` - Scheduled task CRUD (DB in `memory.db`, table `scheduled_tasks`)
 - `radar/watchers.py` - File system monitoring with watchdog
 - `radar/security.py` - Path blocklists and command safety checks
 - `radar/web/` - FastAPI + HTMX web dashboard (mobile responsive)
+
+## Documentation
+
+- `docs/recipes/` — Ready-to-use scenario guides (daily briefing, homelab monitor, research monitor)
+- `docs/scenarios.md` — Capability inventory, scenario tables, and gap analysis
+- When writing docs that reference tools by name (e.g., personality `tools.include` lists), verify against the `@tool(name=...)` decorator in `radar/tools/`
 
 ## Tracking Work
 
