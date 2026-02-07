@@ -1,12 +1,13 @@
 """Tests for radar/plugins/ package — models, validator, runner, versions, loader."""
 
+import logging
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
 
-from radar.plugins.models import Plugin, PluginManifest, TestCase, ToolDefinition, ToolError
+from radar.plugins.models import Plugin, PluginManifest, PromptVariableDefinition, TestCase, ToolDefinition, ToolError
 from radar.plugins.runner import TestRunner
 from radar.plugins.validator import CodeValidator
 from radar.plugins.versions import VersionManager
@@ -107,6 +108,7 @@ class TestPluginManifest:
             "personalities": [],
             "scripts": [],
             "tools": [],
+            "prompt_variables": [],
         }
         m = PluginManifest.from_dict(data)
         assert m.to_dict() == data
@@ -877,6 +879,7 @@ class TestPluginManifestCapabilities:
         assert d["widget"] == {"title": "W"}
         assert d["personalities"] == ["p.md"]
         assert d["scripts"] == ["s.py"]
+        assert d["prompt_variables"] == []
 
     def test_backward_compat_no_capabilities(self):
         m = PluginManifest.from_dict({"name": "old", "version": "0.1"})
@@ -1258,6 +1261,7 @@ class TestMultiToolManifest:
             "tools": [
                 {"name": "upper", "description": "Uppercase", "parameters": {"text": {"type": "string"}}},
             ],
+            "prompt_variables": [],
         }
         m = PluginManifest.from_dict(data)
         assert m.to_dict() == data
@@ -1628,3 +1632,218 @@ class TestBackwardCompatSchemaYaml:
         result = plugin_loader.list_plugins()
         multi = next(p for p in result if p["name"] == "multi_count")
         assert multi["tool_count"] == 2
+
+
+# ===========================================================================
+# 20. PromptVariableDefinition
+# ===========================================================================
+
+
+class TestPromptVariableDefinition:
+    def test_from_dict_full(self):
+        data = {"name": "hostname", "description": "Local machine hostname"}
+        pv = PromptVariableDefinition.from_dict(data)
+        assert pv.name == "hostname"
+        assert pv.description == "Local machine hostname"
+
+    def test_from_dict_defaults(self):
+        pv = PromptVariableDefinition.from_dict({})
+        assert pv.name == ""
+        assert pv.description == ""
+
+    def test_round_trip(self):
+        data = {"name": "os_name", "description": "Operating system name"}
+        pv = PromptVariableDefinition.from_dict(data)
+        assert pv.to_dict() == data
+
+    def test_manifest_parses_prompt_variables(self):
+        data = {
+            "name": "sys_ctx",
+            "capabilities": ["prompt_variables"],
+            "prompt_variables": [
+                {"name": "hostname", "description": "Host"},
+                {"name": "os_name", "description": "OS"},
+            ],
+        }
+        m = PluginManifest.from_dict(data)
+        assert len(m.prompt_variables) == 2
+        assert m.prompt_variables[0].name == "hostname"
+        assert m.prompt_variables[1].name == "os_name"
+
+    def test_empty_prompt_variables_defaults_to_empty_list(self):
+        m = PluginManifest.from_dict({"name": "test"})
+        assert m.prompt_variables == []
+
+    def test_manifest_prompt_variables_round_trip(self):
+        data = {
+            "name": "test",
+            "version": "1.0.0",
+            "description": "",
+            "author": "unknown",
+            "trust_level": "sandbox",
+            "permissions": [],
+            "created_at": "",
+            "updated_at": "",
+            "capabilities": ["prompt_variables"],
+            "widget": None,
+            "personalities": [],
+            "scripts": [],
+            "tools": [],
+            "prompt_variables": [
+                {"name": "hostname", "description": "Host"},
+            ],
+        }
+        m = PluginManifest.from_dict(data)
+        assert m.to_dict() == data
+
+
+# ===========================================================================
+# 21. Prompt Variable Values (Loader)
+# ===========================================================================
+
+
+def _make_prompt_var_plugin(
+    loader,
+    name="sys_ctx",
+    *,
+    trust_level="sandbox",
+    code='def hostname():\n    return "test-host"\n\ndef os_name():\n    return "Linux"',
+    prompt_variables=None,
+    capabilities=None,
+    include_tool_capability=False,
+):
+    """Create an enabled plugin with prompt_variables capability."""
+    d = loader.available_dir / name
+    d.mkdir(parents=True, exist_ok=True)
+
+    if prompt_variables is None:
+        prompt_variables = [
+            {"name": "hostname", "description": "Local hostname"},
+            {"name": "os_name", "description": "OS name"},
+        ]
+    if capabilities is None:
+        capabilities = ["prompt_variables"]
+        if include_tool_capability:
+            capabilities.append("tool")
+
+    manifest = {
+        "name": name,
+        "version": "1.0.0",
+        "description": "Prompt var plugin",
+        "author": "test",
+        "trust_level": trust_level,
+        "capabilities": capabilities,
+        "prompt_variables": prompt_variables,
+    }
+    (d / "manifest.yaml").write_text(yaml.dump(manifest))
+    (d / "tool.py").write_text(code)
+
+    # Enable via symlink
+    (loader.enabled_dir / name).symlink_to(d)
+    return d
+
+
+class TestGetPromptVariableValues:
+    def test_returns_values_from_sandbox_plugin(self, plugin_loader):
+        _make_prompt_var_plugin(plugin_loader)
+        values = plugin_loader.get_prompt_variable_values()
+        assert values["hostname"] == "test-host"
+        assert values["os_name"] == "Linux"
+
+    def test_returns_values_from_local_trust_plugin(self, plugin_loader):
+        code = (
+            'import platform\n'
+            'def hostname():\n'
+            '    return "local-host"\n'
+            'def os_name():\n'
+            '    return platform.system()\n'
+        )
+        _make_prompt_var_plugin(
+            plugin_loader, "local_ctx", trust_level="local", code=code,
+        )
+        values = plugin_loader.get_prompt_variable_values()
+        assert values["hostname"] == "local-host"
+        assert "os_name" in values  # platform.system() returns something
+
+    def test_skips_plugins_without_prompt_variables_capability(self, plugin_loader):
+        # Plugin with only "tool" capability
+        _make_plugin_dir(plugin_loader.available_dir, "plain_tool")
+        (plugin_loader.enabled_dir / "plain_tool").symlink_to(
+            plugin_loader.available_dir / "plain_tool"
+        )
+        values = plugin_loader.get_prompt_variable_values()
+        assert values == {}
+
+    def test_logs_warning_on_function_error(self, plugin_loader, caplog):
+        code = 'def hostname():\n    return 1/0\n'
+        _make_prompt_var_plugin(
+            plugin_loader, "bad_func",
+            code=code,
+            prompt_variables=[{"name": "hostname", "description": "Host"}],
+        )
+        with caplog.at_level(logging.WARNING, logger="radar.plugins"):
+            values = plugin_loader.get_prompt_variable_values()
+        assert "hostname" not in values
+        assert "raised an error" in caplog.text
+
+    def test_warns_when_declared_function_not_found(self, plugin_loader, caplog):
+        code = 'def other_func():\n    return "hi"\n'
+        _make_prompt_var_plugin(
+            plugin_loader, "missing_func",
+            code=code,
+            prompt_variables=[{"name": "hostname", "description": "Host"}],
+        )
+        with caplog.at_level(logging.WARNING, logger="radar.plugins"):
+            values = plugin_loader.get_prompt_variable_values()
+        assert "hostname" not in values
+        assert "no matching function found" in caplog.text
+
+    def test_plugin_with_both_tools_and_prompt_variables(self, plugin_loader):
+        code = (
+            'def greet(name):\n'
+            '    return f"Hello, {name}!"\n'
+            'def hostname():\n'
+            '    return "dual-host"\n'
+        )
+        d = plugin_loader.available_dir / "dual"
+        d.mkdir(parents=True, exist_ok=True)
+        manifest = {
+            "name": "dual",
+            "version": "1.0.0",
+            "trust_level": "sandbox",
+            "capabilities": ["tool", "prompt_variables"],
+            "prompt_variables": [{"name": "hostname", "description": "Host"}],
+            "tools": [{"name": "greet", "description": "Greet", "parameters": {"name": {"type": "string"}}}],
+        }
+        (d / "manifest.yaml").write_text(yaml.dump(manifest))
+        (d / "tool.py").write_text(code)
+        (plugin_loader.enabled_dir / "dual").symlink_to(d)
+
+        values = plugin_loader.get_prompt_variable_values()
+        assert values["hostname"] == "dual-host"
+
+
+# ===========================================================================
+# 22. Register Plugin Guard (prompt_variables-only)
+# ===========================================================================
+
+
+class TestRegisterPluginGuard:
+    def test_prompt_variables_only_skips_tool_registration(self, plugin_loader):
+        """Plugin with only prompt_variables capability doesn't attempt tool registration."""
+        code = 'def hostname():\n    return "test"\n'
+        _make_prompt_var_plugin(plugin_loader, "pv_only", code=code)
+
+        # _register_plugin should succeed without trying to register tools
+        with patch("radar.tools.register_dynamic_tool") as mock_reg:
+            ok = plugin_loader._register_plugin("pv_only")
+        assert ok is True
+        mock_reg.assert_not_called()
+
+    def test_tool_capability_still_registers(self, plugin_loader):
+        """Plugin with tool capability still registers its tools."""
+        _make_plugin_dir(plugin_loader.available_dir, "with_tool")
+        with patch("radar.tools.register_dynamic_tool", return_value=True) as mock_reg:
+            ok = plugin_loader._register_plugin("with_tool")
+        assert ok is True
+        mock_reg.assert_called_once()

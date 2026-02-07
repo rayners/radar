@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 
 from radar.config import get_data_paths
-from radar.plugins.models import Plugin, PluginManifest, TestCase, ToolDefinition, ToolError
+from radar.plugins.models import Plugin, PluginManifest, PromptVariableDefinition, TestCase, ToolDefinition, ToolError
 from radar.plugins.runner import TestRunner
 from radar.plugins.validator import CodeValidator
 from radar.plugins.versions import VersionManager
@@ -507,6 +507,115 @@ class PluginLoader:
 
         return personalities
 
+    def get_prompt_variable_values(self) -> dict[str, str]:
+        """Get prompt variable values from enabled plugins.
+
+        Called on every prompt build (not cached) so that plugin functions
+        always return fresh, current values.
+
+        Iterates plugins with `prompt_variables` capability, loads their
+        variable functions, calls each one, and returns a flat dict of
+        name -> string value. Errors are logged and skipped.
+        """
+        import logging
+
+        logger = logging.getLogger("radar.plugins")
+        values: dict[str, str] = {}
+
+        # Ensure plugins are loaded
+        if not self._plugins:
+            self.load_all()
+
+        for plugin in self._plugins.values():
+            if "prompt_variables" not in plugin.manifest.capabilities:
+                continue
+            if not plugin.manifest.prompt_variables:
+                continue
+
+            funcs = self._load_prompt_variable_functions(plugin)
+            for pv_def in plugin.manifest.prompt_variables:
+                func = funcs.get(pv_def.name)
+                if func is None:
+                    logger.warning(
+                        "Plugin '%s' declares prompt variable '%s' but "
+                        "no matching function found in tool.py",
+                        plugin.name, pv_def.name,
+                    )
+                    continue
+                try:
+                    result = func()
+                    values[pv_def.name] = str(result)
+                except Exception:
+                    logger.warning(
+                        "Plugin '%s' prompt variable '%s' raised an error",
+                        plugin.name, pv_def.name,
+                        exc_info=True,
+                    )
+
+        return values
+
+    def _load_prompt_variable_functions(self, plugin: Plugin) -> dict:
+        """Load prompt variable callable functions from a plugin.
+
+        Dispatches by trust level (same pattern as tool registration):
+        - sandbox: compile and run in restricted namespace
+        - local: load via importlib
+        """
+        import importlib.util
+        import types
+
+        funcs: dict = {}
+        if not plugin.path:
+            return funcs
+
+        code_file = plugin.path / "tool.py"
+        if not code_file.exists():
+            return funcs
+
+        if plugin.manifest.trust_level == "local":
+            spec = importlib.util.spec_from_file_location(
+                f"radar_plugin_pv_{plugin.name}", code_file
+            )
+            if not spec or not spec.loader:
+                return funcs
+            module = importlib.util.module_from_spec(spec)
+            try:
+                spec.loader.exec_module(module)
+            except Exception:
+                return funcs
+            for pv_def in plugin.manifest.prompt_variables:
+                func = getattr(module, pv_def.name, None)
+                if func and callable(func):
+                    funcs[pv_def.name] = func
+        else:
+            # Sandbox: restricted namespace
+            safe_builtins = {
+                "True": True, "False": False, "None": None,
+                "abs": abs, "all": all, "any": any, "bool": bool, "chr": chr,
+                "dict": dict, "divmod": divmod, "enumerate": enumerate,
+                "filter": filter, "float": float, "format": format,
+                "frozenset": frozenset, "hash": hash, "hex": hex, "int": int,
+                "isinstance": isinstance, "issubclass": issubclass, "iter": iter,
+                "len": len, "list": list, "map": map, "max": max, "min": min,
+                "next": next, "oct": oct, "ord": ord, "pow": pow, "print": print,
+                "range": range, "repr": repr, "reversed": reversed, "round": round,
+                "set": set, "slice": slice, "sorted": sorted, "str": str,
+                "sum": sum, "tuple": tuple, "type": type, "zip": zip,
+            }
+            code = code_file.read_text()
+            namespace: dict = {"__builtins__": safe_builtins}
+            try:
+                compiled = compile(code, str(code_file), "exec")
+                exec(compiled, namespace)  # noqa: S102 — validated plugin code
+            except Exception:
+                return funcs
+            for pv_def in plugin.manifest.prompt_variables:
+                func = namespace.get(pv_def.name)
+                if isinstance(func, types.FunctionType):
+                    funcs[pv_def.name] = func
+
+        return funcs
+
     def _load_plugin_scripts(self, plugin_dir: Path) -> dict:
         """Load helper script modules from plugin's scripts/ directory.
 
@@ -592,17 +701,26 @@ class PluginLoader:
         Dispatches based on trust level:
         - sandbox: exec code in restricted namespace (current behavior)
         - local: importlib load with full Python access
+
+        Plugins without the "tool" capability skip tool registration.
         """
         available_path = self.available_dir / name
-        code_file = available_path / "tool.py"
         manifest_file = available_path / "manifest.yaml"
 
-        if not code_file.exists() or not manifest_file.exists():
+        if not manifest_file.exists():
             return False
 
         with open(manifest_file) as f:
             manifest_data = yaml.safe_load(f) or {}
         manifest = PluginManifest.from_dict(manifest_data)
+
+        # Skip tool registration if plugin doesn't have the "tool" capability
+        if "tool" not in manifest.capabilities:
+            return True
+
+        code_file = available_path / "tool.py"
+        if not code_file.exists():
+            return False
 
         tool_defs = self._get_tool_definitions(available_path, manifest)
 

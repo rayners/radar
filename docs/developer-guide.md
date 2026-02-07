@@ -442,6 +442,7 @@ The `capabilities` field controls what the plugin provides:
 - `tool` -- registers a callable tool (the default)
 - `widget` -- renders a Jinja2 template on the dashboard
 - `personality` -- bundles personality `.md` files
+- `prompt_variables` -- contributes dynamic values to personality templates
 
 ### Step 2: Create a Plugin Manually
 
@@ -781,6 +782,78 @@ radar plugin approve git_tools
 radar plugin list
 # NAME         VERSION  TRUST    TOOLS  STATUS   ENABLED
 # git_tools    1.0.0    local    2      approved yes
+```
+
+### Advanced: Prompt Variables
+
+Plugins with `prompt_variables` capability contribute dynamic values to personality
+templates. This lets plugins inject context into every LLM conversation without
+requiring the user to modify their personality files.
+
+**Manifest with prompt variables:**
+
+```yaml
+# system_context/manifest.yaml
+name: system_context
+version: "1.0.0"
+description: "Adds system context to personality prompts"
+author: rayners
+trust_level: local
+capabilities:
+  - prompt_variables
+prompt_variables:
+  - name: hostname
+    description: "Local machine hostname"
+  - name: os_name
+    description: "Operating system name"
+```
+
+**Code with matching functions:**
+
+```python
+# system_context/tool.py
+import platform
+import socket
+
+def hostname() -> str:
+    return socket.gethostname()
+
+def os_name() -> str:
+    return platform.system()
+```
+
+Each function name must match a `name` in `prompt_variables`. Functions take no
+arguments and return a string. Functions are called on every prompt build (not
+cached at startup), so they always return current values.
+
+**Usage in personality files:**
+
+```markdown
+# My Assistant
+
+You are running on {{ hostname }} ({{ os_name }}).
+Current time: {{ current_time }}
+Today is {{ day_of_week }}, {{ current_date }}.
+```
+
+Built-in variables (`current_time`, `current_date`, `day_of_week`) take
+precedence over plugin variables with the same name. Unknown variables render
+as empty strings.
+
+**Combining with other capabilities:** A plugin can have both `tool` and
+`prompt_variables` capabilities:
+
+```yaml
+capabilities:
+  - tool
+  - prompt_variables
+tools:
+  - name: system_info
+    description: Get system information
+    parameters: {}
+prompt_variables:
+  - name: hostname
+    description: Machine hostname
 ```
 
 ### Plugin Configuration

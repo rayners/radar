@@ -545,7 +545,8 @@ You are a helpful assistant with these characteristics:
 
 Additional context or knowledge to include.
 
-Current time: {current_time}
+Current time: {{ current_time }}
+Today is {{ day_of_week }}, {{ current_date }}.
 ```
 
 **Front matter fields** (all optional):
@@ -557,7 +558,7 @@ Current time: {current_time}
 
 Files without front matter work exactly as before (all tools, global model).
 
-The `{current_time}` placeholder is replaced with the current timestamp. Front matter is stripped before sending to the LLM.
+Personality templates use Jinja2 syntax (`{{ variable }}`). Built-in variables: `current_time`, `current_date`, `day_of_week`. Plugins can contribute additional variables via the `prompt_variables` capability. The legacy `{current_time}` syntax is still supported. Front matter is stripped before sending to the LLM.
 
 #### Example: MASH-Inspired Personalities
 

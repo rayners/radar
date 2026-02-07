@@ -1,7 +1,7 @@
 """Plugin system for dynamic tool creation and management."""
 
 from radar.plugins.loader import PluginLoader
-from radar.plugins.models import Plugin, PluginManifest, TestCase, ToolDefinition, ToolError
+from radar.plugins.models import Plugin, PluginManifest, PromptVariableDefinition, TestCase, ToolDefinition, ToolError
 from radar.plugins.runner import TestRunner
 from radar.plugins.validator import CodeValidator
 from radar.plugins.versions import VersionManager
@@ -20,6 +20,7 @@ def get_plugin_loader() -> PluginLoader:
 __all__ = [
     "Plugin",
     "PluginManifest",
+    "PromptVariableDefinition",
     "TestCase",
     "ToolDefinition",
     "ToolError",

@@ -8,16 +8,16 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (73 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (87 tests), `test_config.py` (40 tests), `test_memory.py` (33 tests), `test_llm.py` (34 tests), `test_agent.py` (19 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (155 tests), `test_scheduler.py` (42 tests), `test_integration.py` (7 tests) — **694 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (73 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (87 tests), `test_config.py` (40 tests), `test_memory.py` (33 tests), `test_llm.py` (34 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (181 tests), `test_scheduler.py` (42 tests), `test_integration.py` (7 tests) — **721 total**.
 
-- [x] **Core agent tests** - personality loading, system prompt building, run/ask orchestration (19 tests)
+- [x] **Core agent tests** - personality loading, system prompt building, Jinja2 template rendering, plugin prompt variables, run/ask orchestration (31 tests)
 - [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, format conversion (34 tests)
 - [x] **Tool framework tests** - registration, execution, parameter validation (31 tests)
 - [x] **Security tests** - path blocklist, command validation, write-only blocks, edge cases (87 tests)
 - [x] **Memory tests** - JSONL operations, display formatting, conversation listing, tool call counting, activity feed (33 tests)
 - [x] **Config tests** - YAML loading, env var overrides, deprecated field migration, DataPaths (40 tests)
 - [x] **Scheduler tests** - heartbeat ticks, quiet hours, event queuing (42 tests)
-- [x] **Plugin tests** - code validation, sandboxed execution, version rollback, manifest capabilities, widgets, personality bundling, helper scripts, multi-tool registration, local trust, plugin install CLI (155 tests across all 5 modules)
+- [x] **Plugin tests** - code validation, sandboxed execution, version rollback, manifest capabilities, widgets, personality bundling, helper scripts, multi-tool registration, local trust, plugin install CLI, prompt variables (181 tests across all 5 modules)
 - [x] **Web route tests** - FastAPI endpoints, HTMX responses, config save, activity API (73 tests across all 9 route modules)
 - [x] **Integration test harness** - full conversation flow with mock LLM (7 tests)
 
@@ -265,10 +265,11 @@ Reducing friction for adding new tools and plugins.
 - [x] **`static_tools` list maintenance** — `_static_tools` set is now derived automatically from the registry during discovery. `is_dynamic_tool()` no longer uses a hardcoded list.
 
 ### Plugin Capabilities & Extensibility
-- [x] **Plugin manifest capabilities** — `capabilities` field supports `["tool", "widget", "personality"]` with backward-compatible defaults
+- [x] **Plugin manifest capabilities** — `capabilities` field supports `["tool", "widget", "personality", "prompt_variables"]` with backward-compatible defaults
 - [x] **Dashboard widgets** — Plugins with `widget` capability render Jinja2 templates on the dashboard with auto-refresh
 - [x] **Personality bundling** — Plugins can bundle personality `.md` files in `personalities/` subdirectory
 - [x] **Helper script modules** — Plugins can include validated helper scripts in `scripts/` subdirectory
+- [x] **Prompt variables** — Plugins with `prompt_variables` capability contribute dynamic values to personality templates via Jinja2 `{{ variable }}` syntax
 
 ### Plugin Distribution & Trust
 - [x] **Multi-tool plugins** — Single plugin can register multiple tools via `tools` list in manifest. Backward compatible with single-tool `schema.yaml` fallback.

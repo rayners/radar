@@ -609,7 +609,8 @@ Present numerical data in tables when possible.
 
 ## Context
 
-Current time: {current_time}
+Current time: {{ current_time }}
+Today is {{ day_of_week }}, {{ current_date }}.
 ```
 
 **Front matter fields** (all optional):
@@ -623,7 +624,19 @@ Current time: {current_time}
 
 `tools.include` and `tools.exclude` are mutually exclusive. Files without front matter use all tools and the global model.
 
-The `{current_time}` placeholder is automatically replaced with the current timestamp.
+### Prompt Variables
+
+Personality files use Jinja2 template syntax (`{{ variable_name }}`) for dynamic values. The following built-in variables are always available:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `current_time` | Current timestamp | `2025-01-15 10:00:00` |
+| `current_date` | Current date | `2025-01-15` |
+| `day_of_week` | Day of the week | `Wednesday` |
+
+Plugins can contribute additional variables via the `prompt_variables` capability. For example, a plugin could provide `{{ hostname }}` or `{{ os_name }}`. Plugin variable functions are called fresh on every prompt build, so they always return current values. Unknown variables render as empty strings (no errors).
+
+The legacy `{current_time}` syntax is still supported for backward compatibility.
 
 ### Example: MASH-Inspired Personalities
 

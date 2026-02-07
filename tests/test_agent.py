@@ -9,6 +9,7 @@ from radar.agent import (
     DEFAULT_PERSONALITY,
     PersonalityConfig,
     _build_system_prompt,
+    _render_personality_template,
     ask,
     load_personality,
     run,
@@ -229,3 +230,160 @@ class TestAsk:
         assert call_kwargs["model_override"] == "gpt-4o"
         assert call_kwargs["tools_exclude"] == ["exec"]
         assert call_kwargs["fallback_model_override"] == "gpt-3.5"
+
+
+class TestRenderPersonalityTemplate:
+    """_render_personality_template renders Jinja2 templates safely."""
+
+    def test_jinja2_current_time_renders(self):
+        result = _render_personality_template(
+            "Time: {{ current_time }}", {"current_time": "2025-01-15 10:00:00"}
+        )
+        assert result == "Time: 2025-01-15 10:00:00"
+
+    def test_all_builtin_variables_render(self):
+        context = {
+            "current_time": "2025-01-15 10:00:00",
+            "current_date": "2025-01-15",
+            "day_of_week": "Wednesday",
+        }
+        template = "{{ current_time }} | {{ current_date }} | {{ day_of_week }}"
+        result = _render_personality_template(template, context)
+        assert result == "2025-01-15 10:00:00 | 2025-01-15 | Wednesday"
+
+    def test_undefined_variable_renders_empty(self):
+        result = _render_personality_template(
+            "Hello {{ undefined_var }}!", {"current_time": "now"}
+        )
+        assert result == "Hello !"
+
+    def test_plugin_variable_renders(self):
+        result = _render_personality_template(
+            "Host: {{ hostname }}", {"hostname": "my-machine"}
+        )
+        assert result == "Host: my-machine"
+
+    def test_mixed_known_and_unknown(self):
+        result = _render_personality_template(
+            "{{ current_time }} on {{ hostname }} ({{ missing }})",
+            {"current_time": "now", "hostname": "box"},
+        )
+        assert result == "now on box ()"
+
+    def test_plain_text_passes_through(self):
+        result = _render_personality_template("No variables here.", {})
+        assert result == "No variables here."
+
+
+class TestBuildSystemPromptJinja2:
+    """_build_system_prompt integration with Jinja2 rendering and plugin variables."""
+
+    @patch("radar.agent.get_config")
+    def test_jinja2_current_time_replaced(self, mock_config, personalities_dir):
+        mock_config.return_value = MagicMock(personality="default")
+        (personalities_dir / "default.md").write_text(
+            "Time: {{ current_time }}"
+        )
+        with patch("radar.semantic.search_memories", side_effect=Exception):
+            prompt, _ = _build_system_prompt()
+        assert "{{ current_time }}" not in prompt
+        assert "202" in prompt
+
+    @patch("radar.agent.get_config")
+    def test_current_date_and_day_of_week(self, mock_config, personalities_dir):
+        mock_config.return_value = MagicMock(personality="default")
+        (personalities_dir / "default.md").write_text(
+            "Date: {{ current_date }}, Day: {{ day_of_week }}"
+        )
+        with patch("radar.semantic.search_memories", side_effect=Exception):
+            prompt, _ = _build_system_prompt()
+        assert "{{ current_date }}" not in prompt
+        assert "{{ day_of_week }}" not in prompt
+        # Should contain a date-like string and a day name
+        assert "202" in prompt
+
+    @patch("radar.agent.get_config")
+    def test_plugin_variables_appear_in_prompt(self, mock_config, personalities_dir):
+        mock_config.return_value = MagicMock(personality="default")
+        (personalities_dir / "default.md").write_text(
+            "Host: {{ hostname }}"
+        )
+        mock_loader = MagicMock()
+        mock_loader.get_prompt_variable_values.return_value = {"hostname": "test-box"}
+        with (
+            patch("radar.semantic.search_memories", side_effect=Exception),
+            patch("radar.plugins.get_plugin_loader", return_value=mock_loader),
+        ):
+            prompt, _ = _build_system_prompt()
+        assert "Host: test-box" in prompt
+
+    @patch("radar.agent.get_config")
+    def test_plugin_loader_failure_is_silent(self, mock_config, personalities_dir):
+        mock_config.return_value = MagicMock(personality="default")
+        (personalities_dir / "default.md").write_text(
+            "Time: {{ current_time }}"
+        )
+        with (
+            patch("radar.semantic.search_memories", side_effect=Exception),
+            patch("radar.plugins.get_plugin_loader", side_effect=Exception("broken")),
+        ):
+            prompt, _ = _build_system_prompt()
+        # Should still render with built-in variables
+        assert "202" in prompt
+
+    @patch("radar.agent.get_config")
+    def test_builtin_vars_take_precedence_over_plugin(self, mock_config, personalities_dir):
+        mock_config.return_value = MagicMock(personality="default")
+        (personalities_dir / "default.md").write_text(
+            "{{ current_time }}"
+        )
+        mock_loader = MagicMock()
+        # Plugin tries to override current_time
+        mock_loader.get_prompt_variable_values.return_value = {"current_time": "HACKED"}
+        with (
+            patch("radar.semantic.search_memories", side_effect=Exception),
+            patch("radar.plugins.get_plugin_loader", return_value=mock_loader),
+        ):
+            prompt, _ = _build_system_prompt()
+        assert "HACKED" not in prompt
+        assert "202" in prompt
+
+    @patch("radar.agent.get_config")
+    def test_legacy_braces_still_work(self, mock_config, personalities_dir):
+        mock_config.return_value = MagicMock(personality="default")
+        (personalities_dir / "default.md").write_text(
+            "Time: {current_time}"
+        )
+        with patch("radar.semantic.search_memories", side_effect=Exception):
+            prompt, _ = _build_system_prompt()
+        assert "{current_time}" not in prompt
+        assert "202" in prompt
+
+    @patch("radar.agent.get_config")
+    def test_plugin_variables_evaluated_each_call(self, mock_config, personalities_dir):
+        """Plugin variable functions are called on every prompt build, not cached."""
+        mock_config.return_value = MagicMock(personality="default")
+        (personalities_dir / "default.md").write_text("Counter: {{ counter }}")
+
+        call_count = 0
+
+        def incrementing_counter():
+            nonlocal call_count
+            call_count += 1
+            return str(call_count)
+
+        mock_loader = MagicMock()
+        mock_loader.get_prompt_variable_values.side_effect = [
+            {"counter": incrementing_counter()},
+            {"counter": incrementing_counter()},
+        ]
+        with (
+            patch("radar.semantic.search_memories", side_effect=Exception),
+            patch("radar.plugins.get_plugin_loader", return_value=mock_loader),
+        ):
+            prompt1, _ = _build_system_prompt()
+            prompt2, _ = _build_system_prompt()
+
+        assert "Counter: 1" in prompt1
+        assert "Counter: 2" in prompt2
+        assert mock_loader.get_prompt_variable_values.call_count == 2

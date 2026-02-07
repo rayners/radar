@@ -101,7 +101,7 @@ When given a task, execute it using your available tools. If you need multiple s
 
 If you discover something noteworthy during a task, flag it. If you're unsure about a destructive action, ask for confirmation.
 
-Current time: {current_time}
+Current time: {{ current_time }}
 """
 
 
@@ -167,6 +167,26 @@ def _load_personality_config(name_or_path: str) -> PersonalityConfig:
     return parse_personality(raw)
 
 
+def _render_personality_template(template_str: str, context: dict) -> str:
+    """Render a personality template string with Jinja2.
+
+    Uses SandboxedEnvironment for safety. Undefined variables render as
+    empty strings (no errors for missing variables).
+
+    Args:
+        template_str: Jinja2 template string.
+        context: Dict of variable name -> value.
+
+    Returns:
+        Rendered string.
+    """
+    import jinja2.sandbox
+
+    env = jinja2.sandbox.SandboxedEnvironment(undefined=jinja2.Undefined)
+    template = env.from_string(template_str)
+    return template.render(**context)
+
+
 def _build_system_prompt(
     personality_override: str | None = None,
 ) -> tuple[str, PersonalityConfig]:
@@ -186,9 +206,27 @@ def _build_system_prompt(
     # Load and parse personality file (falls back to DEFAULT_PERSONALITY if not found)
     pc = _load_personality_config(personality_name)
 
-    # Format with current time — use the parsed content (front matter stripped)
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    prompt = pc.content.replace("{current_time}", current_time)
+    # Build template context with built-in variables
+    now = datetime.now()
+    context = {
+        "current_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "current_date": now.strftime("%Y-%m-%d"),
+        "day_of_week": now.strftime("%A"),
+    }
+
+    # Collect plugin prompt variables (do not override built-ins)
+    try:
+        from radar.plugins import get_plugin_loader
+        plugin_vars = get_plugin_loader().get_prompt_variable_values()
+        for key, value in plugin_vars.items():
+            if key not in context:
+                context[key] = value
+    except Exception:
+        pass  # Plugin loader not available or failed
+
+    # Render template — also supports legacy {current_time} syntax
+    prompt = pc.content.replace("{current_time}", context["current_time"])
+    prompt = _render_personality_template(prompt, context)
 
     # Inject personality notes from semantic memory
     try:

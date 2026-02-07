@@ -33,6 +33,29 @@ class ToolDefinition:
 
 
 @dataclass
+class PromptVariableDefinition:
+    """A prompt variable definition within a plugin."""
+
+    name: str
+    description: str = ""
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "PromptVariableDefinition":
+        """Create prompt variable definition from dictionary."""
+        return cls(
+            name=data.get("name", ""),
+            description=data.get("description", ""),
+        )
+
+    def to_dict(self) -> dict:
+        """Convert to dictionary."""
+        return {
+            "name": self.name,
+            "description": self.description,
+        }
+
+
+@dataclass
 class PluginManifest:
     """Plugin manifest describing a tool."""
 
@@ -49,12 +72,15 @@ class PluginManifest:
     personalities: list[str] = field(default_factory=list)  # filenames
     scripts: list[str] = field(default_factory=list)  # filenames
     tools: list[ToolDefinition] = field(default_factory=list)
+    prompt_variables: list[PromptVariableDefinition] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, data: dict) -> "PluginManifest":
         """Create manifest from dictionary."""
         tools_data = data.get("tools", [])
         tools = [ToolDefinition.from_dict(t) for t in tools_data]
+        pv_data = data.get("prompt_variables", [])
+        prompt_variables = [PromptVariableDefinition.from_dict(pv) for pv in pv_data]
         return cls(
             name=data.get("name", "unknown"),
             version=data.get("version", "1.0.0"),
@@ -69,6 +95,7 @@ class PluginManifest:
             personalities=data.get("personalities", []),
             scripts=data.get("scripts", []),
             tools=tools,
+            prompt_variables=prompt_variables,
         )
 
     def to_dict(self) -> dict:
@@ -87,6 +114,7 @@ class PluginManifest:
             "personalities": self.personalities,
             "scripts": self.scripts,
             "tools": [t.to_dict() for t in self.tools],
+            "prompt_variables": [pv.to_dict() for pv in self.prompt_variables],
         }
 
 
