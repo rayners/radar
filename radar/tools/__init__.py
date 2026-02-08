@@ -12,6 +12,12 @@ _registry: dict[str, tuple[Callable, dict]] = {}
 _static_tools: set[str] = set()
 _external_tools: set[str] = set()
 
+# External tool source tracking for hot-reload
+# file_path (str) -> set of tool names registered by that file
+_external_tool_sources: dict[str, set[str]] = {}
+# file_path (str) -> mtime at last load
+_external_tool_mtimes: dict[str, float] = {}
+
 # Plugin name -> set of tool names registered by that plugin
 _plugin_tools: dict[str, set[str]] = {}
 
@@ -349,6 +355,21 @@ def _discover_tools() -> set[str]:
     return set(_registry.keys()) - snapshot
 
 
+def _load_external_file(file: Path) -> set[str]:
+    """Load a single external tool file and return the set of tool names it registered."""
+    import importlib.util
+
+    snapshot = set(_registry.keys())
+    spec = importlib.util.spec_from_file_location(
+        f"radar_external_tools.{file.stem}", file
+    )
+    if spec and spec.loader:
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+    new_tools = set(_registry.keys()) - snapshot
+    return new_tools
+
+
 def load_external_tools(directories: list[str | Path]) -> list[str]:
     """Load tool modules from external directories.
 
@@ -358,8 +379,6 @@ def load_external_tools(directories: list[str | Path]) -> list[str]:
     Returns:
         List of module stems that were loaded.
     """
-    import importlib.util
-
     loaded = []
     for dir_path in directories:
         path = Path(dir_path).expanduser()
@@ -368,13 +387,14 @@ def load_external_tools(directories: list[str | Path]) -> list[str]:
         for file in sorted(path.glob("*.py")):
             if file.name.startswith("_"):
                 continue
-            spec = importlib.util.spec_from_file_location(
-                f"radar_external_tools.{file.stem}", file
-            )
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                loaded.append(file.stem)
+            new_tools = _load_external_file(file)
+            file_key = str(file)
+            _external_tool_sources[file_key] = new_tools
+            try:
+                _external_tool_mtimes[file_key] = file.stat().st_mtime
+            except OSError:
+                pass
+            loaded.append(file.stem)
     return loaded
 
 
@@ -405,6 +425,71 @@ def ensure_external_tools_loaded() -> None:
         pass
 
 
+def reload_external_tools() -> dict[str, list[str]]:
+    """Reload external tools, adding new ones and removing stale ones.
+
+    Returns dict with keys: added, removed, reloaded (lists of tool names).
+    """
+    from radar.config import get_config, get_data_paths
+
+    config = get_config()
+    paths = get_data_paths()
+    dirs = [paths.tools] + [Path(d).expanduser() for d in config.tools.extra_dirs]
+
+    # Discover what's currently on disk
+    current_files: dict[str, Path] = {}  # file_key -> Path
+    for dir_path in dirs:
+        if not dir_path.is_dir():
+            continue
+        for f in sorted(dir_path.glob("*.py")):
+            if f.name.startswith("_"):
+                continue
+            current_files[str(f)] = f
+
+    added: list[str] = []
+    removed: list[str] = []
+    reloaded: list[str] = []
+
+    # Remove tools from files that no longer exist on disk
+    stale_keys = set(_external_tool_sources.keys()) - set(current_files.keys())
+    for file_key in stale_keys:
+        tool_names = _external_tool_sources.pop(file_key, set())
+        _external_tool_mtimes.pop(file_key, None)
+        for name in tool_names:
+            unregister_tool(name)
+            _external_tools.discard(name)
+            removed.append(name)
+
+    # Process current files: add new, reload changed, skip unchanged
+    for file_key, file_path in current_files.items():
+        try:
+            current_mtime = file_path.stat().st_mtime
+        except OSError:
+            continue
+
+        if file_key not in _external_tool_sources:
+            # New file — load it
+            new_tools = _load_external_file(file_path)
+            _external_tool_sources[file_key] = new_tools
+            _external_tool_mtimes[file_key] = current_mtime
+            _external_tools.update(new_tools)
+            added.extend(new_tools)
+        elif current_mtime != _external_tool_mtimes.get(file_key):
+            # Changed file — unregister old tools, re-import
+            old_tools = _external_tool_sources.get(file_key, set())
+            for name in old_tools:
+                unregister_tool(name)
+                _external_tools.discard(name)
+            new_tools = _load_external_file(file_path)
+            _external_tool_sources[file_key] = new_tools
+            _external_tool_mtimes[file_key] = current_mtime
+            _external_tools.update(new_tools)
+            reloaded.extend(new_tools)
+        # else: unchanged — skip
+
+    return {"added": added, "removed": removed, "reloaded": reloaded}
+
+
 # Auto-discover built-in tool modules at import time
 _static_tools = _discover_tools()
 
@@ -422,4 +507,5 @@ __all__ = [
     "is_dynamic_tool",
     "load_external_tools",
     "ensure_external_tools_loaded",
+    "reload_external_tools",
 ]

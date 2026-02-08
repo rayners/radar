@@ -40,6 +40,7 @@ __all__ = [
     # Singleton
     "get_config",
     "reload_config",
+    "config_file_changed",
 ]
 
 
@@ -47,6 +48,34 @@ __all__ = [
 # tests doing `radar.config._config = None` and `patch("radar.config.get_config")`
 # target the correct module object.
 _config: Config | None = None
+_config_mtime: float | None = None
+
+
+def _stamp_config_mtime() -> None:
+    """Record the current config file's mtime."""
+    global _config_mtime
+    path = get_config_path()
+    if path is not None:
+        try:
+            _config_mtime = path.stat().st_mtime
+        except OSError:
+            pass
+
+
+def config_file_changed() -> bool:
+    """Check if the config file has been modified since last load."""
+    global _config_mtime
+    path = get_config_path()
+    if path is None:
+        return False
+    try:
+        current_mtime = path.stat().st_mtime
+    except OSError:
+        return False
+    if _config_mtime is None:
+        _config_mtime = current_mtime
+        return False
+    return current_mtime != _config_mtime
 
 
 def get_config() -> Config:
@@ -54,6 +83,7 @@ def get_config() -> Config:
     global _config
     if _config is None:
         _config = load_config()
+        _stamp_config_mtime()
     return _config
 
 
@@ -61,4 +91,5 @@ def reload_config() -> Config:
     """Reload configuration from file."""
     global _config
     _config = load_config()
+    _stamp_config_mtime()
     return _config

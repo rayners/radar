@@ -65,6 +65,33 @@ def _log_heartbeat(message: str, **extra) -> None:
         pass
 
 
+def _check_config_reload() -> None:
+    """Reload config, hooks, and external tools if the config file changed."""
+    from radar.config import config_file_changed, reload_config
+
+    if not config_file_changed():
+        return
+
+    _log_heartbeat("Config file changed, reloading")
+    reload_config()
+
+    # Reload hooks (clear config-sourced, re-register from new config)
+    from radar.hooks import unregister_hooks_by_source
+    from radar.hooks_builtin import load_config_hooks
+    removed = unregister_hooks_by_source("config")
+    added = load_config_hooks()
+    _log_heartbeat(f"Hooks reloaded: {removed} removed, {added} added")
+
+    # Reload external tools
+    from radar.tools import reload_external_tools
+    result = reload_external_tools()
+    if any(result.values()):
+        _log_heartbeat(
+            f"External tools reloaded: {len(result['added'])} added, "
+            f"{len(result['removed'])} removed, {len(result['reloaded'])} reloaded"
+        )
+
+
 def _heartbeat_tick() -> None:
     """Execute a heartbeat tick."""
     global _last_heartbeat, _event_queue
@@ -72,6 +99,12 @@ def _heartbeat_tick() -> None:
     if _is_quiet_hours():
         _log_heartbeat("Heartbeat skipped (quiet hours)")
         return
+
+    # --- Config hot-reload ---
+    try:
+        _check_config_reload()
+    except Exception as e:
+        _log_heartbeat("Config reload error", error=str(e))
 
     # --- PRE hook ---
     try:

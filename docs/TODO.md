@@ -105,7 +105,7 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 
 ### Configuration
 - [ ] Pydantic validation for config schema
-- [ ] Config hot-reload via file watcher
+- [x] Config hot-reload via file watcher — mtime check at each heartbeat reloads config, hooks, and external tools
 - [ ] Configuration migration for version upgrades
 - [ ] Config documentation generator
 
