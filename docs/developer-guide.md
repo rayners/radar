@@ -80,6 +80,8 @@ radar/
     │   ├── logs.py
     │   ├── personalities.py
     │   ├── plugins.py
+    │   ├── summaries.py
+    │   ├── documents.py
     │   ├── auth.py
     │   └── health.py
     ├── static/         # CSS, JS

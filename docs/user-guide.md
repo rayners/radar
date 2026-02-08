@@ -232,6 +232,31 @@ skills:
     # - ~/Code/my-skill
     # - ~/skills
 
+# Hook system (see Hook System section)
+hooks:
+  enabled: true
+  # rules: []                   # Hook rules (see Hook System section)
+
+# URL monitor settings (see URL Monitors section)
+# web_monitor:
+#   default_interval_minutes: 60
+#   min_interval_minutes: 5
+#   fetch_timeout: 30
+#   max_error_count: 5
+
+# Conversation summaries (see Conversation Summaries section)
+# summaries:
+#   enabled: true
+#   daily_summary_time: "21:00"
+#   weekly_summary_day: "sun"
+#   monthly_summary_day: 1
+
+# Document indexing (see Document Indexing section)
+# documents:
+#   enabled: true
+#   chunk_size: 800
+#   generate_embeddings: true
+
 # Active personality
 personality: default            # Name of personality file (without .md) or path
 
@@ -516,9 +541,13 @@ When the daemon is running, Radar serves a web dashboard at `http://localhost:84
 - Continue previous conversations (via the History page)
 - Give thumbs up/down feedback on assistant responses (used by personality evolution)
 
-**History** (`/history`) -- Browse past conversations. Each entry shows a preview of the first message and a timestamp. Click a conversation to continue it in the Chat page.
+**History** (`/history`) -- Browse past conversations. Each entry shows a preview of the first message and a timestamp. Click a conversation to continue it in the Chat page. Supports filtering by type, search, and pagination.
 
-**Memory** (`/memory`) -- View all stored semantic memories. Each memory shows its content, source, and creation timestamp. You can delete individual memories from this page.
+**Summaries** (`/summaries`) -- Browse conversation summaries (daily, weekly, monthly). Filter by period type, and manually generate new summaries.
+
+**Documents** (`/documents`) -- Manage document collections for hybrid search. Create collections, trigger indexing, and search across indexed documents.
+
+**Memory** (`/memory`) -- View all stored semantic memories. Each memory shows its content, source, and creation timestamp. You can add or delete individual memories from this page.
 
 **Personalities** (`/personalities`) -- Manage personality files. View, enable, and navigate to the suggestions review page. Links to:
 - **Suggestions** (`/personalities/suggestions`) -- Review and approve or reject pending personality changes proposed by the LLM.

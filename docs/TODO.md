@@ -18,7 +18,7 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 - [x] **Config tests** - YAML loading, env var overrides, deprecated field migration, DataPaths (40 tests)
 - [x] **Scheduler tests** - heartbeat ticks, quiet hours, event queuing (42 tests)
 - [x] **Plugin tests** - code validation, sandboxed execution, version rollback, manifest capabilities, widgets, personality bundling, helper scripts, multi-tool registration, local trust, plugin install CLI, prompt variables (169 tests across all 5 modules)
-- [x] **Web route tests** - FastAPI endpoints, HTMX responses, config save, activity API, history API (81 tests across all 9 route modules)
+- [x] **Web route tests** - FastAPI endpoints, HTMX responses, config save, activity API, history API (81 tests across all 11 route modules)
 - [x] **Integration test harness** - full conversation flow with mock LLM (7 tests)
 
 ---
@@ -344,7 +344,7 @@ Ready-to-use configurations that demonstrate Radar's autonomous capabilities. Se
 ## Priority Suggestions
 
 **High Priority (Foundational):**
-1. ~~Test coverage~~ (done — 914 tests)
+1. ~~Test coverage~~ (done — 1048 tests)
 2. ~~Config save in web UI~~ (done)
 3. ~~Tool auto-discovery~~ (done)
 4. Error handling improvements (still relevant)
