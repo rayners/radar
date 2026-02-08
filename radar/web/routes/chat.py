@@ -20,7 +20,8 @@ async def api_ask(request: Request):
     if not message:
         return HTMLResponse('<div class="text-muted">No message provided</div>')
 
-    response = ask(message)
+    personality = form.get("personality") or None
+    response = ask(message, personality=personality)
 
     return HTMLResponse(
         f"""
@@ -49,7 +50,8 @@ async def api_chat(request: Request):
     if not message:
         return HTMLResponse("")
 
-    response, new_conversation_id = run(message, conversation_id)
+    personality = form.get("personality") or None
+    response, new_conversation_id = run(message, conversation_id, personality=personality)
 
     # Get message index for feedback (count messages in conversation)
     messages = get_messages(new_conversation_id)

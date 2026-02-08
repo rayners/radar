@@ -283,6 +283,53 @@ class TestChatRoutes:
         })
         assert resp.status_code == 400
 
+    @patch("radar.agent.ask", return_value="personality response")
+    def test_api_ask_passes_personality(self, mock_ask, client):
+        resp = client.post("/api/ask", data={"message": "hello", "personality": "creative"})
+        assert resp.status_code == 200
+        mock_ask.assert_called_once_with("hello", personality="creative")
+
+    @patch("radar.agent.ask", return_value="default response")
+    def test_api_ask_no_personality_uses_default(self, mock_ask, client):
+        resp = client.post("/api/ask", data={"message": "hello"})
+        assert resp.status_code == 200
+        mock_ask.assert_called_once_with("hello", personality=None)
+
+    @patch("radar.memory.get_messages", return_value=[{}, {}, {}])
+    @patch("radar.agent.run", return_value=("personality response", "conv-456"))
+    def test_api_chat_passes_personality(self, mock_run, mock_msgs, client):
+        resp = client.post("/api/chat", data={
+            "message": "hi",
+            "personality": "creative",
+        })
+        assert resp.status_code == 200
+        mock_run.assert_called_once_with("hi", None, personality="creative")
+
+    @patch("radar.memory.get_messages", return_value=[{}, {}, {}])
+    @patch("radar.agent.run", return_value=("default response", "conv-789"))
+    def test_api_chat_no_personality_uses_default(self, mock_run, mock_msgs, client):
+        resp = client.post("/api/chat", data={"message": "hi"})
+        assert resp.status_code == 200
+        mock_run.assert_called_once_with("hi", None, personality=None)
+
+
+class TestChatPersonalitySelector:
+    """Tests for personality selector on the chat page."""
+
+    @patch("radar.agent.get_personalities_dir")
+    def test_chat_page_includes_personality_selector(self, mock_dir, tmp_path, client):
+        pdir = tmp_path / "personalities"
+        pdir.mkdir()
+        (pdir / "default.md").write_text("# Default\nA test personality.")
+        (pdir / "creative.md").write_text("# Creative\nA creative personality.")
+        mock_dir.return_value = pdir
+        resp = client.get("/chat")
+        assert resp.status_code == 200
+        assert '<select' in resp.text
+        assert 'personality-select' in resp.text
+        assert 'default' in resp.text
+        assert 'creative' in resp.text
+
 
 # ===== Tasks Routes =====
 

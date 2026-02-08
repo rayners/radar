@@ -540,6 +540,7 @@ When the daemon is running, Radar serves a web dashboard at `http://localhost:84
 - Send messages and see responses with rendered markdown
 - Continue previous conversations (via the History page)
 - Give thumbs up/down feedback on assistant responses (used by personality evolution)
+- Select a personality from the dropdown in the chat header to use for the current conversation (defaults to the globally active personality)
 
 **History** (`/history`) -- Browse past conversations. Each entry shows a preview of the first message and a timestamp. Click a conversation to continue it in the Chat page. Supports filtering by type, search, and pagination.
 

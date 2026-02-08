@@ -12,6 +12,13 @@
                 Session: {{ conversation_id[:8] }}...
             </span>
             {% endif %}
+            <select name="personality" id="personality-select" class="input input--select">
+                {% for p in personalities %}
+                <option value="{{ p.name }}" {% if p.is_active %}selected{% endif %}>
+                    {{ p.name }}
+                </option>
+                {% endfor %}
+            </select>
             <a href="/chat" class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;">
                 New Chat
             </a>
@@ -89,6 +96,7 @@
               hx-swap="beforeend"
               hx-indicator="#chat-indicator">
             <input type="hidden" name="conversation_id" id="conversation-id" value="{{ conversation_id or '' }}">
+            <input type="hidden" name="personality" id="personality-hidden" value="{{ active_personality }}">
             <div class="flex gap-md">
                 <textarea name="message"
                           id="chat-input"
@@ -248,6 +256,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 messages.scrollTop = messages.scrollHeight;
             }, 100);
         }
+    });
+
+    // Sync personality selector with hidden form input
+    document.getElementById('personality-select').addEventListener('change', function() {
+        document.getElementById('personality-hidden').value = this.value;
     });
 
     // Render markdown on page load

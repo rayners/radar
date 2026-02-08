@@ -111,6 +111,9 @@ async def api_activity():
 @router.get("/chat", response_class=HTMLResponse)
 async def chat(request: Request, continue_: str = Query(None, alias="continue")):
     """Chat page."""
+    from radar.agent import get_personalities_dir
+    from radar.config import load_config
+
     context = get_common_context(request, "chat")
     context["conversation_id"] = continue_
     context["messages"] = []
@@ -119,7 +122,46 @@ async def chat(request: Request, continue_: str = Query(None, alias="continue"))
         from radar.memory import get_messages_for_display
         context["messages"] = get_messages_for_display(continue_)
 
+    # Load personality list for selector
+    config = load_config()
+    context["active_personality"] = config.personality
+    context["personalities"] = _get_personality_names(get_personalities_dir(), config)
+
     return templates.TemplateResponse("chat.html", context)
+
+
+def _get_personality_names(personalities_dir, config) -> list[dict]:
+    """Return lightweight list of personality names for the chat selector."""
+    names: list[dict] = []
+    seen: set[str] = set()
+
+    # Flat .md files
+    for pfile in sorted(personalities_dir.glob("*.md")):
+        name = pfile.stem
+        seen.add(name)
+        names.append({"name": name, "is_active": name == config.personality})
+
+    # Directory-based personalities
+    for d in sorted(personalities_dir.iterdir()):
+        if d.is_dir() and (d / "PERSONALITY.md").exists():
+            name = d.name
+            if name not in seen:
+                seen.add(name)
+                names.append({"name": name, "is_active": name == config.personality})
+
+    # Plugin bundled personalities
+    try:
+        from radar.plugins import get_plugin_loader
+        loader = get_plugin_loader()
+        for bp in loader.get_bundled_personalities():
+            name = bp["name"]
+            if name not in seen:
+                seen.add(name)
+                names.append({"name": name, "is_active": name == config.personality})
+    except Exception:
+        pass
+
+    return names
 
 
 @router.get("/history", response_class=HTMLResponse)
