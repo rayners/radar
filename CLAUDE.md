@@ -65,6 +65,22 @@ RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API
 - `radar/security.py` - Path blocklists and command safety checks
 - `radar/web/` - FastAPI + HTMX web dashboard (mobile responsive)
 
+## Claude Code Automations
+
+### Hooks (`.claude/settings.json`)
+
+- **Auto-run tests** (`PostToolUse`): When a source file is edited, `.claude/hooks/run-tests.sh` maps it to the corresponding test file and runs it. Mapping: `radar/<module>.py` → `tests/test_<module>.py`, `radar/web/routes/*` → `test_web_routes.py`, `radar/config/*` → `test_config.py`, `radar/plugins/*` → `test_plugins.py`, `radar/tools/*` → `test_tool_framework.py` + `test_tool_discovery.py`.
+- **Block edits** (`PreToolUse`): `.claude/hooks/block-edits.sh` blocks edits to `.lock` files, `.venv/`, and `__pycache__/`.
+
+### Skills (`.claude/skills/`)
+
+- **`/smart-commit`**: Commits changes and auto-updates test counts in `docs/TODO.md` if stale. Collects per-file counts from pytest, updates the test file listing on line 11 of TODO.md, then commits.
+- **`/new-tool`**: Scaffolds a new radar tool — creates `radar/tools/<name>.py`, `tests/test_<name>.py`, and adds entries to `docs/user-guide.md` and `docs/scenarios.md`.
+
+### Subagents (`.claude/agents/`)
+
+- **`security-reviewer`**: Read-only security review focused on path traversal, command injection, plugin sandbox escapes, web auth, SQL injection, hook system abuse, and memory poisoning.
+
 ## Documentation
 
 - `docs/recipes/` — Ready-to-use scenario guides (daily briefing, homelab monitor, research monitor)
