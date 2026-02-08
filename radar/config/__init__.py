@@ -11,6 +11,7 @@ from .schema import (
     OllamaConfig,
     PersonalityEvolutionConfig,
     PluginsConfig,
+    SkillsConfig,
     ToolsConfig,
     WebConfig,
     WebSearchConfig,
@@ -32,6 +33,7 @@ __all__ = [
     "WebConfig",
     "PluginsConfig",
     "PersonalityEvolutionConfig",
+    "SkillsConfig",
     "WebSearchConfig",
     # Loader
     "load_config",

@@ -13,11 +13,13 @@ plugins, web routes, or contribute to the core codebase.
 4. [Tutorial: Your First Radar Plugin](#tutorial-your-first-radar-plugin)
 5. [Tutorial: Hook System](#tutorial-hook-system)
 6. [Tutorial: User-Local Tools](#tutorial-user-local-tools)
-7. [Adding Config Sections](#adding-config-sections)
-8. [Web Routes](#web-routes)
-9. [Testing Patterns](#testing-patterns)
-10. [Security Considerations](#security-considerations)
-11. [Design Philosophy](#design-philosophy)
+7. [Tutorial: Agent Skills](#tutorial-agent-skills)
+8. [Tutorial: Directory-Based Personalities](#tutorial-directory-based-personalities)
+9. [Adding Config Sections](#adding-config-sections)
+10. [Web Routes](#web-routes)
+11. [Testing Patterns](#testing-patterns)
+12. [Security Considerations](#security-considerations)
+13. [Design Philosophy](#design-philosophy)
 
 ---
 
@@ -51,7 +53,9 @@ radar/
 │   ├── exec.py         # Shell command execution
 │   ├── read_file.py    # File reading
 │   ├── write_file.py   # File writing
+│   ├── skills.py       # use_skill + load_context tools
 │   └── ...             # Add a .py file here and it is auto-discovered
+├── skills.py           # Agent Skills discovery, loading, and prompt building
 ├── hooks.py            # Hook system (pre/post tool call, filter tools)
 ├── hooks_builtin.py    # Config-driven hook builders (block patterns, time restrict, etc.)
 ├── plugins/            # Dynamic plugin system
@@ -1136,6 +1140,206 @@ Files starting with `_` are skipped, just like built-in tools.
 | Loading | At package import time | Lazily on first `get_tools_schema()` call |
 | Tracking | `_static_tools` set | `_external_tools` set |
 | Updates | Requires package reinstall | Edit file and restart |
+
+---
+
+## Tutorial: Agent Skills
+
+Agent Skills are packaged bundles of procedural knowledge following the
+[Agent Skills](https://agentskills.io/) open standard. This tutorial covers
+the internals of how Radar discovers, loads, and activates skills.
+
+### Core Module: `radar/skills.py`
+
+Key types and functions:
+
+- `SkillInfo` dataclass: `name`, `description`, `path`, `license`,
+  `compatibility`, `metadata`
+- `discover_skills()` -- Scan skill directories, parse SKILL.md frontmatter,
+  return cached list of `SkillInfo`
+- `load_skill(name)` -- Load the full SKILL.md body content (frontmatter stripped)
+- `get_skill_resource_path(name, resource)` -- Resolve a resource path within
+  a skill directory (with path traversal protection)
+- `build_skills_prompt_section(skills)` -- Build the `<available_skills>` XML
+  block for the system prompt
+- `invalidate_skills_cache()` -- Clear the cache (called on config hot-reload)
+- `_list_skill_resources(skill)` -- List all files in scripts/, references/,
+  assets/ subdirectories
+
+### Discovery Flow
+
+1. `discover_skills()` checks if skills are enabled via config
+2. Scans default directory (`~/.local/share/radar/skills/`)
+3. Scans additional directories from `config.skills.dirs`
+4. For each directory, looks for `SKILL.md` and parses its YAML frontmatter
+5. Validates: frontmatter exists, `name` field present, name matches directory name
+6. If a configured directory itself contains `SKILL.md` (not just subdirectories),
+   it's treated as a skill
+7. Results are cached until `invalidate_skills_cache()` is called
+
+### Progressive Disclosure
+
+Skills use progressive disclosure to minimize system prompt size:
+
+1. **Startup**: Only frontmatter is parsed (~50-100 tokens per skill)
+2. **System prompt**: An `<available_skills>` XML block lists skill names and
+   descriptions
+3. **Activation**: The LLM calls `use_skill` to load full instructions
+4. **Resources**: The LLM can read scripts/references/assets via existing
+   file tools
+
+### Tools: `radar/tools/skills.py`
+
+Two tools are provided:
+
+- `use_skill(name)` -- Loads and returns a skill's full SKILL.md body plus a
+  list of available resource files. Returns an error with available skill names
+  if the skill is not found.
+- `load_context(name)` -- Loads a context document from the active
+  personality's `context/` directory (see Directory-Based Personalities below).
+
+### System Prompt Integration
+
+In `radar/agent.py`, `_build_system_prompt()` calls `discover_skills()` and
+appends the skills prompt section after the personality template:
+
+```python
+from radar.skills import discover_skills, build_skills_prompt_section
+skills = discover_skills()
+if skills:
+    prompt += "\n\n" + build_skills_prompt_section(skills)
+```
+
+### Config Hot-Reload
+
+When the config file changes, `radar/scheduler.py`'s `_check_config_reload()`
+calls `invalidate_skills_cache()` so skills are re-discovered with updated
+`skills.dirs`.
+
+### Creating a SKILL.md
+
+The frontmatter must include `name` (matching the directory name) and
+`description`. Optional fields: `license`, `compatibility`, `metadata`.
+
+```yaml
+---
+name: my-skill
+description: >-
+  What this skill does and when to use it.
+compatibility: Requirements and prerequisites.
+metadata:
+  author: yourname
+  version: "1.0"
+---
+
+# My Skill
+
+Instructions for the LLM...
+```
+
+### Testing Skills
+
+See `tests/test_skills.py` for patterns. Key fixtures:
+
+- `skills_dir` -- Creates and returns the skills directory within
+  `isolated_data_dir`
+- `clear_skills_cache` -- Autouse fixture that invalidates the skills cache
+  before and after each test
+
+Test patterns:
+
+```python
+def test_discover_skills(skills_dir):
+    _create_skill(skills_dir, "my-skill", "Test skill")
+    skills = discover_skills()
+    assert len(skills) == 1
+    assert skills[0].name == "my-skill"
+
+def test_use_skill_tool(skills_dir):
+    _create_skill(skills_dir, "usable", "Usable skill",
+                  body="# Instructions\n\nDo things.")
+    from radar.tools.skills import use_skill
+    result = use_skill("usable")
+    assert "# Instructions" in result
+```
+
+---
+
+## Tutorial: Directory-Based Personalities
+
+Directory-based personalities extend the flat `.md` format with context
+documents, scripts, and assets. This tutorial covers the implementation details.
+
+### Resolution Order
+
+`load_personality()` in `radar/agent.py` checks in this order:
+
+1. Explicit file path (if the name looks like a path)
+2. `{personalities_dir}/{name}/PERSONALITY.md` (directory-based)
+3. `{personalities_dir}/{name}.md` (flat file)
+4. Plugin-bundled personalities
+5. `DEFAULT_PERSONALITY` fallback
+
+### Context Documents: Progressive Disclosure
+
+Context documents in `context/` use the same progressive disclosure pattern
+as skills:
+
+1. `_get_personality_context_metadata(name)` parses YAML frontmatter from
+   each `context/*.md` file, extracting `(name, description)` pairs
+2. `_build_system_prompt()` injects a `<personality_context>` XML block with
+   just names and descriptions
+3. The LLM calls `load_context(name)` to fetch full content on demand
+4. Full content is returned with frontmatter stripped
+
+Files without frontmatter use their filename (without `.md`) as both name
+and description.
+
+### Scripts and Assets
+
+When a directory personality has `scripts/` or `assets/` subdirectories,
+`load_personality()` appends a "Available Resources" section noting their
+paths. The LLM can then use `read_file` or `exec` to access them.
+
+### CLI Updates
+
+All personality CLI commands handle both formats:
+
+- `personality list` -- Scans for both `*.md` files and directories containing
+  `PERSONALITY.md`. Directory personalities show `(dir)` marker.
+- `personality create --directory` -- Creates a directory personality with
+  `PERSONALITY.md` and `context/` subdirectory.
+- `personality show` -- For directory personalities, also shows context
+  document listings.
+- `personality edit` -- Opens `PERSONALITY.md` for directory personalities.
+
+### Web Route Updates
+
+All personality web routes (`radar/web/routes/personalities.py`) handle both
+formats transparently. The create endpoint supports a `directory: true` form
+parameter. Delete uses `shutil.rmtree` for directory personalities.
+
+### Testing Directory Personalities
+
+See `tests/test_personality_directory.py` for patterns. Key helpers:
+
+```python
+def _create_flat_personality(personalities_dir, name, content=None):
+    """Create a flat .md personality file."""
+
+def _create_dir_personality(personalities_dir, name, content=None,
+                           context_files=None, scripts=None, assets=None):
+    """Create a directory-based personality with optional subdirs."""
+```
+
+For system prompt injection tests, patch at source modules:
+
+```python
+# Correct: patch search_memories at the source module
+with patch("radar.semantic.search_memories", side_effect=Exception("skip")):
+    with patch("radar.skills.discover_skills", return_value=[]):
+        prompt, pc = _build_system_prompt("my-personality")
+```
 
 ---
 

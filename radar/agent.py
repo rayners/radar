@@ -120,6 +120,13 @@ def _ensure_default_personality() -> None:
 def load_personality(name_or_path: str) -> str:
     """Load personality content from file.
 
+    Resolution order:
+    1. Explicit file path → read it
+    2. {personalities_dir}/{name}/PERSONALITY.md → directory-based
+    3. {personalities_dir}/{name}.md → flat file
+    4. Plugin bundled personalities
+    5. DEFAULT_PERSONALITY fallback
+
     Args:
         name_or_path: Either a personality name (looked up in personalities dir)
                       or an explicit path to a personality file.
@@ -135,7 +142,24 @@ def load_personality(name_or_path: str) -> str:
     if path.exists() and path.is_file():
         return path.read_text()
 
-    # Otherwise look in personalities directory
+    # Check for directory-based personality
+    personality_dir = get_personalities_dir() / name_or_path
+    personality_md = personality_dir / "PERSONALITY.md"
+    if personality_dir.is_dir() and personality_md.exists():
+        content = personality_md.read_text()
+        # Note available scripts/assets
+        extras = []
+        scripts_dir = personality_dir / "scripts"
+        assets_dir = personality_dir / "assets"
+        if scripts_dir.is_dir():
+            extras.append(f"Scripts available at: {scripts_dir}")
+        if assets_dir.is_dir():
+            extras.append(f"Assets available at: {assets_dir}")
+        if extras:
+            content += "\n\n## Available Resources\n\n" + "\n".join(f"- {e}" for e in extras)
+        return content
+
+    # Otherwise look in personalities directory (flat file)
     personality_file = get_personalities_dir() / f"{name_or_path}.md"
     if personality_file.exists():
         return personality_file.read_text()
@@ -152,6 +176,46 @@ def load_personality(name_or_path: str) -> str:
 
     # Fall back to default
     return DEFAULT_PERSONALITY
+
+
+def _get_personality_context_metadata(
+    personality_name: str | None = None,
+) -> list[tuple[str, str]] | None:
+    """Get (name, description) pairs for context files in a directory-based personality.
+
+    Returns None if the active personality isn't directory-based or has no context/ dir.
+    """
+    if personality_name is None:
+        personality_name = get_config().personality
+
+    personality_dir = get_personalities_dir() / personality_name
+    context_dir = personality_dir / "context"
+
+    if not personality_dir.is_dir() or not context_dir.is_dir():
+        return None
+
+    results = []
+    for f in sorted(context_dir.glob("*.md")):
+        name = f.stem
+        description = name  # Default: use filename
+
+        # Try to extract description from front matter
+        try:
+            content = f.read_text()
+            if content.startswith("---"):
+                end = content.find("---", 3)
+                if end != -1:
+                    fm_str = content[3:end].strip()
+                    if fm_str:
+                        fm = yaml.safe_load(fm_str)
+                        if isinstance(fm, dict) and isinstance(fm.get("description"), str):
+                            description = fm["description"]
+        except Exception:
+            pass
+
+        results.append((name, description))
+
+    return results if results else None
 
 
 def _load_personality_config(name_or_path: str) -> PersonalityConfig:
@@ -227,6 +291,24 @@ def _build_system_prompt(
     # Render template — also supports legacy {current_time} syntax
     prompt = pc.content.replace("{current_time}", context["current_time"])
     prompt = _render_personality_template(prompt, context)
+
+    # Inject personality context metadata (directory-based personalities)
+    context_meta = _get_personality_context_metadata(personality_name)
+    if context_meta:
+        lines = ["<personality_context>"]
+        for ctx_name, ctx_desc in context_meta:
+            lines.append(f"- {ctx_name}: {ctx_desc}")
+        lines.append("</personality_context>")
+        prompt += "\n\n" + "\n".join(lines)
+
+    # Inject available skills
+    try:
+        from radar.skills import discover_skills, build_skills_prompt_section
+        skills = discover_skills()
+        if skills:
+            prompt += "\n\n" + build_skills_prompt_section(skills)
+    except Exception:
+        pass
 
     # Inject personality notes from semantic memory
     try:

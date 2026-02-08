@@ -50,6 +50,7 @@ RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API
 - `radar/semantic.py` - Embedding client (Ollama, OpenAI, or local sentence-transformers)
 - `radar/config.py` - YAML config with env var overrides
 - `radar/tools/` - Tool modules registered via `@tool` decorator
+- `radar/skills.py` - Agent Skills discovery and progressive disclosure
 - `radar/plugins.py` - Dynamic plugin system for LLM-generated tools
 - `radar/hooks.py` - Hook system for intercepting tool execution and filtering tool lists
 - `radar/hooks_builtin.py` - Config-driven hook builders (block patterns, time restrict, etc.)
@@ -65,6 +66,8 @@ RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API
 - `docs/recipes/` — Ready-to-use scenario guides (daily briefing, homelab monitor, research monitor)
 - `docs/scenarios.md` — Capability inventory, scenario tables, and gap analysis
 - When writing docs that reference tools by name (e.g., personality `tools.include` lists), verify against the `@tool(name=...)` decorator in `radar/tools/`
+- When adding features, update `docs/user-guide.md` (usage) and `docs/developer-guide.md` (internals/tutorials) as part of the same work
+- New tools should be added to the tools table in `docs/user-guide.md` and the capability inventory in `docs/scenarios.md`
 
 ## Tracking Work
 
@@ -85,6 +88,9 @@ Every new feature or bug fix must include tests. Run tests with `python -m pytes
 - Plugin TestRunner sandbox: only safe builtins are available (no `ValueError`, `open`, etc.). To test exceptions, use operations that trigger built-in errors (e.g., `1/0`)
 - Dynamic tool sandbox (`register_dynamic_tool`): restricted builtins block `import`/`open` at **call time**, not definition time. Registration succeeds; execution fails. Test both phases separately.
 - New CLI commands: use `click.testing.CliRunner` with mocked lazy imports (see `tests/test_cli_daemon.py`)
+- Skills tests: use `invalidate_skills_cache()` in an autouse fixture (see `tests/test_skills.py`)
+- `_build_system_prompt()` tests: patch `radar.semantic.search_memories` (source) and `radar.skills.discover_skills` since both are lazily imported inside the function
+- Personality config in tests: use `radar.config.get_config().personality = "name"` directly (with `isolated_data_dir` fixture) rather than monkeypatching
 
 ## Code Conventions
 
@@ -102,6 +108,7 @@ Every new feature or bug fix must include tests. Run tests with `python -m pytes
 - **Tools are functions** - Decorated Python functions returning strings
 - **Wrap CLIs, don't import libraries** - Prefer wrapping existing CLI tools (e.g., `gh`, `khal`) via subprocess over pulling in libraries or writing custom code. The tool already handles the hard parts; we just need to parse its output.
 - **SQLite datetime format** - Use `strftime("%Y-%m-%d %H:%M:%S")` (space separator), NOT `.isoformat()` (T separator). ISO `T` breaks SQLite `datetime()` comparisons.
+- **Progressive disclosure for system prompt** - Keep the system prompt lean by injecting only metadata (names + descriptions) at startup; load full content on demand via tools (`use_skill`, `load_context`). This pattern is used by Agent Skills and personality context documents.
 
 ## Adding a New Tool
 
@@ -711,6 +718,113 @@ SELECT * FROM feedback ORDER BY created_at DESC;
 
 -- Pending personality changes
 SELECT * FROM personality_suggestions WHERE status = 'pending';
+```
+
+## Agent Skills
+
+Radar can consume [Agent Skills](https://agentskills.io/) packages — directories containing a `SKILL.md` file with YAML frontmatter and markdown instructions.
+
+### How It Works
+
+**Progressive disclosure**: At startup, only frontmatter metadata (name, description) is parsed (~50-100 tokens per skill). An `<available_skills>` block is injected into the system prompt. When the LLM wants to activate a skill, it calls the `use_skill` tool to load the full instructions.
+
+### Skill Directory Layout
+
+```
+skill-name/
+├── SKILL.md       # Required: YAML front matter + instructions
+├── scripts/       # Optional: helper scripts
+├── references/    # Optional: reference documents
+└── assets/        # Optional: templates, data files
+```
+
+### SKILL.md Format
+
+```markdown
+---
+name: skill-name          # Must match directory name
+description: What this skill does
+compatibility: Requirements info
+license: MIT
+metadata:
+  author: name
+  version: "1.0"
+---
+
+# Skill Instructions
+
+Full instructions loaded on demand via use_skill tool.
+```
+
+### Configuration
+
+```yaml
+skills:
+  enabled: true
+  dirs:
+    - ~/Code/radar-meal-planning  # External skill directories
+    - ~/skills
+```
+
+Default scan location: `~/.local/share/radar/skills/`
+
+### Dual Integration Pattern
+
+A directory can serve as both an **external tools directory** (tools loaded via `tools.extra_dirs`) and an **Agent Skill** (SKILL.md provides workflow knowledge). Tools provide capabilities; skills provide the "how to use them together" instructions.
+
+## Directory-Based Personalities
+
+Personalities can be either flat `.md` files (unchanged) or directories:
+
+```
+personality-name/
+├── PERSONALITY.md    # Required: same format as flat .md files
+├── context/          # Optional: progressive-disclosure context documents
+│   ├── coding-standards.md
+│   └── project-notes.md
+├── scripts/          # Optional: personality-specific scripts
+└── assets/           # Optional: templates, reference data
+```
+
+### Resolution Order
+
+1. Explicit file path
+2. `{personalities_dir}/{name}/PERSONALITY.md` (directory-based)
+3. `{personalities_dir}/{name}.md` (flat file)
+4. Plugin bundled personalities
+5. Default personality
+
+### Context Documents
+
+Context files in `context/` use progressive disclosure — only name + description are injected into the system prompt:
+
+```xml
+<personality_context>
+- coding-standards: Coding standards and conventions
+- project-notes: Notes about project structure
+</personality_context>
+```
+
+The LLM calls `load_context(name="coding-standards")` to load full content on demand.
+
+Context files support optional YAML front matter for the description:
+```markdown
+---
+description: Coding standards and conventions
+---
+
+# Full content here...
+```
+
+Files without front matter use their filename as the description.
+
+### CLI Commands
+
+```bash
+radar personality create my-persona --directory  # Create directory-based
+radar personality list                           # Shows (dir) marker
+radar personality show my-persona                # Shows context docs if present
+radar personality edit my-persona                # Edits PERSONALITY.md
 ```
 
 ## Plugin System (Self-Improvement)

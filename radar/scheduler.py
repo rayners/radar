@@ -91,6 +91,14 @@ def _check_config_reload() -> None:
             f"{len(result['removed'])} removed, {len(result['reloaded'])} reloaded"
         )
 
+    # Invalidate skills cache so they're re-discovered with new config dirs
+    try:
+        from radar.skills import invalidate_skills_cache
+        invalidate_skills_cache()
+        _log_heartbeat("Skills cache invalidated")
+    except Exception:
+        pass
+
 
 def _heartbeat_tick() -> None:
     """Execute a heartbeat tick."""

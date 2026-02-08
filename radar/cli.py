@@ -420,28 +420,50 @@ def personality_list():
     console.print(Panel.fit("[bold]Available Personalities[/bold]", border_style="blue"))
     console.print()
 
-    # List all .md files in personalities directory
-    personality_files = sorted(personalities_dir.glob("*.md"))
+    # Collect all personalities: flat .md files and directory-based
+    entries: list[tuple[str, str, str]] = []  # (name, description, format)
 
-    if not personality_files:
-        console.print("[dim]No personalities found[/dim]")
-        return
-
-    for pfile in personality_files:
+    # Flat .md files
+    for pfile in sorted(personalities_dir.glob("*.md")):
         name = pfile.stem
-        is_active = name == active or str(pfile) == active
-        marker = "[green]* [/green]" if is_active else "  "
-        # Get first non-empty, non-heading line as description
         content = pfile.read_text()
         description = ""
         for line in content.split("\n"):
             line = line.strip()
-            if line and not line.startswith("#"):
+            if line and not line.startswith("#") and not line.startswith("---"):
                 description = line[:60]
                 if len(line) > 60:
                     description += "..."
                 break
-        console.print(f"{marker}[bold]{name}[/bold]")
+        entries.append((name, description, "file"))
+
+    # Directory-based personalities
+    for d in sorted(personalities_dir.iterdir()):
+        if d.is_dir() and (d / "PERSONALITY.md").exists():
+            name = d.name
+            # Skip if a flat file with same name exists (flat takes precedence in listing)
+            if any(e[0] == name for e in entries):
+                continue
+            content = (d / "PERSONALITY.md").read_text()
+            description = ""
+            for line in content.split("\n"):
+                line = line.strip()
+                if line and not line.startswith("#") and not line.startswith("---"):
+                    description = line[:60]
+                    if len(line) > 60:
+                        description += "..."
+                    break
+            entries.append((name, description, "directory"))
+
+    if not entries:
+        console.print("[dim]No personalities found[/dim]")
+        return
+
+    for name, description, fmt in sorted(entries, key=lambda e: e[0]):
+        is_active = name == active or str(personalities_dir / f"{name}.md") == active
+        marker = "[green]* [/green]" if is_active else "  "
+        fmt_tag = " [dim](dir)[/dim]" if fmt == "directory" else ""
+        console.print(f"{marker}[bold]{name}[/bold]{fmt_tag}")
         if description:
             console.print(f"    [dim]{description}[/dim]")
 
@@ -456,9 +478,27 @@ def personality_show(name: str):
     name = name or cfg.personality
 
     content = load_personality(name)
-    console.print(Panel.fit(f"[bold]Personality: {name}[/bold]", border_style="blue"))
+
+    # Check if directory-based
+    personalities_dir = get_personalities_dir()
+    personality_dir = personalities_dir / name
+    is_dir = personality_dir.is_dir() and (personality_dir / "PERSONALITY.md").exists()
+
+    fmt_tag = " (directory)" if is_dir else ""
+    console.print(Panel.fit(f"[bold]Personality: {name}{fmt_tag}[/bold]", border_style="blue"))
     console.print()
     console.print(Markdown(content))
+
+    # Show context files if directory-based
+    if is_dir:
+        context_dir = personality_dir / "context"
+        if context_dir.is_dir():
+            context_files = sorted(context_dir.glob("*.md"))
+            if context_files:
+                console.print()
+                console.print("[bold]Context documents:[/bold]")
+                for cf in context_files:
+                    console.print(f"  - {cf.stem}")
 
 
 @personality.command("edit")
@@ -471,15 +511,22 @@ def personality_edit(name: str):
     name = name or cfg.personality
 
     personalities_dir = get_personalities_dir()
-    personality_file = personalities_dir / f"{name}.md"
 
-    # Create if it doesn't exist
-    if not personality_file.exists():
-        if name == "default":
-            personality_file.write_text(DEFAULT_PERSONALITY)
-        else:
-            console.print(f"[yellow]Personality '{name}' does not exist. Creating from template...[/yellow]")
-            personality_file.write_text(DEFAULT_PERSONALITY.replace("# Default", f"# {name.title()}"))
+    # Check for directory-based personality first
+    personality_dir = personalities_dir / name
+    personality_md = personality_dir / "PERSONALITY.md"
+    if personality_dir.is_dir() and personality_md.exists():
+        personality_file = personality_md
+    else:
+        personality_file = personalities_dir / f"{name}.md"
+
+        # Create if it doesn't exist
+        if not personality_file.exists():
+            if name == "default":
+                personality_file.write_text(DEFAULT_PERSONALITY)
+            else:
+                console.print(f"[yellow]Personality '{name}' does not exist. Creating from template...[/yellow]")
+                personality_file.write_text(DEFAULT_PERSONALITY.replace("# Default", f"# {name.title()}"))
 
     # Get editor
     editor = os.environ.get("EDITOR", "nano")
@@ -490,27 +537,51 @@ def personality_edit(name: str):
 
 @personality.command("create")
 @click.argument("name")
-def personality_create(name: str):
+@click.option("--directory", "-d", is_flag=True, help="Create a directory-based personality")
+def personality_create(name: str, directory: bool):
     """Create a new personality from template."""
     from radar.agent import get_personalities_dir, DEFAULT_PERSONALITY
 
     personalities_dir = get_personalities_dir()
-    personality_file = personalities_dir / f"{name}.md"
 
-    if personality_file.exists():
-        console.print(f"[red]Personality '{name}' already exists[/red]")
-        raise SystemExit(1)
+    if directory:
+        personality_dir = personalities_dir / name
+        personality_file = personality_dir / "PERSONALITY.md"
 
-    # Create from template with customized name
-    content = DEFAULT_PERSONALITY.replace("# Default", f"# {name.title()}")
-    content = content.replace("A practical, local-first AI assistant.", f"A custom personality for {name}.")
-    personality_file.write_text(content)
+        if personality_dir.exists():
+            console.print(f"[red]Personality '{name}' already exists[/red]")
+            raise SystemExit(1)
 
-    console.print(f"[green]Created personality: {name}[/green]")
-    console.print(f"[dim]File: {personality_file}[/dim]")
+        # Create directory structure
+        personality_dir.mkdir(parents=True)
+        (personality_dir / "context").mkdir()
+
+        # Create from template
+        content = DEFAULT_PERSONALITY.replace("# Default", f"# {name.title()}")
+        content = content.replace("A practical, local-first AI assistant.", f"A custom personality for {name}.")
+        personality_file.write_text(content)
+
+        console.print(f"[green]Created directory personality: {name}[/green]")
+        console.print(f"[dim]Directory: {personality_dir}[/dim]")
+        console.print(f"[dim]Add context docs to: {personality_dir / 'context'}[/dim]")
+    else:
+        personality_file = personalities_dir / f"{name}.md"
+
+        if personality_file.exists():
+            console.print(f"[red]Personality '{name}' already exists[/red]")
+            raise SystemExit(1)
+
+        # Create from template with customized name
+        content = DEFAULT_PERSONALITY.replace("# Default", f"# {name.title()}")
+        content = content.replace("A practical, local-first AI assistant.", f"A custom personality for {name}.")
+        personality_file.write_text(content)
+
+        console.print(f"[green]Created personality: {name}[/green]")
+        console.print(f"[dim]File: {personality_file}[/dim]")
+
     console.print()
-    console.print("Edit with: [bold]radar personality edit {name}[/bold]")
-    console.print("Use with:  [bold]radar personality use {name}[/bold]")
+    console.print(f"Edit with: [bold]radar personality edit {name}[/bold]")
+    console.print(f"Use with:  [bold]radar personality use {name}[/bold]")
 
 
 @personality.command("use")
@@ -523,14 +594,23 @@ def personality_use(name: str):
     # Verify personality exists
     personalities_dir = get_personalities_dir()
     personality_file = personalities_dir / f"{name}.md"
+    personality_dir = personalities_dir / name
     path = Path(name).expanduser()
 
-    if not personality_file.exists() and not path.exists():
+    exists = (
+        personality_file.exists()
+        or (personality_dir.is_dir() and (personality_dir / "PERSONALITY.md").exists())
+        or path.exists()
+    )
+    if not exists:
         console.print(f"[red]Personality '{name}' not found[/red]")
         console.print()
         console.print("Available personalities:")
         for pfile in sorted(personalities_dir.glob("*.md")):
             console.print(f"  - {pfile.stem}")
+        for d in sorted(personalities_dir.iterdir()):
+            if d.is_dir() and (d / "PERSONALITY.md").exists():
+                console.print(f"  - {d.name} (dir)")
         raise SystemExit(1)
 
     # Update config file

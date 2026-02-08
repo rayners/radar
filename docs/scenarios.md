@@ -28,6 +28,8 @@ Tools available today and the scenarios they enable:
 | `create_tool` | Meta | LLM generates new tools (plugin system) |
 | `debug_tool` | Meta | Fix failing plugins iteratively |
 | `rollback_tool` | Meta | Revert plugins to previous versions |
+| `use_skill` | Meta | Activate an agent skill by name (progressive disclosure) |
+| `load_context` | Meta | Load personality context document on demand |
 | `analyze_feedback` | Meta | Analyze user feedback patterns |
 | `suggest_personality` | Meta | Propose personality improvements |
 
@@ -41,6 +43,8 @@ Infrastructure:
 | Personality system | Customizable behavior per use case, with Jinja2 templates |
 | Front matter config | Per-personality model, tool include/exclude lists |
 | Semantic memory | Persistent knowledge that accumulates over time |
+| Agent Skills | Packaged workflow knowledge with progressive disclosure |
+| Directory personalities | Personality bundles with context documents, scripts, assets |
 | Plugin system | Self-extending tool creation with safety validation |
 
 ---
@@ -77,6 +81,7 @@ See `docs/recipes/` for ready-to-use implementations of the first three.
 | "What's the weather forecast?" | weather |
 | "Show me what's in ~/Downloads" | list_directory, read_file |
 | "Create a tool that converts temperatures" | create_tool |
+| "Plan meals from this week's Hungryroot delivery" | use_skill, hungryroot, anylist |
 
 ### Compound Scenarios (Multiple Tools + Memory)
 

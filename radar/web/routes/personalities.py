@@ -61,11 +61,14 @@ async def personalities(request: Request):
     if not default_file.exists():
         default_file.write_text(DEFAULT_PERSONALITY)
 
-    # List all personality files
-    personality_files = sorted(personalities_dir.glob("*.md"))
     personalities_list = []
+    seen_names: set[str] = set()
+
+    # List all flat .md personality files
+    personality_files = sorted(personalities_dir.glob("*.md"))
     for pfile in personality_files:
         name = pfile.stem
+        seen_names.add(name)
         content = pfile.read_text()
         info = _extract_personality_info(content)
         personalities_list.append({
@@ -75,6 +78,24 @@ async def personalities(request: Request):
             "tools_filter": info.get("tools_filter"),
             "is_active": name == config.personality,
         })
+
+    # List directory-based personalities
+    for d in sorted(personalities_dir.iterdir()):
+        if d.is_dir() and (d / "PERSONALITY.md").exists():
+            name = d.name
+            if name in seen_names:
+                continue
+            seen_names.add(name)
+            content = (d / "PERSONALITY.md").read_text()
+            info = _extract_personality_info(content)
+            personalities_list.append({
+                "name": name,
+                "description": info["description"],
+                "model": info.get("model"),
+                "tools_filter": info.get("tools_filter"),
+                "is_active": name == config.personality,
+                "source": "directory",
+            })
 
     # Add plugin bundled personalities
     try:
@@ -117,10 +138,14 @@ async def api_personalities_list():
     if not default_file.exists():
         default_file.write_text(DEFAULT_PERSONALITY)
 
-    personality_files = sorted(personalities_dir.glob("*.md"))
     result = []
+    seen_names: set[str] = set()
+
+    # Flat .md files
+    personality_files = sorted(personalities_dir.glob("*.md"))
     for pfile in personality_files:
         name = pfile.stem
+        seen_names.add(name)
         content = pfile.read_text()
         info = _extract_personality_info(content)
         entry = {
@@ -133,6 +158,27 @@ async def api_personalities_list():
         if info.get("tools_filter"):
             entry["tools_filter"] = info["tools_filter"]
         result.append(entry)
+
+    # Directory-based personalities
+    for d in sorted(personalities_dir.iterdir()):
+        if d.is_dir() and (d / "PERSONALITY.md").exists():
+            name = d.name
+            if name in seen_names:
+                continue
+            seen_names.add(name)
+            content = (d / "PERSONALITY.md").read_text()
+            info = _extract_personality_info(content)
+            entry = {
+                "name": name,
+                "description": info["description"],
+                "is_active": name == config.personality,
+                "source": "directory",
+            }
+            if info.get("model"):
+                entry["model"] = info["model"]
+            if info.get("tools_filter"):
+                entry["tools_filter"] = info["tools_filter"]
+            result.append(entry)
 
     # Add plugin bundled personalities
     try:
@@ -176,9 +222,15 @@ async def api_personality_update(name: str, request: Request):
     content = form.get("content", "")
 
     personalities_dir = get_personalities_dir()
-    personality_file = personalities_dir / f"{name}.md"
 
-    personality_file.write_text(content)
+    # Check for directory-based personality first
+    personality_dir = personalities_dir / name
+    personality_md = personality_dir / "PERSONALITY.md"
+    if personality_dir.is_dir() and personality_md.exists():
+        personality_md.write_text(content)
+    else:
+        personality_file = personalities_dir / f"{name}.md"
+        personality_file.write_text(content)
 
     return HTMLResponse(
         f'<div class="text-phosphor">✓ Personality "{escape(name)}" saved</div>'
@@ -192,6 +244,7 @@ async def api_personality_create(request: Request):
 
     form = await request.form()
     name = form.get("name", "").strip()
+    directory = form.get("directory", "") == "true"
 
     if not name:
         return HTMLResponse(
@@ -207,9 +260,12 @@ async def api_personality_create(request: Request):
         )
 
     personalities_dir = get_personalities_dir()
-    personality_file = personalities_dir / f"{name}.md"
 
-    if personality_file.exists():
+    # Check both formats for conflicts
+    personality_file = personalities_dir / f"{name}.md"
+    personality_dir = personalities_dir / name
+
+    if personality_file.exists() or (personality_dir.is_dir() and (personality_dir / "PERSONALITY.md").exists()):
         return HTMLResponse(
             f'<div class="text-error">Personality "{escape(name)}" already exists</div>',
             status_code=400,
@@ -218,7 +274,13 @@ async def api_personality_create(request: Request):
     # Create from template
     content = DEFAULT_PERSONALITY.replace("# Default", f"# {name.title()}")
     content = content.replace("A practical, local-first AI assistant.", f"A custom personality: {name}")
-    personality_file.write_text(content)
+
+    if directory:
+        personality_dir.mkdir(parents=True, exist_ok=True)
+        (personality_dir / "context").mkdir(exist_ok=True)
+        (personality_dir / "PERSONALITY.md").write_text(content)
+    else:
+        personality_file.write_text(content)
 
     # Return redirect response
     return RedirectResponse(url=f"/personalities?created={name}", status_code=303)
@@ -227,6 +289,8 @@ async def api_personality_create(request: Request):
 @router.delete("/api/personalities/{name}")
 async def api_personality_delete(name: str):
     """Delete a personality."""
+    import shutil
+
     from radar.agent import get_personalities_dir
     from radar.config import load_config
 
@@ -245,14 +309,17 @@ async def api_personality_delete(name: str):
 
     personalities_dir = get_personalities_dir()
     personality_file = personalities_dir / f"{name}.md"
+    personality_dir = personalities_dir / name
 
-    if not personality_file.exists():
+    if personality_file.exists():
+        personality_file.unlink()
+    elif personality_dir.is_dir() and (personality_dir / "PERSONALITY.md").exists():
+        shutil.rmtree(personality_dir)
+    else:
         return HTMLResponse(
             f'<div class="text-error">Personality "{escape(name)}" not found</div>',
             status_code=404,
         )
-
-    personality_file.unlink()
 
     # Return empty response for HTMX to remove the element
     return HTMLResponse("")
@@ -267,8 +334,13 @@ async def api_personality_activate(name: str):
 
     personalities_dir = get_personalities_dir()
     personality_file = personalities_dir / f"{name}.md"
+    personality_dir = personalities_dir / name
 
-    if not personality_file.exists():
+    exists = (
+        personality_file.exists()
+        or (personality_dir.is_dir() and (personality_dir / "PERSONALITY.md").exists())
+    )
+    if not exists:
         return HTMLResponse(
             f'<div class="text-error">Personality "{escape(name)}" not found</div>',
             status_code=404,

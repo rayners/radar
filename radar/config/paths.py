@@ -66,6 +66,13 @@ class DataPaths:
         return path
 
     @property
+    def skills(self) -> Path:
+        """Get skills directory."""
+        path = self.base / "skills"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @property
     def tools(self) -> Path:
         """Get user tools directory."""
         path = self.base / "tools"

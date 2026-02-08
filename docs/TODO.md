@@ -8,7 +8,7 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (81 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (87 tests), `test_config.py` (40 tests), `test_memory.py` (45 tests), `test_llm.py` (34 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (169 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (96 tests), `test_integration.py` (7 tests) — **837 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (81 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (87 tests), `test_config.py` (40 tests), `test_memory.py` (45 tests), `test_llm.py` (34 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (169 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (96 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests) — **914 total**.
 
 - [x] **Core agent tests** - personality loading, system prompt building, Jinja2 template rendering, plugin prompt variables, run/ask orchestration (31 tests)
 - [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, format conversion (34 tests)
@@ -344,7 +344,7 @@ Ready-to-use configurations that demonstrate Radar's autonomous capabilities. Se
 ## Priority Suggestions
 
 **High Priority (Foundational):**
-1. ~~Test coverage~~ (done — 792 tests)
+1. ~~Test coverage~~ (done — 914 tests)
 2. ~~Config save in web UI~~ (done)
 3. ~~Tool auto-discovery~~ (done)
 4. Error handling improvements (still relevant)

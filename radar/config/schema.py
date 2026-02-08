@@ -160,6 +160,14 @@ class WebSearchConfig:
 
 
 @dataclass
+class SkillsConfig:
+    """Agent Skills configuration."""
+
+    enabled: bool = True
+    dirs: list[str] = field(default_factory=list)  # Extra skill directories
+
+
+@dataclass
 class Config:
     """Main configuration container."""
 
@@ -173,6 +181,7 @@ class Config:
     personality_evolution: PersonalityEvolutionConfig = field(default_factory=PersonalityEvolutionConfig)
     search: WebSearchConfig = field(default_factory=WebSearchConfig)
     hooks: HooksConfig = field(default_factory=HooksConfig)
+    skills: SkillsConfig = field(default_factory=SkillsConfig)
     system_prompt: str = ""
     max_tool_iterations: int = 10
     watch_paths: list[dict] = field(default_factory=list)
@@ -198,6 +207,7 @@ class Config:
         personality_evolution_data = data.get("personality_evolution", {})
         search_data = data.get("search", {})
         hooks_data = data.get("hooks", {})
+        skills_data = data.get("skills", {})
 
         # Backward compatibility: if 'ollama' section exists but not 'llm', migrate
         if ollama_data and not llm_data:
@@ -288,6 +298,10 @@ class Config:
             hooks=HooksConfig(
                 enabled=hooks_data.get("enabled", HooksConfig.enabled),
                 rules=hooks_data.get("rules", []),
+            ),
+            skills=SkillsConfig(
+                enabled=skills_data.get("enabled", SkillsConfig.enabled),
+                dirs=skills_data.get("dirs", []),
             ),
             system_prompt=data.get("system_prompt", ""),
             max_tool_iterations=data.get("max_tool_iterations", 10),

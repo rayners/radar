@@ -19,6 +19,7 @@ This guide covers everything you need to get started and make the most of Radar 
 - [File Watchers](#file-watchers)
 - [Notifications](#notifications)
 - [Web Search](#web-search)
+- [Agent Skills](#agent-skills)
 - [Plugin System](#plugin-system)
 - [Hook System](#hook-system)
 - [Security](#security)
@@ -124,7 +125,8 @@ Radar stores all its data under `~/.local/share/radar/` by default. This include
 ~/.local/share/radar/
   conversations/      # JSONL conversation files
   memory.db           # SQLite database (semantic memory, scheduled tasks, feedback)
-  personalities/      # Personality markdown files
+  personalities/      # Personality files and directories
+  skills/             # Agent Skills directories
   plugins/            # LLM-generated plugin tools
   tools/              # User-local tool files
   radar.log           # Daemon log file
@@ -219,6 +221,13 @@ personality_evolution:
   allow_suggestions: true       # Allow LLM to suggest personality changes
   auto_approve_suggestions: false  # Require human review
   min_feedback_for_analysis: 10 # Minimum feedback before analysis
+
+# Agent Skills
+skills:
+  enabled: true                  # Enable Agent Skills discovery
+  dirs: []                       # Additional directories to scan for skills
+    # - ~/Code/my-skill
+    # - ~/skills
 
 # Active personality
 personality: default            # Name of personality file (without .md) or path
@@ -474,6 +483,9 @@ radar personality show
 # Create a new personality from template
 radar personality create analyst
 
+# Create a directory-based personality (with context/ subdirectory)
+radar personality create analyst --directory
+
 # Open a personality in your $EDITOR
 radar personality edit analyst
 
@@ -545,7 +557,43 @@ If you try to bind to a non-localhost address without an auth token, Radar will 
 
 ## Personalities
 
-Personalities customize how Radar behaves -- its tone, focus, and even which tools and model it uses. They are stored as markdown files in `~/.local/share/radar/personalities/`.
+Personalities customize how Radar behaves -- its tone, focus, and even which tools and model it uses. They are stored in `~/.local/share/radar/personalities/` as either flat markdown files or directory-based packages.
+
+### Personality Formats
+
+Radar supports two personality formats:
+
+**Flat file** -- a single `.md` file (the original format):
+
+```
+~/.local/share/radar/personalities/
+  creative.md
+  technical.md
+```
+
+**Directory-based** -- a directory containing `PERSONALITY.md` plus optional subdirectories for context documents, scripts, and assets:
+
+```
+~/.local/share/radar/personalities/
+  analyst/
+    PERSONALITY.md       # Required: personality instructions (same format as flat files)
+    context/             # Optional: reference documents with progressive disclosure
+      coding-standards.md
+      project-notes.md
+    scripts/             # Optional: helper scripts the LLM can run
+    assets/              # Optional: templates, reference data
+```
+
+Both formats work interchangeably. When both exist for the same name, the directory format takes precedence.
+
+When listing personalities, directory-based personalities are marked with `(dir)`:
+
+```
+$ radar personality list
+  analyst (dir)
+* creative
+  technical
+```
 
 ### Listing and Using Personalities
 
@@ -575,14 +623,47 @@ export RADAR_PERSONALITY=creative
 ### Creating a Personality
 
 ```bash
+# Create a flat file personality
 radar personality create analyst
+
+# Create a directory-based personality
+radar personality create analyst --directory
 ```
 
-This creates `~/.local/share/radar/personalities/analyst.md` from a template. Edit it to your liking:
+The flat version creates `~/.local/share/radar/personalities/analyst.md`. The directory version creates `~/.local/share/radar/personalities/analyst/PERSONALITY.md` with a `context/` subdirectory. Edit it to your liking:
 
 ```bash
 radar personality edit analyst
 ```
+
+### Context Documents (Directory-Based Personalities)
+
+Directory-based personalities can include context documents in a `context/` subdirectory. These act like mini reference libraries: only their name and a brief description are injected into the system prompt (keeping it lean), and the LLM loads the full content on demand using the `load_context` tool.
+
+Each context document is a markdown file with optional YAML front matter:
+
+```markdown
+---
+description: Coding standards and conventions for this project
+---
+
+# Coding Standards
+
+Detailed content here...
+```
+
+What the LLM sees in the system prompt (automatically):
+
+```xml
+<personality_context>
+- coding-standards: Coding standards and conventions for this project
+- project-notes: Notes about the current project structure
+</personality_context>
+```
+
+When a task relates to one of these documents, the LLM calls `load_context(name="coding-standards")` to fetch the full content. Files without front matter use their filename (without `.md`) as the description.
+
+This progressive disclosure pattern keeps the system prompt small while still giving the LLM access to rich reference material when needed.
 
 ### Personality File Format
 
@@ -771,6 +852,8 @@ Radar comes with a set of built-in tools that the LLM can call automatically bas
 | `create_tool` | Generate a new plugin tool | "Create a tool that converts temperatures" |
 | `debug_tool` | Debug a failed plugin | "Debug the temperature converter tool" |
 | `rollback_tool` | Revert a plugin to a previous version | "Rollback my_tool to version 1" |
+| `use_skill` | Activate an agent skill by name | (Called by the LLM when a task matches a skill) |
+| `load_context` | Load a personality context document | (Called by the LLM when it needs reference material) |
 | `analyze_feedback` | Analyze chat feedback patterns | "Analyze recent feedback" |
 | `suggest_personality_update` | Propose a personality change | (Called by the LLM, not typically by users) |
 
@@ -990,6 +1073,98 @@ search:
 radar ask "Search for the latest Python release notes"
 radar ask "Search for AI news from this week"
 ```
+
+---
+
+## Agent Skills
+
+Agent Skills are packaged bundles of procedural knowledge that teach Radar how to perform specific workflows. They follow the [Agent Skills](https://agentskills.io/) open standard -- a directory containing a `SKILL.md` file (YAML frontmatter + markdown instructions) plus optional resource subdirectories.
+
+Skills provide the "how" (workflow instructions) while tools provide the "what" (capabilities). For example, a meal-planning skill might describe *how* to plan weekly meals using Hungryroot and AnyList tools, without those tools needing to know about each other.
+
+### How Skills Work
+
+Radar uses **progressive disclosure** to keep the system prompt lean:
+
+1. At startup, Radar scans skill directories and parses only the frontmatter (`name`, `description`) from each `SKILL.md` -- roughly 50-100 tokens each.
+2. An `<available_skills>` block is injected into the system prompt listing all discovered skills.
+3. When a task matches a skill's description, the LLM activates it by calling the `use_skill` tool, which loads the full instructions.
+4. The LLM then follows the skill's instructions, using existing tools (like `exec`, `read_file`, etc.) as needed.
+
+### Skill Directory Layout
+
+```
+my-skill/
+├── SKILL.md           # Required: YAML front matter + instructions
+├── scripts/           # Optional: helper scripts
+├── references/        # Optional: reference documents
+└── assets/            # Optional: templates, data files
+```
+
+### SKILL.md Format
+
+```markdown
+---
+name: my-skill
+description: >-
+  Brief description of what this skill does and when to use it.
+compatibility: Any prerequisites or requirements.
+metadata:
+  author: yourname
+  version: "1.0"
+---
+
+# My Skill
+
+## Instructions
+
+Step-by-step instructions for the LLM to follow...
+
+## Tools Used
+
+- **tool_name** -- How this tool is used in the workflow
+```
+
+The `name` field must match the directory name. The `description` is what the LLM sees in the system prompt to decide when to activate the skill.
+
+### Configuration
+
+Skills are discovered from `~/.local/share/radar/skills/` by default, plus any directories listed in `skills.dirs`:
+
+```yaml
+skills:
+  enabled: true
+  dirs:
+    - ~/Code/my-skill
+    - ~/skills
+```
+
+### Dual Integration Pattern
+
+A directory can serve as both an **external tools directory** (via `tools.extra_dirs`) and an **Agent Skill** (via `SKILL.md`). The tools provide capabilities while the skill provides contextual knowledge about how to use them together.
+
+For example, the `radar-meal-planning` repo works as both:
+- Tools directory: provides `hungryroot`, `anylist`, and `lasership` tools
+- Agent Skill: `SKILL.md` describes the meal planning workflow
+
+```yaml
+tools:
+  extra_dirs:
+    - ~/Code/radar-meal-planning
+
+skills:
+  dirs:
+    - ~/Code/radar-meal-planning
+```
+
+### Creating a Skill
+
+1. Create a directory for your skill.
+2. Add a `SKILL.md` with YAML front matter (`name`, `description`) and markdown instructions.
+3. Optionally add `scripts/`, `references/`, or `assets/` subdirectories.
+4. Point Radar at it via `skills.dirs` in your config.
+
+The skill appears automatically at the next startup (or config reload).
 
 ---
 
