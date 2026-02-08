@@ -309,6 +309,7 @@ def index_file(
     chunk_size: int = 800,
     overlap_pct: float = 0.1,
     generate_embeddings: bool = True,
+    text_override: str | None = None,
 ) -> int:
     """Index a single file, skipping if unchanged.
 
@@ -319,6 +320,8 @@ def index_file(
         chunk_size: Chunk size for splitting
         overlap_pct: Overlap percentage
         generate_embeddings: Whether to generate embeddings
+        text_override: Pre-converted text to index instead of reading from file.
+            The file hash is still computed from the actual file for change detection.
 
     Returns:
         Number of chunks created (0 if skipped)
@@ -356,7 +359,7 @@ def index_file(
         file_id = cursor.lastrowid
 
     # Read and chunk the file
-    text = file_path.read_text(errors="replace")
+    text = text_override if text_override is not None else file_path.read_text(errors="replace")
     chunks = chunk_markdown(text, chunk_size=chunk_size, overlap_pct=overlap_pct)
 
     for idx, chunk_text in enumerate(chunks):

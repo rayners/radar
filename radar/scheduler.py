@@ -190,6 +190,13 @@ def _heartbeat_tick() -> None:
     except Exception as e:
         _log_heartbeat("Document indexing error", error=str(e))
 
+    # Index conversations for semantic search
+    try:
+        from radar.conversation_search import index_conversations
+        index_conversations()
+    except Exception as e:
+        _log_heartbeat("Conversation indexing error", error=str(e))
+
     # Calendar reminders
     try:
         from radar.tools.calendar import _get_reminders

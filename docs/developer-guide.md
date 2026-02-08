@@ -59,6 +59,7 @@ radar/
 │   └── ...             # Add a .py file here and it is auto-discovered
 ├── summaries.py        # Conversation summary file I/O, scanning, formatting
 ├── documents.py        # Document indexing, chunking, hybrid search (FTS5 + semantic)
+├── conversation_search.py # Semantic conversation search (reuses documents.py infrastructure)
 ├── skills.py           # Agent Skills discovery, loading, and prompt building
 ├── hooks.py            # Hook system (pre/post tool call, filter tools)
 ├── hooks_builtin.py    # Config-driven hook builders (block patterns, time restrict, etc.)

@@ -190,12 +190,37 @@ async def api_history(
     from radar.memory import get_recent_conversations
 
     type_filter = filter if filter != "all" else None
+
+    # Use semantic search when a query is present
+    semantic_ids: list[str] = []
+    if search:
+        try:
+            from radar.conversation_search import search_conversations
+            results = search_conversations(search, limit=50)
+            semantic_ids = [r["conversation_id"] for r in results]
+        except Exception:
+            pass
+
     conversations = get_recent_conversations(
         limit=limit,
         offset=offset,
         type_filter=type_filter,
         search=search or None,
     )
+
+    # Merge: semantic results first (by rank), then substring-only matches
+    if semantic_ids:
+        seen: set[str] = set()
+        merged: list[dict] = []
+        for cid in semantic_ids:
+            match = next((c for c in conversations if c["id"] == cid), None)
+            if match:
+                merged.append(match)
+                seen.add(cid)
+        for c in conversations:
+            if c["id"] not in seen:
+                merged.append(c)
+        conversations = merged[:limit]
 
     if not conversations:
         return HTMLResponse(

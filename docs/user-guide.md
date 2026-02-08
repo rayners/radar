@@ -603,7 +603,7 @@ When the daemon is running, Radar serves a web dashboard at `http://localhost:84
 - Give thumbs up/down feedback on assistant responses (used by personality evolution)
 - Select a personality from the dropdown in the chat header to use for the current conversation (defaults to the globally active personality)
 
-**History** (`/history`) -- Browse past conversations. Each entry shows a preview of the first message and a timestamp. Click a conversation to continue it in the Chat page. Supports filtering by type, search, and pagination.
+**History** (`/history`) -- Browse past conversations. Each entry shows a preview of the first message and a timestamp. Click a conversation to continue it in the Chat page. Supports filtering by type, search, and pagination. Search uses hybrid semantic + keyword matching when conversations have been indexed (runs automatically during heartbeat).
 
 **Summaries** (`/summaries`) -- Browse conversation summaries (daily, weekly, monthly). Filter by period type, and manually generate new summaries.
 
@@ -933,6 +933,7 @@ When Radar needs to recall information, the `recall` tool:
 1. Generates an embedding for the search query
 2. Finds the most similar stored memories using cosine similarity
 3. Returns the matching memories to the LLM
+4. Also searches indexed documents and past conversations for relevant context
 
 Memories are also automatically retrieved at the start of each conversation to provide context about you.
 

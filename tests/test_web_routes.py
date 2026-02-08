@@ -232,6 +232,27 @@ class TestApiHistory:
         assert resp.status_code == 200
         assert "2025-01-15 10:30" in resp.text
 
+    @patch("radar.memory.get_recent_conversations")
+    @patch("radar.conversation_search.search_conversations")
+    def test_semantic_search_merges_results(self, mock_sem, mock_convs, client):
+        """Semantic results are ordered first, then substring matches."""
+        mock_sem.return_value = [
+            {"conversation_id": "sem-1", "content": "semantic match", "score": 0.9},
+        ]
+        mock_convs.return_value = [
+            {"id": "sub-1", "created_at": "", "timestamp": "", "type": "chat",
+             "summary": "substring match", "tool_count": 0, "preview": "substring match"},
+            {"id": "sem-1", "created_at": "", "timestamp": "", "type": "chat",
+             "summary": "semantic match", "tool_count": 0, "preview": "semantic match"},
+        ]
+        resp = client.get("/api/history?search=test+query")
+        assert resp.status_code == 200
+        # Semantic result (sem-1) should appear before substring-only (sub-1)
+        text = resp.text
+        sem_pos = text.index("sem-1")
+        sub_pos = text.index("sub-1")
+        assert sem_pos < sub_pos
+
 
 # ===== Conversation Delete Routes =====
 

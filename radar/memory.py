@@ -127,6 +127,13 @@ def delete_conversation(conversation_id: str) -> tuple[bool, str]:
     except Exception:
         pass
 
+    # Best-effort cleanup of conversation search index
+    try:
+        from radar.conversation_search import remove_conversation_index
+        remove_conversation_index(conversation_id)
+    except Exception:
+        pass
+
     return True, f"Conversation {conversation_id} deleted"
 
 

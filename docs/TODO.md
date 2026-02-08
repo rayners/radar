@@ -8,7 +8,7 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (89 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (36 tests), `test_security.py` (87 tests), `test_config.py` (43 tests), `test_memory.py` (50 tests), `test_llm.py` (42 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (25 tests), `test_plugins.py` (193 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (104 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests), `test_summaries.py` (41 tests), `test_documents.py` (43 tests), `test_retry.py` (21 tests), `test_hot_reload.py` (21 tests), `test_rss_reader.py` (45 tests), `test_export.py` (23 tests) — **1207 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (90 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (36 tests), `test_security.py` (87 tests), `test_config.py` (43 tests), `test_memory.py` (50 tests), `test_llm.py` (42 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (25 tests), `test_plugins.py` (193 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (104 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests), `test_summaries.py` (41 tests), `test_documents.py` (44 tests), `test_retry.py` (21 tests), `test_hot_reload.py` (21 tests), `test_rss_reader.py` (45 tests), `test_export.py` (23 tests), `test_conversation_search.py` (15 tests) — **1224 total**.
 
 - [x] **Core agent tests** - personality loading, system prompt building, Jinja2 template rendering, plugin prompt variables, run/ask orchestration (32 tests)
 - [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, retry with backoff, format conversion (42 tests)
@@ -46,7 +46,7 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 ### History Page
 - [x] `/api/history` with filter/pagination — HTMX endpoint with type filter, search, offset/limit pagination
 - [x] Conversation search (full-text) — case-insensitive substring search across message content
-- [ ] Conversation search (semantic) — embedding-based search
+- [x] Conversation search (semantic) — hybrid FTS5 + embedding search via document indexing infrastructure (15 tests)
 - [x] Export conversations as markdown/JSON — `radar export` CLI + `/api/export/{id}` web API (23 tests)
 - [x] Conversation deletion — `radar delete` CLI + `DELETE /api/conversations/{id}` web API + history page button (13 tests)
 

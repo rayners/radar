@@ -197,6 +197,30 @@ class TestIndexing:
         chunks2 = index_file(doc_conn, coll_id, docs_dir / "readme.md", generate_embeddings=False)
         assert chunks2 == 0
 
+    def test_index_file_text_override(self, docs_dir, doc_conn, isolated_data_dir):
+        from radar.documents import create_collection, index_file, search_fts
+
+        coll_id = create_collection("test", str(docs_dir))
+
+        # Index with text_override — different content than actual file
+        custom_text = "# Custom Title\n\nThis is overridden content about xylophones."
+        chunks_created = index_file(
+            doc_conn, coll_id, docs_dir / "readme.md",
+            generate_embeddings=False, text_override=custom_text,
+        )
+        doc_conn.commit()
+
+        assert chunks_created > 0
+
+        # FTS should find the overridden content, not the file content
+        results = search_fts("xylophones")
+        assert len(results) > 0
+        assert any("xylophones" in r["content"] for r in results)
+
+        # File content ("Getting Started") should NOT be in FTS
+        results2 = search_fts("Getting Started")
+        assert len(results2) == 0
+
     def test_index_file_reindexes_on_change(self, docs_dir, doc_conn, isolated_data_dir):
         from radar.documents import create_collection, index_file
 

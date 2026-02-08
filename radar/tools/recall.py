@@ -53,6 +53,20 @@ def recall(query: str, limit: int = 5) -> str:
         except Exception:
             pass  # Don't let document search errors break recall
 
+        # Include conversation search results
+        try:
+            from radar.conversation_search import search_conversations
+            conv_results = search_conversations(query, limit=3)
+            if conv_results:
+                parts.append("\nRelevant conversations:")
+                for r in conv_results:
+                    content = r["content"][:200]
+                    if len(r["content"]) > 200:
+                        content += "..."
+                    parts.append(f"- Conversation {r['conversation_id'][:8]}: {content}")
+        except Exception:
+            pass  # Don't let conversation search errors break recall
+
         if not parts:
             return "No relevant memories found."
 
