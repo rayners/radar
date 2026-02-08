@@ -63,26 +63,28 @@ async def api_chat(request: Request):
     # Include conversation_id in response for HTMX to track
     # Add feedback buttons to assistant message
     # data-raw contains JSON-encoded markdown for client-side rendering
+    positive_vals = escape(json.dumps({"conversation_id": new_conversation_id, "message_index": message_index, "sentiment": "positive"}))
+    negative_vals = escape(json.dumps({"conversation_id": new_conversation_id, "message_index": message_index, "sentiment": "negative"}))
     return HTMLResponse(
         f"""
         <div class="message message--user">
             <div class="message__role">you</div>
             <div class="message__content">{escape(message)}</div>
         </div>
-        <div class="message message--assistant" data-conversation-id="{new_conversation_id}" data-message-index="{message_index}">
+        <div class="message message--assistant" data-conversation-id="{escape(new_conversation_id)}" data-message-index="{message_index}">
             <div class="message__role">radar</div>
             <div class="message__content" data-raw="{raw_response_attr}"></div>
             <div class="message__feedback">
                 <button class="feedback-btn feedback-btn--positive"
                         hx-post="/api/feedback"
-                        hx-vals='{{"conversation_id": "{new_conversation_id}", "message_index": {message_index}, "sentiment": "positive"}}'
+                        hx-vals='{positive_vals}'
                         hx-swap="outerHTML"
                         title="This was helpful">
                     <span class="feedback-icon">+</span>
                 </button>
                 <button class="feedback-btn feedback-btn--negative"
                         hx-post="/api/feedback"
-                        hx-vals='{{"conversation_id": "{new_conversation_id}", "message_index": {message_index}, "sentiment": "negative"}}'
+                        hx-vals='{negative_vals}'
                         hx-swap="outerHTML"
                         title="This could be better">
                     <span class="feedback-icon">-</span>
