@@ -8,17 +8,17 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (81 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (87 tests), `test_config.py` (40 tests), `test_memory.py` (45 tests), `test_llm.py` (34 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (169 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (96 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests), `test_summaries.py` (41 tests), `test_documents.py` (43 tests) — **1048 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (86 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (36 tests), `test_security.py` (87 tests), `test_config.py` (43 tests), `test_memory.py` (45 tests), `test_llm.py` (42 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (169 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (96 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests), `test_summaries.py` (41 tests), `test_documents.py` (43 tests), `test_retry.py` (21 tests), `test_hot_reload.py` (21 tests) — **1094 total**.
 
-- [x] **Core agent tests** - personality loading, system prompt building, Jinja2 template rendering, plugin prompt variables, run/ask orchestration (31 tests)
-- [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, format conversion (34 tests)
+- [x] **Core agent tests** - personality loading, system prompt building, Jinja2 template rendering, plugin prompt variables, run/ask orchestration (32 tests)
+- [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, retry with backoff, format conversion (42 tests)
 - [x] **Tool framework tests** - registration, execution, parameter validation (31 tests)
 - [x] **Security tests** - path blocklist, command validation, write-only blocks, edge cases (87 tests)
 - [x] **Memory tests** - JSONL operations, display formatting, conversation listing, tool call counting, activity feed, enriched history (45 tests)
-- [x] **Config tests** - YAML loading, env var overrides, deprecated field migration, DataPaths (40 tests)
+- [x] **Config tests** - YAML loading, env var overrides, deprecated field migration, DataPaths, RetryConfig (43 tests)
 - [x] **Scheduler tests** - heartbeat ticks, quiet hours, event queuing (42 tests)
 - [x] **Plugin tests** - code validation, sandboxed execution, version rollback, manifest capabilities, widgets, personality bundling, helper scripts, multi-tool registration, local trust, plugin install CLI, prompt variables (169 tests across all 5 modules)
-- [x] **Web route tests** - FastAPI endpoints, HTMX responses, config save, activity API, history API (81 tests across all 11 route modules)
+- [x] **Web route tests** - FastAPI endpoints, HTMX responses, config save, activity API, history API (86 tests across all 11 route modules)
 - [x] **Integration test harness** - full conversation flow with mock LLM (7 tests)
 
 ---
@@ -344,7 +344,7 @@ Ready-to-use configurations that demonstrate Radar's autonomous capabilities. Se
 ## Priority Suggestions
 
 **High Priority (Foundational):**
-1. ~~Test coverage~~ (done — 1048 tests)
+1. ~~Test coverage~~ (done — 1094 tests)
 2. ~~Config save in web UI~~ (done)
 3. ~~Tool auto-discovery~~ (done)
 4. Error handling improvements (still relevant)
