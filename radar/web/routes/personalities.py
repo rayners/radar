@@ -38,6 +38,10 @@ def _extract_personality_info(content: str) -> dict:
 
     if pc and pc.model:
         info["model"] = pc.model
+    if pc and pc.provider:
+        info["provider"] = pc.provider
+    if pc and pc.base_url:
+        info["base_url"] = pc.base_url
     if pc and pc.tools_include:
         info["tools_filter"] = f"include: {', '.join(pc.tools_include)}"
     elif pc and pc.tools_exclude:
@@ -75,6 +79,7 @@ async def personalities(request: Request):
             "name": name,
             "description": info["description"],
             "model": info.get("model"),
+            "provider": info.get("provider"),
             "tools_filter": info.get("tools_filter"),
             "is_active": name == config.personality,
         })
@@ -92,6 +97,7 @@ async def personalities(request: Request):
                 "name": name,
                 "description": info["description"],
                 "model": info.get("model"),
+                "provider": info.get("provider"),
                 "tools_filter": info.get("tools_filter"),
                 "is_active": name == config.personality,
                 "source": "directory",
@@ -107,6 +113,7 @@ async def personalities(request: Request):
                 "name": bp["name"],
                 "description": info["description"],
                 "model": info.get("model"),
+                "provider": info.get("provider"),
                 "tools_filter": info.get("tools_filter"),
                 "is_active": bp["name"] == config.personality,
                 "source": "plugin",
@@ -155,6 +162,8 @@ async def api_personalities_list():
         }
         if info.get("model"):
             entry["model"] = info["model"]
+        if info.get("provider"):
+            entry["provider"] = info["provider"]
         if info.get("tools_filter"):
             entry["tools_filter"] = info["tools_filter"]
         result.append(entry)
@@ -176,6 +185,8 @@ async def api_personalities_list():
             }
             if info.get("model"):
                 entry["model"] = info["model"]
+            if info.get("provider"):
+                entry["provider"] = info["provider"]
             if info.get("tools_filter"):
                 entry["tools_filter"] = info["tools_filter"]
             result.append(entry)
@@ -195,6 +206,8 @@ async def api_personalities_list():
             }
             if info.get("model"):
                 entry["model"] = info["model"]
+            if info.get("provider"):
+                entry["provider"] = info["provider"]
             if info.get("tools_filter"):
                 entry["tools_filter"] = info["tools_filter"]
             result.append(entry)

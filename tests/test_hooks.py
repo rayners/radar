@@ -1208,7 +1208,8 @@ class TestPostAgentHooks:
             patch("radar.agent.messages_to_api_format", return_value=[]),
             patch("radar.agent._build_system_prompt", return_value=(
                 "system prompt",
-                MagicMock(model=None, fallback_model=None, tools_include=None, tools_exclude=None),
+                MagicMock(model=None, fallback_model=None, tools_include=None, tools_exclude=None,
+                          provider=None, base_url=None, api_key_env=None),
             )),
             patch("radar.agent.chat", return_value=(mock_final, [
                 {"role": "system", "content": "system prompt"},

@@ -49,6 +49,9 @@ def chat(
     fallback_model_override: str | None = None,
     tools_include: list[str] | None = None,
     tools_exclude: list[str] | None = None,
+    provider_override: str | None = None,
+    base_url_override: str | None = None,
+    api_key_override: str | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Send messages to LLM and handle tool calls.
 
@@ -59,19 +62,25 @@ def chat(
         fallback_model_override: Fallback model override (e.g. from personality)
         tools_include: If set, only provide these tools (allowlist)
         tools_exclude: If set, exclude these tools (denylist)
+        provider_override: LLM provider override (e.g. from personality)
+        base_url_override: API base URL override (e.g. from personality)
+        api_key_override: API key override (resolved from env var by caller)
 
     Returns:
         Tuple of (final assistant message, full message history)
     """
     config = get_config()
+    effective_provider = provider_override or config.llm.provider
 
-    if config.llm.provider == "openai":
+    if effective_provider == "openai":
         return _chat_openai(
             messages, use_tools, config,
             model_override=model_override,
             fallback_model_override=fallback_model_override,
             tools_include=tools_include,
             tools_exclude=tools_exclude,
+            base_url_override=base_url_override,
+            api_key_override=api_key_override,
         )
     else:
         return _chat_ollama(
@@ -80,6 +89,7 @@ def chat(
             fallback_model_override=fallback_model_override,
             tools_include=tools_include,
             tools_exclude=tools_exclude,
+            base_url_override=base_url_override,
         )
 
 
@@ -87,9 +97,11 @@ def _chat_ollama(
     messages, use_tools, config, *,
     model_override=None, fallback_model_override=None,
     tools_include=None, tools_exclude=None,
+    base_url_override=None,
 ):
     """Chat using Ollama's native API."""
-    url = f"{config.llm.base_url.rstrip('/')}/api/chat"
+    effective_base_url = base_url_override or config.llm.base_url
+    url = f"{effective_base_url.rstrip('/')}/api/chat"
 
     tools = get_tools_schema(include=tools_include, exclude=tools_exclude) if use_tools else []
     all_messages = list(messages)
@@ -130,7 +142,7 @@ def _chat_ollama(
                 continue
             raise RuntimeError(f"Ollama error: {status_code} - {error_text}")
         except httpx.ConnectError:
-            raise RuntimeError(f"Cannot connect to Ollama at {config.llm.base_url}")
+            raise RuntimeError(f"Cannot connect to Ollama at {effective_base_url}")
 
         data = response.json()
         assistant_message = data.get("message", {})
@@ -177,13 +189,14 @@ def _chat_openai(
     messages, use_tools, config, *,
     model_override=None, fallback_model_override=None,
     tools_include=None, tools_exclude=None,
+    base_url_override=None, api_key_override=None,
 ):
     """Chat using OpenAI-compatible API."""
     from openai import OpenAI
 
     client = OpenAI(
-        base_url=config.llm.base_url,
-        api_key=config.llm.api_key or "not-needed",  # Some proxies don't require key
+        base_url=base_url_override or config.llm.base_url,
+        api_key=api_key_override or config.llm.api_key or "not-needed",
     )
 
     tools = get_tools_schema(include=tools_include, exclude=tools_exclude) if use_tools else None

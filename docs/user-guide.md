@@ -699,7 +699,7 @@ This progressive disclosure pattern keeps the system prompt small while still gi
 
 ### Personality File Format
 
-A personality file is a markdown document with optional YAML front matter. Without front matter, it is simply a system prompt. With front matter, it becomes a full agent profile that can override the model and restrict tools.
+A personality file is a markdown document with optional YAML front matter. Without front matter, it is simply a system prompt. With front matter, it becomes a full agent profile that can override the model, LLM provider, and restrict tools.
 
 ```markdown
 ---
@@ -733,10 +733,42 @@ Today is {{ day_of_week }}, {{ current_date }}.
 |-------|-------------|
 | `model` | Override the global LLM model |
 | `fallback_model` | Override the global fallback model |
+| `provider` | Override the LLM provider (`"ollama"` or `"openai"`) |
+| `base_url` | Override the API endpoint URL |
+| `api_key_env` | Name of environment variable containing the API key |
 | `tools.include` | Allowlist -- only these tools are available |
 | `tools.exclude` | Denylist -- all tools except these are available |
 
-`tools.include` and `tools.exclude` are mutually exclusive. Files without front matter use all tools and the global model.
+`tools.include` and `tools.exclude` are mutually exclusive. Files without front matter use all tools, the global model, and the global provider.
+
+#### Per-Personality LLM Provider
+
+A personality can connect to a completely different LLM provider than the global config. This lets a single Radar instance mix local and cloud models across different personas. API keys are referenced by environment variable name (`api_key_env`) rather than stored as literal values, keeping personality files safe to share.
+
+```markdown
+---
+provider: openai
+base_url: https://api.openai.com/v1
+api_key_env: OPENAI_API_KEY
+model: gpt-4o
+fallback_model: gpt-4o-mini
+tools:
+  exclude:
+    - exec
+---
+
+# Cloud Assistant
+
+You are a helpful assistant powered by GPT-4o.
+```
+
+Set the API key in your environment:
+
+```bash
+export OPENAI_API_KEY=sk-your-key-here
+```
+
+You can also override just `provider` (to use the global `base_url` with a different provider) or just `base_url` (to hit a different endpoint with the same provider).
 
 ### Prompt Variables
 

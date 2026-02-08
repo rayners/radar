@@ -605,11 +605,14 @@ Today is {{ day_of_week }}, {{ current_date }}.
 **Front matter fields** (all optional):
 - `model` — LLM model to use (overrides `config.llm.model`)
 - `fallback_model` — Fallback model on rate limit (overrides `config.llm.fallback_model`)
+- `provider` — LLM provider to use (overrides `config.llm.provider`): `"ollama"` or `"openai"`
+- `base_url` — API endpoint URL (overrides `config.llm.base_url`)
+- `api_key_env` — Name of environment variable containing API key (resolved at call time, not stored in file)
 - `tools.include` — Allowlist of tool names (only these tools available)
 - `tools.exclude` — Denylist of tool names (all tools except these)
 - `tools.include` and `tools.exclude` are mutually exclusive
 
-Files without front matter work exactly as before (all tools, global model).
+Files without front matter work exactly as before (all tools, global model, global provider).
 
 Personality templates use Jinja2 syntax (`{{ variable }}`). Built-in variables: `current_time`, `current_date`, `day_of_week`. Plugins can contribute additional variables via the `prompt_variables` capability. The legacy `{current_time}` syntax is still supported. Front matter is stripped before sending to the LLM.
 

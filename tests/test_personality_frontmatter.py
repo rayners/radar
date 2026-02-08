@@ -21,6 +21,9 @@ class TestParsePersonality:
         assert pc.fallback_model is None
         assert pc.tools_include is None
         assert pc.tools_exclude is None
+        assert pc.provider is None
+        assert pc.base_url is None
+        assert pc.api_key_env is None
 
     def test_model_and_fallback_parsed(self):
         raw = "---\nmodel: qwen3:30b-a3b\nfallback_model: qwen3:latest\n---\n# Dev\n\nPrompt body."
@@ -92,6 +95,37 @@ class TestParsePersonality:
         assert "---" not in pc.content
         assert "model:" not in pc.content
         assert pc.content.startswith("# Weather Bot")
+
+    def test_provider_and_base_url_parsed(self):
+        raw = "---\nprovider: openai\nbase_url: https://api.openai.com/v1\napi_key_env: OPENAI_API_KEY\nmodel: gpt-4o\n---\n# Cloud"
+        pc = parse_personality(raw)
+        assert pc.provider == "openai"
+        assert pc.base_url == "https://api.openai.com/v1"
+        assert pc.api_key_env == "OPENAI_API_KEY"
+        assert pc.model == "gpt-4o"
+
+    def test_provider_only_parsed(self):
+        raw = "---\nprovider: openai\nmodel: gpt-4o\n---\n# Cloud"
+        pc = parse_personality(raw)
+        assert pc.provider == "openai"
+        assert pc.base_url is None
+        assert pc.api_key_env is None
+        assert pc.model == "gpt-4o"
+
+    def test_non_string_provider_ignored(self):
+        raw = "---\nprovider: 42\n---\n# Body"
+        pc = parse_personality(raw)
+        assert pc.provider is None
+
+    def test_non_string_base_url_ignored(self):
+        raw = "---\nbase_url: 8080\n---\n# Body"
+        pc = parse_personality(raw)
+        assert pc.base_url is None
+
+    def test_non_string_api_key_env_ignored(self):
+        raw = "---\napi_key_env: 123\n---\n# Body"
+        pc = parse_personality(raw)
+        assert pc.api_key_env is None
 
 
 # ===== Tool Filtering Tests =====
@@ -214,6 +248,54 @@ class TestIntegration:
         assert kwargs["fallback_model_override"] is None
         assert kwargs["tools_include"] is None
         assert kwargs["tools_exclude"] is None
+        assert kwargs["provider_override"] is None
+        assert kwargs["base_url_override"] is None
+        assert kwargs["api_key_override"] is None
+
+    @patch("radar.agent.chat")
+    @patch("radar.agent.load_personality")
+    @patch("radar.agent.get_config")
+    def test_ask_passes_provider_override(self, mock_config, mock_load, mock_chat):
+        from radar.agent import ask
+
+        mock_config.return_value = MagicMock(personality="default")
+        mock_load.return_value = (
+            "---\nprovider: openai\nbase_url: https://api.openai.com/v1\n"
+            "api_key_env: TEST_RADAR_KEY\nmodel: gpt-4o\n---\n# Cloud"
+        )
+        mock_chat.return_value = ({"role": "assistant", "content": "hi"}, [])
+
+        import os
+        os.environ["TEST_RADAR_KEY"] = "sk-test-key-123"
+        try:
+            ask("hello")
+        finally:
+            del os.environ["TEST_RADAR_KEY"]
+
+        mock_chat.assert_called_once()
+        _, kwargs = mock_chat.call_args
+        assert kwargs["provider_override"] == "openai"
+        assert kwargs["base_url_override"] == "https://api.openai.com/v1"
+        assert kwargs["api_key_override"] == "sk-test-key-123"
+        assert kwargs["model_override"] == "gpt-4o"
+
+    @patch("radar.agent.chat")
+    @patch("radar.agent.load_personality")
+    @patch("radar.agent.get_config")
+    def test_api_key_env_not_set_passes_none(self, mock_config, mock_load, mock_chat):
+        from radar.agent import ask
+
+        mock_config.return_value = MagicMock(personality="default")
+        mock_load.return_value = (
+            "---\nprovider: openai\napi_key_env: NONEXISTENT_KEY_XYZ\n---\n# Cloud"
+        )
+        mock_chat.return_value = ({"role": "assistant", "content": "hi"}, [])
+
+        ask("hello")
+
+        _, kwargs = mock_chat.call_args
+        assert kwargs["provider_override"] == "openai"
+        assert kwargs["api_key_override"] is None
 
 
 # ===== Feedback Front Matter Preservation =====
@@ -292,3 +374,20 @@ class TestExtractPersonalityInfo:
         assert "tools_filter" in info
         assert "include" in info["tools_filter"]
         assert "weather" in info["tools_filter"]
+
+    def test_personality_with_provider(self):
+        from radar.web.routes.personalities import _extract_personality_info
+
+        content = "---\nprovider: openai\nbase_url: https://api.openai.com/v1\nmodel: gpt-4o\n---\n# Cloud\n\nCloud assistant."
+        info = _extract_personality_info(content)
+        assert info["provider"] == "openai"
+        assert info["base_url"] == "https://api.openai.com/v1"
+        assert info["model"] == "gpt-4o"
+
+    def test_personality_without_provider(self):
+        from radar.web.routes.personalities import _extract_personality_info
+
+        content = "---\nmodel: qwen3:latest\n---\n# Local\n\nLocal assistant."
+        info = _extract_personality_info(content)
+        assert "provider" not in info
+        assert "base_url" not in info

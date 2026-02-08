@@ -1346,6 +1346,39 @@ with patch("radar.semantic.search_memories", side_effect=Exception("skip")):
         prompt, pc = _build_system_prompt("my-personality")
 ```
 
+### Per-Personality LLM Provider
+
+Personality front matter can override the full LLM connection, not just the
+model. The `PersonalityConfig` dataclass includes:
+
+- `provider` -- `"ollama"` or `"openai"` (overrides `config.llm.provider`)
+- `base_url` -- API endpoint URL (overrides `config.llm.base_url`)
+- `api_key_env` -- Name of an environment variable containing the API key
+
+The `api_key_env` field stores the env var **name** (e.g., `OPENAI_API_KEY`),
+not the key itself. Resolution happens in `agent.py` at call time:
+
+```python
+api_key_override=os.environ.get(pc.api_key_env) if pc.api_key_env else None,
+```
+
+This keeps personality files safe to share (no secrets in the file). The
+overrides flow through `agent.ask()` / `agent.run()` → `llm.chat()` →
+`_chat_ollama()` / `_chat_openai()`.
+
+Example personality with full provider override:
+
+```markdown
+---
+provider: openai
+base_url: https://api.openai.com/v1
+api_key_env: OPENAI_API_KEY
+model: gpt-4o
+---
+
+# Cloud Assistant
+```
+
 ---
 
 ## Adding Config Sections

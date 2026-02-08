@@ -1,5 +1,6 @@
 """Agent orchestration - context building and LLM interaction."""
 
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +27,9 @@ class PersonalityConfig:
     fallback_model: str | None = None
     tools_include: list[str] | None = None
     tools_exclude: list[str] | None = None
+    provider: str | None = None
+    base_url: str | None = None
+    api_key_env: str | None = None
 
 
 def parse_personality(raw: str) -> PersonalityConfig:
@@ -69,6 +73,9 @@ def parse_personality(raw: str) -> PersonalityConfig:
     # Extract fields
     model = fm.get("model")
     fallback_model = fm.get("fallback_model")
+    provider = fm.get("provider")
+    base_url = fm.get("base_url")
+    api_key_env = fm.get("api_key_env")
 
     tools = fm.get("tools") or {}
     tools_include = tools.get("include") if isinstance(tools, dict) else None
@@ -85,6 +92,9 @@ def parse_personality(raw: str) -> PersonalityConfig:
         fallback_model=fallback_model if isinstance(fallback_model, str) else None,
         tools_include=tools_include,
         tools_exclude=tools_exclude,
+        provider=provider if isinstance(provider, str) else None,
+        base_url=base_url if isinstance(base_url, str) else None,
+        api_key_env=api_key_env if isinstance(api_key_env, str) else None,
     )
 
 DEFAULT_PERSONALITY = """# Default
@@ -372,6 +382,9 @@ def run(
         fallback_model_override=pc.fallback_model,
         tools_include=pc.tools_include,
         tools_exclude=pc.tools_exclude,
+        provider_override=pc.provider,
+        base_url_override=pc.base_url,
+        api_key_override=os.environ.get(pc.api_key_env) if pc.api_key_env else None,
     )
 
     # Store all new messages from the interaction
@@ -420,6 +433,9 @@ def ask(user_message: str, personality: str | None = None) -> str:
         fallback_model_override=pc.fallback_model,
         tools_include=pc.tools_include,
         tools_exclude=pc.tools_exclude,
+        provider_override=pc.provider,
+        base_url_override=pc.base_url,
+        api_key_override=os.environ.get(pc.api_key_env) if pc.api_key_env else None,
     )
     response_text = final_message.get("content", "")
 
