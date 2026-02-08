@@ -25,6 +25,10 @@ Tools available today and the scenarios they enable:
 | `schedule_task` | Automation | Create scheduled tasks (daily, weekly, interval, one-time) |
 | `list_scheduled_tasks` | Automation | View scheduled tasks |
 | `cancel_task` | Automation | Disable or delete scheduled tasks |
+| `monitor_url` | Input | Create periodic URL monitor for change detection |
+| `list_url_monitors` | Input | List all URL monitors with status |
+| `check_url` | Input | Manual URL check or one-off fetch |
+| `remove_monitor` | Automation | Pause, resume, or delete URL monitors |
 | `create_tool` | Meta | LLM generates new tools (plugin system) |
 | `debug_tool` | Meta | Fix failing plugins iteratively |
 | `rollback_tool` | Meta | Revert plugins to previous versions |
@@ -65,6 +69,8 @@ These scenarios use only existing tools and infrastructure.
 | Calendar reminders | calendar, notify | Built into heartbeat |
 | PDF summarization on download | pdf_extract, notify | File watcher trigger |
 | TODO extraction from markdown notes | read_file, remember, notify | File watcher trigger |
+| Changelog / release page monitoring | monitor_url, notify | Heartbeat interval |
+| Price drop alerts | monitor_url (with CSS selector), notify | Heartbeat interval |
 
 See `docs/recipes/` for ready-to-use implementations of the first three.
 
@@ -150,7 +156,7 @@ A read-only `email` tool connecting via IMAP.
 
 | Capability | Scenarios unlocked | Difficulty |
 |------------|-------------------|------------|
-| **Web page diff/monitor** | Changelog tracking, price drops, government notices | Low |
+| ~~**Web page diff/monitor**~~ | ~~Changelog tracking, price drops, government notices~~ | ~~Low~~ (done) |
 | **Home Assistant API** | Smart home control, climate, security | Medium |
 | **Secure credential store** | Enables email + browser auth, per-service secrets | Low-Medium |
 | **RSS/Atom feed reader** | Blog monitoring, release tracking, news aggregation | Low |
@@ -189,7 +195,7 @@ Ranked by number of scenarios unlocked and practical impact:
 |---|-----|-----------|------------|-------|
 | 1 | **Email (IMAP read)** | Briefings, bill tracking, inbox watch, package tracking | Medium | Independently useful, simpler than browser |
 | 2 | **Browser automation** | Appointments, forms, price monitoring, content reading | High | Largest unlock, but complex to build safely |
-| 3 | **Web page diff/monitor** | Changelog tracking, price drops, government notices | Low | Could be a simple plugin |
+| ~~3~~ | ~~**Web page diff/monitor**~~ | ~~Changelog tracking, price drops, government notices~~ | ~~Low~~ | Done — `monitor_url`, `list_url_monitors`, `check_url`, `remove_monitor` |
 | 4 | **RSS/Atom feed reader** | Blog monitoring, release tracking, news | Low | Already in TODO.md |
 | 5 | **Home Assistant API** | Smart home, climate control, security | Medium | REST API wrapper |
 | 6 | **Secure credential store** | Enables email + browser auth | Low-Medium | Foundation for #1 and #2 |

@@ -54,8 +54,9 @@ RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API
 - `radar/plugins.py` - Dynamic plugin system for LLM-generated tools
 - `radar/hooks.py` - Hook system for intercepting tool execution and filtering tool lists
 - `radar/hooks_builtin.py` - Config-driven hook builders (block patterns, time restrict, etc.)
+- `radar/url_monitors.py` - URL monitor CRUD, fetching, diffing, heartbeat integration
 - `radar/scheduler.py` - APScheduler heartbeat with quiet hours + event queue
-- Heartbeat flow: `_heartbeat_tick()` checks due scheduled tasks → injects them as events via `add_event("scheduled_task", ...)` → also checks calendar reminders → runs `agent.run()` with the compiled event message + active personality context
+- Heartbeat flow: `_heartbeat_tick()` checks due scheduled tasks → injects them as events via `add_event("scheduled_task", ...)` → checks due URL monitors → also checks calendar reminders → runs `agent.run()` with the compiled event message + active personality context
 - `radar/scheduled_tasks.py` - Scheduled task CRUD (DB in `memory.db`, table `scheduled_tasks`)
 - `radar/watchers.py` - File system monitoring with watchdog
 - `radar/security.py` - Path blocklists and command safety checks
@@ -441,6 +442,40 @@ Environment variables:
 - `RADAR_SEARCH_PROVIDER` - "duckduckgo", "brave", or "searxng"
 - `RADAR_BRAVE_API_KEY` - Brave Search API key
 - `RADAR_SEARXNG_URL` - SearXNG instance URL
+
+## URL Monitors
+
+Periodically fetch web pages and detect changes. Chat-driven (like scheduled tasks).
+
+```bash
+# The LLM uses these tools:
+# monitor_url - Create a URL monitor (name, url, interval, css_selector, threshold)
+# list_url_monitors - List all monitors with status
+# check_url - Manual check by monitor_id or one-off URL fetch
+# remove_monitor - Pause, resume, or delete a monitor
+```
+
+Features:
+- HTML text extraction (stdlib `html.parser`, optional `beautifulsoup4` for CSS selectors)
+- SHA-256 hash for quick change detection + `difflib.unified_diff` for diffs
+- HTTP conditional requests (`ETag`/`Last-Modified`) for bandwidth savings
+- Compressed content storage (`zlib`) for efficient diffs
+- Auto-pause after consecutive errors (configurable `max_error_count`)
+- Heartbeat-integrated: `_check_url_monitors()` runs between scheduled tasks and calendar reminders
+
+Configuration in `radar.yaml`:
+```yaml
+web_monitor:
+  default_interval_minutes: 60
+  min_interval_minutes: 5
+  fetch_timeout: 30
+  user_agent: "Radar/1.0 (Web Monitor)"
+  max_content_size: 1048576  # 1MB
+  max_diff_length: 2000
+  max_error_count: 5
+```
+
+Database tables in `memory.db`: `url_monitors` (CRUD + state), `url_changes` (diff history).
 
 ## Testing Tools
 

@@ -8,7 +8,7 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (81 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (87 tests), `test_config.py` (40 tests), `test_memory.py` (45 tests), `test_llm.py` (34 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (169 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (96 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests) — **914 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (81 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (87 tests), `test_config.py` (40 tests), `test_memory.py` (45 tests), `test_llm.py` (34 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (169 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (96 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests) — **964 total**.
 
 - [x] **Core agent tests** - personality loading, system prompt building, Jinja2 template rendering, plugin prompt variables, run/ask orchestration (31 tests)
 - [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, format conversion (34 tests)
@@ -85,7 +85,7 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 - [ ] **System info** - CPU, memory, disk usage
 - [ ] **Process management** - list/kill processes
 - [ ] **Browser automation** - Playwright for web form filling, scraping (unlocks: appointments, forms, price monitoring — see `docs/scenarios.md`)
-- [ ] **Web page diff/monitor** - fetch a URL periodically, diff against previous fetch, report changes (unlocks: changelog tracking, price drops, government notices)
+- [x] **Web page diff/monitor** - fetch a URL periodically, diff against previous fetch, report changes (unlocks: changelog tracking, price drops, government notices) — `monitor_url`, `list_url_monitors`, `check_url`, `remove_monitor` tools + heartbeat integration (50 tests)
 - [ ] **Jinja2 template tester** - validate personality template syntax and preview rendered output from CLI
 
 ### Pipelines (Multi-tool Workflows)
@@ -322,7 +322,7 @@ Ready-to-use configurations that demonstrate Radar's autonomous capabilities. Se
 |---|-----|--------------------|------------|
 | 1 | IMAP email (read-only) | Briefings, bill tracking, inbox watch, package tracking | Medium |
 | 2 | Browser automation (Playwright) | Appointments, forms, price monitoring, article reading | High |
-| 3 | Web page diff/monitor | Changelog tracking, price drops, government notices | Low |
+| ~~3~~ | ~~Web page diff/monitor~~ | ~~Changelog tracking, price drops, government notices~~ | ~~Low~~ (done) |
 | 4 | Home Assistant API | Smart home, climate, security | Medium |
 | 5 | Secure credential store | Foundation for email + browser auth | Low-Medium |
 
@@ -353,7 +353,7 @@ Ready-to-use configurations that demonstrate Radar's autonomous capabilities. Se
 
 **Medium Priority (Usability):**
 1. IMAP email (read-only) — highest scenario unlock count, enables briefing + bill tracking + inbox watch
-2. Web page diff/monitor tool — low effort, enables changelog tracking and price monitoring
+2. ~~Web page diff/monitor tool~~ (done — 50 tests)
 3. Plugin scaffolding CLI (`radar plugin create`)
 4. Template syntax validation for personality files
 5. Token/cost tracking

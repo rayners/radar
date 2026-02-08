@@ -160,6 +160,19 @@ class WebSearchConfig:
 
 
 @dataclass
+class WebMonitorConfig:
+    """URL monitor configuration."""
+
+    default_interval_minutes: int = 60
+    min_interval_minutes: int = 5
+    fetch_timeout: int = 30
+    user_agent: str = "Radar/1.0 (Web Monitor)"
+    max_content_size: int = 1048576  # 1MB
+    max_diff_length: int = 2000
+    max_error_count: int = 5
+
+
+@dataclass
 class SkillsConfig:
     """Agent Skills configuration."""
 
@@ -182,6 +195,7 @@ class Config:
     search: WebSearchConfig = field(default_factory=WebSearchConfig)
     hooks: HooksConfig = field(default_factory=HooksConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
+    web_monitor: WebMonitorConfig = field(default_factory=WebMonitorConfig)
     system_prompt: str = ""
     max_tool_iterations: int = 10
     watch_paths: list[dict] = field(default_factory=list)
@@ -208,6 +222,7 @@ class Config:
         search_data = data.get("search", {})
         hooks_data = data.get("hooks", {})
         skills_data = data.get("skills", {})
+        web_monitor_data = data.get("web_monitor", {})
 
         # Backward compatibility: if 'ollama' section exists but not 'llm', migrate
         if ollama_data and not llm_data:
@@ -302,6 +317,15 @@ class Config:
             skills=SkillsConfig(
                 enabled=skills_data.get("enabled", SkillsConfig.enabled),
                 dirs=skills_data.get("dirs", []),
+            ),
+            web_monitor=WebMonitorConfig(
+                default_interval_minutes=web_monitor_data.get("default_interval_minutes", WebMonitorConfig.default_interval_minutes),
+                min_interval_minutes=web_monitor_data.get("min_interval_minutes", WebMonitorConfig.min_interval_minutes),
+                fetch_timeout=web_monitor_data.get("fetch_timeout", WebMonitorConfig.fetch_timeout),
+                user_agent=web_monitor_data.get("user_agent", WebMonitorConfig.user_agent),
+                max_content_size=web_monitor_data.get("max_content_size", WebMonitorConfig.max_content_size),
+                max_diff_length=web_monitor_data.get("max_diff_length", WebMonitorConfig.max_diff_length),
+                max_error_count=web_monitor_data.get("max_error_count", WebMonitorConfig.max_error_count),
             ),
             system_prompt=data.get("system_prompt", ""),
             max_tool_iterations=data.get("max_tool_iterations", 10),

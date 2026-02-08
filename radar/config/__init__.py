@@ -14,6 +14,7 @@ from .schema import (
     SkillsConfig,
     ToolsConfig,
     WebConfig,
+    WebMonitorConfig,
     WebSearchConfig,
 )
 
@@ -34,6 +35,7 @@ __all__ = [
     "PluginsConfig",
     "PersonalityEvolutionConfig",
     "SkillsConfig",
+    "WebMonitorConfig",
     "WebSearchConfig",
     # Loader
     "load_config",

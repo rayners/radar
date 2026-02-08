@@ -136,6 +136,27 @@ def _heartbeat_tick() -> None:
     except Exception as e:
         _log_heartbeat("Scheduled task processing error", error=str(e))
 
+    # Check due URL monitors
+    try:
+        from radar.url_monitors import get_due_monitors, check_monitor
+        for monitor in get_due_monitors():
+            try:
+                change = check_monitor(monitor)
+                if change:
+                    add_event("url_changed", {
+                        "description": f"URL changed: {monitor['name']} ({monitor['url']})",
+                        "action": (
+                            f"The monitored URL '{monitor['name']}' has changed. "
+                            f"Changes ({change['change_size']} lines):\n"
+                            f"{change['diff_summary']}\n\n"
+                            f"Summarize what changed and notify the user."
+                        ),
+                    })
+            except Exception as e:
+                _log_heartbeat(f"URL monitor failed: {monitor.get('name', '?')}", error=str(e))
+    except Exception as e:
+        _log_heartbeat("URL monitor processing error", error=str(e))
+
     # Calendar reminders
     try:
         from radar.tools.calendar import _get_reminders

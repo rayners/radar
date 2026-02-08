@@ -59,6 +59,44 @@ def _init_db(conn: sqlite3.Connection) -> None:
         )
     """)
 
+    # URL monitors
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS url_monitors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            url TEXT NOT NULL,
+            check_interval_minutes INTEGER NOT NULL DEFAULT 60,
+            css_selector TEXT,
+            min_change_threshold INTEGER DEFAULT 0,
+            headers TEXT,
+            enabled BOOLEAN DEFAULT TRUE,
+            last_check TIMESTAMP,
+            next_check TIMESTAMP,
+            last_hash TEXT,
+            last_content BLOB,
+            last_etag TEXT,
+            last_modified TEXT,
+            error_count INTEGER DEFAULT 0,
+            last_error TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT DEFAULT 'chat'
+        )
+    """)
+
+    # URL change history
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS url_changes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            monitor_id INTEGER NOT NULL,
+            detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            old_hash TEXT,
+            new_hash TEXT,
+            diff_summary TEXT,
+            change_size INTEGER,
+            FOREIGN KEY (monitor_id) REFERENCES url_monitors(id)
+        )
+    """)
+
     # Personality change suggestions
     conn.execute("""
         CREATE TABLE IF NOT EXISTS personality_suggestions (

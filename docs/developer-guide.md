@@ -36,6 +36,7 @@ radar/
 ├── security.py         # Path blocklists and command safety checks
 ├── scheduler.py        # APScheduler heartbeat with quiet hours + event queue
 ├── scheduled_tasks.py  # Scheduled task CRUD (SQLite memory.db)
+├── url_monitors.py     # URL monitor CRUD, fetching, diffing (SQLite memory.db)
 ├── watchers.py         # File system monitoring with watchdog
 ├── feedback.py         # User feedback collection + personality suggestions
 ├── logging.py          # Structured logging with stats tracking

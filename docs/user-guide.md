@@ -16,6 +16,7 @@ This guide covers everything you need to get started and make the most of Radar 
 - [Semantic Memory](#semantic-memory)
 - [Tools Overview](#tools-overview)
 - [Scheduled Tasks](#scheduled-tasks)
+- [URL Monitors](#url-monitors)
 - [File Watchers](#file-watchers)
 - [Notifications](#notifications)
 - [Web Search](#web-search)
@@ -848,6 +849,10 @@ Radar comes with a set of built-in tools that the LLM can call automatically bas
 | `schedule_task` | Create a scheduled task | "Remind me to check logs every morning at 9am" |
 | `list_scheduled_tasks` | Show all scheduled tasks | "What tasks do I have scheduled?" |
 | `cancel_task` | Disable or delete a scheduled task | "Cancel the daily log check task" |
+| `monitor_url` | Create a URL monitor for periodic change detection | "Monitor https://example.com/changelog every hour" |
+| `list_url_monitors` | List all URL monitors with status | "Show my URL monitors" |
+| `check_url` | Manually check a monitored URL or fetch any URL | "Check monitor 1 for changes" |
+| `remove_monitor` | Pause, resume, or delete a URL monitor | "Pause monitor 3" |
 | `calendar` | Query calendar events via khal | "What is on my calendar today?" |
 | `create_tool` | Generate a new plugin tool | "Create a tool that converts temperatures" |
 | `debug_tool` | Debug a failed plugin | "Debug the temperature converter tool" |
@@ -932,6 +937,76 @@ In the web dashboard, navigate to `/tasks` to view all scheduled tasks. From the
 ### How Tasks Execute
 
 Tasks are processed during heartbeats. The daemon runs a heartbeat at a configurable interval (default: every 15 minutes). At each heartbeat, Radar checks for due tasks and executes their messages through the agent. During quiet hours (default: 11 PM to 7 AM), heartbeats are suppressed.
+
+---
+
+## URL Monitors
+
+Radar can periodically check web pages for changes and notify you when content updates. This is useful for tracking changelogs, monitoring prices, watching government notices, and more.
+
+### Creating Monitors
+
+Ask Radar to monitor a URL:
+
+```bash
+radar ask "Monitor https://example.com/changelog every 30 minutes"
+radar ask "Watch the Python release page for changes"
+radar ask "Monitor https://news.site/feed but only the .article-content section"
+```
+
+Behind the scenes, the LLM calls the `monitor_url` tool. You can specify:
+- **Check interval** (default: 60 minutes, minimum: 5 minutes)
+- **CSS selector** to monitor only part of a page (requires `beautifulsoup4`)
+- **Minimum change threshold** to ignore small changes
+
+### How Monitoring Works
+
+1. When you create a monitor, Radar fetches the page immediately to establish a baseline
+2. At each heartbeat, Radar checks all due monitors
+3. Content is extracted from HTML (scripts and styles are stripped)
+4. A SHA-256 hash detects changes; if content changed, a unified diff is computed
+5. Changes are reported as heartbeat events -- the agent summarizes and can notify you
+6. HTTP conditional requests (`ETag`/`Last-Modified`) save bandwidth when servers support them
+
+### Managing Monitors
+
+```bash
+# List all monitors
+radar ask "Show my URL monitors"
+
+# Manually check right now
+radar ask "Check monitor 1 for changes"
+
+# One-off URL fetch (no monitor needed)
+radar ask "Fetch https://example.com and show me the content"
+
+# Pause a monitor
+radar ask "Pause monitor 2"
+
+# Resume a paused monitor
+radar ask "Resume monitor 2"
+
+# Permanently delete
+radar ask "Delete monitor 3"
+```
+
+### Error Handling
+
+If a monitor fails to fetch (network error, server error), the error count increments. After 5 consecutive failures (configurable), the monitor is automatically paused. Resume it manually after fixing the issue.
+
+### Configuration
+
+```yaml
+# radar.yaml
+web_monitor:
+  default_interval_minutes: 60  # Default check interval
+  min_interval_minutes: 5       # Minimum allowed interval
+  fetch_timeout: 30             # HTTP timeout in seconds
+  user_agent: "Radar/1.0 (Web Monitor)"
+  max_content_size: 1048576     # Max page size to process (1MB)
+  max_diff_length: 2000         # Max diff length in output
+  max_error_count: 5            # Auto-pause after N consecutive errors
+```
 
 ---
 
