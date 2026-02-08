@@ -24,13 +24,13 @@ def compute_delay(attempt: int, base_delay: float = 1.0, max_delay: float = 30.0
 def is_retryable_httpx_error(exc: Exception) -> bool:
     """Check if an httpx exception is worth retrying.
 
-    Retryable: TimeoutException, ConnectError, HTTP 429/502/503/504.
+    Retryable: TimeoutException, ConnectError, HTTP 429/500/502/503/504.
     Not retryable: 400/401/403/404 and other client errors.
     """
     if isinstance(exc, (httpx.TimeoutException, httpx.ConnectError)):
         return True
     if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code in (429, 502, 503, 504)
+        return exc.response.status_code in (429, 500, 502, 503, 504)
     return False
 
 
@@ -42,7 +42,7 @@ def is_retryable_openai_error(exc: Exception) -> bool:
     """
     status_code = getattr(exc, "status_code", None)
     if status_code is not None:
-        return status_code in (429, 502, 503, 504)
+        return status_code in (429, 500, 502, 503, 504)
     error_text = str(exc).lower()
     return any(
         phrase in error_text
