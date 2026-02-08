@@ -257,6 +257,17 @@ def run(
     Returns:
         Tuple of (assistant response text, conversation_id)
     """
+    # --- PRE hook (before any work) ---
+    from radar.hooks import run_pre_agent_hooks
+    hook_result = run_pre_agent_hooks(user_message, conversation_id)
+    if hook_result.blocked:
+        if conversation_id is None:
+            conversation_id = create_conversation()
+        add_message(conversation_id, "user", user_message)
+        error_msg = hook_result.message or "Message blocked by hook"
+        add_message(conversation_id, "assistant", error_msg)
+        return error_msg, conversation_id
+
     # Create or use existing conversation
     if conversation_id is None:
         conversation_id = create_conversation()
@@ -293,6 +304,11 @@ def run(
         )
 
     response_text = final_message.get("content", "")
+
+    # --- POST hook (can transform response) ---
+    from radar.hooks import run_post_agent_hooks
+    response_text = run_post_agent_hooks(user_message, response_text, conversation_id)
+
     return response_text, conversation_id
 
 
@@ -306,6 +322,12 @@ def ask(user_message: str, personality: str | None = None) -> str:
     Returns:
         Assistant response text
     """
+    # --- PRE hook ---
+    from radar.hooks import run_pre_agent_hooks
+    hook_result = run_pre_agent_hooks(user_message, None)
+    if hook_result.blocked:
+        return hook_result.message or "Message blocked by hook"
+
     prompt, pc = _build_system_prompt(personality)
     system_message = {"role": "system", "content": prompt}
     user_msg = {"role": "user", "content": user_message}
@@ -317,4 +339,10 @@ def ask(user_message: str, personality: str | None = None) -> str:
         tools_include=pc.tools_include,
         tools_exclude=pc.tools_exclude,
     )
-    return final_message.get("content", "")
+    response_text = final_message.get("content", "")
+
+    # --- POST hook ---
+    from radar.hooks import run_post_agent_hooks
+    response_text = run_post_agent_hooks(user_message, response_text, None)
+
+    return response_text

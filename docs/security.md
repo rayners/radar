@@ -116,7 +116,7 @@ This instruction persists and influences all future conversations.
 
 **Mitigations**:
 - [ ] Separate "facts" from "instructions" in memory schema
-- [ ] Sanitize memory content (strip instruction-like patterns)
+- [x] Sanitize memory content (strip instruction-like patterns) - Partially addressed: `block_memory_pattern` hook blocks storage; `filter_memory_pattern` hook filters search results
 - [ ] Rate limit memory storage
 - [ ] Memory review UI to audit stored content
 
@@ -238,17 +238,19 @@ ollama:
 
 The hook system (`radar/hooks.py`, `radar/hooks_builtin.py`) provides a configurable
 policy layer that runs **on top of** the hardcoded security checks in `radar/security.py`.
-Hooks intercept tool calls before the tool function is even invoked, and can also
-filter which tools are visible to the LLM.
+Hooks intercept tool calls, agent interactions, memory operations, and heartbeats.
 
-This addresses several recommendations below (audit logging, tool restrictions) without
-requiring source code changes:
+This addresses several recommendations below (audit logging, tool restrictions, memory
+poisoning mitigation) without requiring source code changes:
 
-- **Audit logging**: A `log` hook rule logs every tool call, including arguments and results
+- **Audit logging**: `log`, `log_agent`, and `log_heartbeat` rules for comprehensive audit trails
 - **Command blocking**: `block_command_pattern` rules can block exec commands matching patterns
 - **Path blocking**: `block_path_pattern` rules can restrict file access to configured directories
 - **Time-based restrictions**: `time_restrict` rules can remove tools during off-hours
 - **Tool allowlists/denylists**: Static filtering of which tools are available
+- **Content moderation**: `block_message_pattern` rules can block prompt injection attempts before they reach the LLM
+- **Response redaction**: `redact_response` rules can strip leaked secrets or PII from responses
+- **Memory poisoning mitigation**: `block_memory_pattern` rules block storing memories containing instruction-like content (e.g., "run:", "curl", "sudo"). `filter_memory_pattern` rules filter suspicious content from memory search results before they enter the system prompt.
 
 The baseline security in `radar/security.py` remains as an always-on safety net. Hooks
 add stricter policies without weakening the baseline. See the User Guide for configuration
@@ -263,7 +265,7 @@ details.
 
 ### Short Term
 4. ~~Implement audit logging of all tool calls~~ - Done: configurable via hook system (`type: log` rule)
-5. Sanitize memory content before prompt injection
+5. ~~Sanitize memory content before prompt injection~~ - Partially addressed: `block_memory_pattern` and `filter_memory_pattern` hook rules can block poisoned memories at storage and retrieval time
 6. Escape all dynamic HTML content
 
 ### Long Term

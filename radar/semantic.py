@@ -214,8 +214,14 @@ def store_memory(content: str, source: str | None = None) -> int:
         The ID of the stored memory
 
     Raises:
-        RuntimeError: If embeddings are disabled
+        RuntimeError: If embeddings are disabled or storage is blocked by a hook
     """
+    # --- PRE hook ---
+    from radar.hooks import run_pre_memory_store_hooks
+    hook_result = run_pre_memory_store_hooks(content, source)
+    if hook_result.blocked:
+        raise RuntimeError(hook_result.message or "Memory storage blocked by hook")
+
     embedding = get_embedding(content)
     embedding_bytes = _serialize_embedding(embedding)
 
@@ -266,7 +272,13 @@ def search_memories(query: str, limit: int = 5) -> list[dict]:
 
         # Sort by similarity descending and limit
         results.sort(key=lambda x: x["similarity"], reverse=True)
-        return results[:limit]
+        results = results[:limit]
+
+        # --- POST hook (can filter/rerank) ---
+        from radar.hooks import run_post_memory_search_hooks
+        results = run_post_memory_search_hooks(query, results)
+
+        return results
     finally:
         conn.close()
 

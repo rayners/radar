@@ -807,6 +807,12 @@ Two sources of hooks:
 | `pre_tool_call` | Before `execute_tool()` runs the tool function | Yes |
 | `post_tool_call` | After `execute_tool()` completes | No (observe only) |
 | `filter_tools` | When `get_tools_schema()` builds the tool list | N/A (transforms list) |
+| `pre_agent_run` | Before `agent.run()` / `agent.ask()` calls the LLM | Yes |
+| `post_agent_run` | After `agent.run()` / `agent.ask()` returns | Transform (can modify response) |
+| `pre_memory_store` | Before `semantic.store_memory()` embeds + inserts | Yes |
+| `post_memory_search` | After `semantic.search_memories()` computes results | Transform (can filter/rerank) |
+| `pre_heartbeat` | Before `scheduler._heartbeat_tick()` processes | Yes |
+| `post_heartbeat` | After `scheduler._heartbeat_tick()` completes | No (observe only) |
 
 ### Configuration
 
@@ -814,6 +820,7 @@ Two sources of hooks:
 hooks:
   enabled: true
   rules:
+    # --- Tool rules ---
     - name: block_rm
       hook_point: pre_tool_call
       type: block_command_pattern
@@ -833,6 +840,37 @@ hooks:
       hook_point: post_tool_call
       type: log
       log_level: info
+
+    # --- Agent rules ---
+    - name: content_moderation
+      hook_point: pre_agent_run
+      type: block_message_pattern
+      patterns: ["ignore previous instructions"]
+      message: "Message blocked by content filter"
+
+    - name: redact_secrets
+      hook_point: post_agent_run
+      type: redact_response
+      patterns: ["sk-[a-zA-Z0-9]+"]
+      replacement: "[REDACTED]"
+
+    # --- Memory rules ---
+    - name: anti_poisoning
+      hook_point: pre_memory_store
+      type: block_memory_pattern
+      patterns: ["run:", "execute:", "curl ", "sudo "]
+      message: "Memory blocked: contains instruction-like content"
+
+    - name: filter_suspicious_memories
+      hook_point: post_memory_search
+      type: filter_memory_pattern
+      exclude_patterns: ["ignore previous", "system prompt"]
+
+    # --- Heartbeat rules ---
+    - name: heartbeat_audit
+      hook_point: post_heartbeat
+      type: log_heartbeat
+      log_level: info
 ```
 
 ### Config Rule Types
@@ -848,6 +886,22 @@ hooks:
 
 **Post-tool rules** (observe only):
 - `log` -- Log tool execution via `radar.logging`
+
+**Pre-agent rules** (block messages):
+- `block_message_pattern` -- Block messages matching substring patterns (case-insensitive)
+
+**Post-agent rules** (transform responses):
+- `redact_response` -- Replace regex patterns in LLM responses (fields: `patterns`, `replacement`)
+- `log_agent` -- Log agent interactions
+
+**Pre-memory rules** (block storage):
+- `block_memory_pattern` -- Block storing memories matching substring patterns (anti-poisoning)
+
+**Post-memory rules** (filter results):
+- `filter_memory_pattern` -- Remove search results matching patterns (fields: `exclude_patterns`)
+
+**Post-heartbeat rules** (observe only):
+- `log_heartbeat` -- Log heartbeat execution
 
 ### Plugin Hooks
 

@@ -911,6 +911,12 @@ receive different arguments depending on the hook point:
 | `pre_tool_call` | `(tool_name, arguments)` | `HookResult` (blocked, message) |
 | `post_tool_call` | `(tool_name, arguments, result, success)` | `None` |
 | `filter_tools` | `(tools)` | `list[dict]` (filtered tool list) |
+| `pre_agent_run` | `(user_message, conversation_id)` | `HookResult` (blocked, message) |
+| `post_agent_run` | `(user_message, response, conversation_id)` | `str` or `None` |
+| `pre_memory_store` | `(content, source)` | `HookResult` (blocked, message) |
+| `post_memory_search` | `(query, results)` | `list[dict]` (filtered results) |
+| `pre_heartbeat` | `(event_count)` | `HookResult` (blocked, message) |
+| `post_heartbeat` | `(event_count, success, error)` | `None` |
 
 **Trust levels for hooks:** Sandbox hooks get `HookResult` injected into their
 namespace so they can return blocks. Local-trust hooks load via `importlib`
@@ -949,6 +955,12 @@ and run **before** the tool function is even called.
 | `pre_tool_call` | Before `execute_tool()` runs the tool function | Yes |
 | `post_tool_call` | After `execute_tool()` completes | No (observe only) |
 | `filter_tools` | When `get_tools_schema()` builds the tool list | N/A (transforms list) |
+| `pre_agent_run` | Before `agent.run()` / `agent.ask()` calls the LLM | Yes |
+| `post_agent_run` | After `agent.run()` / `agent.ask()` returns | Transform (can modify response) |
+| `pre_memory_store` | Before `semantic.store_memory()` embeds + inserts | Yes |
+| `post_memory_search` | After `semantic.search_memories()` computes results | Transform (can filter/rerank) |
+| `pre_heartbeat` | Before `scheduler._heartbeat_tick()` processes | Yes |
+| `post_heartbeat` | After `scheduler._heartbeat_tick()` completes | No (observe only) |
 
 ### Two Sources of Hooks
 
@@ -986,6 +998,12 @@ Config rule types:
 - `time_restrict` -- Remove tools during a time window
 - `allowlist` / `denylist` -- Static tool filtering
 - `log` -- Log tool execution
+- `block_message_pattern` -- Block messages matching substring patterns (pre-agent)
+- `redact_response` -- Replace regex patterns in LLM responses (post-agent)
+- `log_agent` -- Log agent interactions (post-agent)
+- `block_memory_pattern` -- Block storing memories matching patterns (pre-memory)
+- `filter_memory_pattern` -- Remove search results matching patterns (post-memory)
+- `log_heartbeat` -- Log heartbeat execution (post-heartbeat)
 
 **2. Plugin hooks** -- Python functions from plugins with `hook` capability.
 See [Advanced: Plugin Hooks](#advanced-plugin-hooks) in the plugin tutorial.
@@ -993,7 +1011,9 @@ See [Advanced: Plugin Hooks](#advanced-plugin-hooks) in the plugin tutorial.
 ### Core Module: `radar/hooks.py`
 
 Key types:
-- `HookPoint` enum: `PRE_TOOL_CALL`, `POST_TOOL_CALL`, `FILTER_TOOLS`
+- `HookPoint` enum: `PRE_TOOL_CALL`, `POST_TOOL_CALL`, `FILTER_TOOLS`,
+  `PRE_AGENT_RUN`, `POST_AGENT_RUN`, `PRE_MEMORY_STORE`, `POST_MEMORY_SEARCH`,
+  `PRE_HEARTBEAT`, `POST_HEARTBEAT`
 - `HookResult` dataclass: `blocked: bool`, `message: str`
 - `HookRegistration` dataclass: `name`, `hook_point`, `callback`, `priority`,
   `source`, `description`
@@ -1003,6 +1023,12 @@ Key functions:
 - `run_pre_tool_hooks()` -- Returns `HookResult` (short-circuits on first block)
 - `run_post_tool_hooks()` -- Fire-and-forget observation
 - `run_filter_tools_hooks()` -- Chain-filters the tool list
+- `run_pre_agent_hooks()` -- Returns `HookResult` (short-circuits on first block)
+- `run_post_agent_hooks()` -- Chain-transforms the response string
+- `run_pre_memory_store_hooks()` -- Returns `HookResult` (short-circuits on first block)
+- `run_post_memory_search_hooks()` -- Chain-filters/reranks search results
+- `run_pre_heartbeat_hooks()` -- Returns `HookResult` (short-circuits on first block)
+- `run_post_heartbeat_hooks()` -- Fire-and-forget observation
 - `clear_all_hooks()` -- Reset (useful for testing)
 - `list_hooks()` -- Introspection
 

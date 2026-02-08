@@ -4,6 +4,7 @@ Reads hooks.rules from radar.yaml and registers hook callbacks.
 """
 
 import logging
+import re
 from datetime import datetime
 from typing import Any
 
@@ -85,6 +86,18 @@ def _build_callback(
         return _build_post_callback(rule_type, rule)
     elif hook_point == HookPoint.FILTER_TOOLS:
         return _build_filter_callback(rule_type, rule)
+    elif hook_point == HookPoint.PRE_AGENT_RUN:
+        return _build_pre_agent_callback(rule_type, rule)
+    elif hook_point == HookPoint.POST_AGENT_RUN:
+        return _build_post_agent_callback(rule_type, rule)
+    elif hook_point == HookPoint.PRE_MEMORY_STORE:
+        return _build_pre_memory_callback(rule_type, rule)
+    elif hook_point == HookPoint.POST_MEMORY_SEARCH:
+        return _build_post_memory_callback(rule_type, rule)
+    elif hook_point == HookPoint.PRE_HEARTBEAT:
+        return _build_pre_heartbeat_callback(rule_type, rule)
+    elif hook_point == HookPoint.POST_HEARTBEAT:
+        return _build_post_heartbeat_callback(rule_type, rule)
     return None
 
 
@@ -249,5 +262,155 @@ def _make_denylist(rule: dict) -> Any:
             t for t in tools
             if t.get("function", {}).get("name") not in denied
         ]
+
+    return callback
+
+
+# --- Pre-agent callbacks ---
+
+
+def _build_pre_agent_callback(rule_type: str, rule: dict) -> Any:
+    """Build a pre-agent callback."""
+    if rule_type == "block_message_pattern":
+        return _make_block_message_pattern(rule)
+    return None
+
+
+def _make_block_message_pattern(rule: dict) -> Any:
+    """Block messages matching substring patterns."""
+    patterns = rule.get("patterns", [])
+    message = rule.get("message", "Message blocked by hook")
+
+    def callback(user_message: str, conversation_id: str | None) -> HookResult:
+        lower_msg = user_message.lower()
+        for pattern in patterns:
+            if pattern.lower() in lower_msg:
+                return HookResult(blocked=True, message=message)
+        return HookResult()
+
+    return callback
+
+
+# --- Post-agent callbacks ---
+
+
+def _build_post_agent_callback(rule_type: str, rule: dict) -> Any:
+    """Build a post-agent callback."""
+    if rule_type == "redact_response":
+        return _make_redact_response(rule)
+    elif rule_type == "log_agent":
+        return _make_log_agent(rule)
+    return None
+
+
+def _make_redact_response(rule: dict) -> Any:
+    """Replace patterns in LLM responses."""
+    patterns = [re.compile(p) for p in rule.get("patterns", [])]
+    replacement = rule.get("replacement", "[REDACTED]")
+
+    def callback(
+        user_message: str,
+        response: str,
+        conversation_id: str | None,
+    ) -> str:
+        for pattern in patterns:
+            response = pattern.sub(replacement, response)
+        return response
+
+    return callback
+
+
+def _make_log_agent(rule: dict) -> Any:
+    """Log agent interactions."""
+    log_level = rule.get("log_level", "info")
+
+    def callback(
+        user_message: str,
+        response: str,
+        conversation_id: str | None,
+    ) -> None:
+        from radar.logging import log
+        log(log_level, f"Hook log: agent run (conversation={conversation_id})")
+
+    return callback
+
+
+# --- Pre-memory callbacks ---
+
+
+def _build_pre_memory_callback(rule_type: str, rule: dict) -> Any:
+    """Build a pre-memory-store callback."""
+    if rule_type == "block_memory_pattern":
+        return _make_block_memory_pattern(rule)
+    return None
+
+
+def _make_block_memory_pattern(rule: dict) -> Any:
+    """Block storing memories matching patterns."""
+    patterns = rule.get("patterns", [])
+    message = rule.get("message", "Memory storage blocked by hook")
+
+    def callback(content: str, source: str | None) -> HookResult:
+        lower_content = content.lower()
+        for pattern in patterns:
+            if pattern.lower() in lower_content:
+                return HookResult(blocked=True, message=message)
+        return HookResult()
+
+    return callback
+
+
+# --- Post-memory callbacks ---
+
+
+def _build_post_memory_callback(rule_type: str, rule: dict) -> Any:
+    """Build a post-memory-search callback."""
+    if rule_type == "filter_memory_pattern":
+        return _make_filter_memory_pattern(rule)
+    return None
+
+
+def _make_filter_memory_pattern(rule: dict) -> Any:
+    """Remove search results matching patterns."""
+    exclude_patterns = rule.get("exclude_patterns", [])
+
+    def callback(query: str, results: list[dict]) -> list[dict]:
+        filtered = []
+        for result in results:
+            content = result.get("content", "").lower()
+            if not any(p.lower() in content for p in exclude_patterns):
+                filtered.append(result)
+        return filtered
+
+    return callback
+
+
+# --- Pre-heartbeat callbacks ---
+
+
+def _build_pre_heartbeat_callback(rule_type: str, rule: dict) -> Any:
+    """Build a pre-heartbeat callback."""
+    # No config-driven pre-heartbeat rules yet; plugin hooks can fill this.
+    return None
+
+
+# --- Post-heartbeat callbacks ---
+
+
+def _build_post_heartbeat_callback(rule_type: str, rule: dict) -> Any:
+    """Build a post-heartbeat callback."""
+    if rule_type == "log_heartbeat":
+        return _make_log_heartbeat(rule)
+    return None
+
+
+def _make_log_heartbeat(rule: dict) -> Any:
+    """Log heartbeat execution."""
+    log_level = rule.get("log_level", "info")
+
+    def callback(event_count: int, success: bool, error: str | None) -> None:
+        from radar.logging import log
+        status = "success" if success else f"failure: {error}"
+        log(log_level, f"Hook log: heartbeat ({status}, {event_count} events)")
 
     return callback

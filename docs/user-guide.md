@@ -1168,7 +1168,7 @@ Plugin safety is enforced through multiple layers:
 
 ## Hook System
 
-Hooks let you intercept tool execution and filter which tools are available -- without modifying Radar's source code. They provide a configurable policy layer on top of the built-in security checks in `radar/security.py`.
+Hooks let you intercept tool execution, agent interactions, memory operations, and heartbeats -- without modifying Radar's source code. They provide a configurable policy layer on top of the built-in security checks in `radar/security.py`.
 
 ### Why Hooks?
 
@@ -1177,6 +1177,11 @@ The built-in security (path blocklists, command pattern blocking) is hardcoded a
 - Block specific command patterns (e.g., prevent `rm` commands)
 - Restrict tools during certain hours (e.g., no `exec` at night)
 - Audit-log every tool call
+- Block prompt injection attempts before they reach the LLM
+- Redact secrets from LLM responses
+- Prevent memory poisoning by blocking suspicious memory content
+- Filter potentially poisoned memories from search results
+- Skip heartbeats under custom conditions
 - Use plugin hooks for custom security checks
 
 ### Configuration
@@ -1187,6 +1192,7 @@ Add a `hooks` section to your `radar.yaml`:
 hooks:
   enabled: true    # Set to false to disable all hooks
   rules:
+    # --- Tool rules ---
     - name: block_rm
       hook_point: pre_tool_call
       type: block_command_pattern
@@ -1205,6 +1211,37 @@ hooks:
     - name: audit_log
       hook_point: post_tool_call
       type: log
+      log_level: info
+
+    # --- Agent rules ---
+    - name: content_moderation
+      hook_point: pre_agent_run
+      type: block_message_pattern
+      patterns: ["ignore previous instructions", "ignore all instructions"]
+      message: "Message blocked by content filter"
+
+    - name: redact_secrets
+      hook_point: post_agent_run
+      type: redact_response
+      patterns: ["sk-[a-zA-Z0-9]+", "password:\\s*\\S+"]
+      replacement: "[REDACTED]"
+
+    # --- Memory rules (anti-poisoning) ---
+    - name: anti_poisoning
+      hook_point: pre_memory_store
+      type: block_memory_pattern
+      patterns: ["run:", "execute:", "curl ", "wget ", "sudo "]
+      message: "Memory blocked: contains instruction-like content"
+
+    - name: filter_suspicious_memories
+      hook_point: post_memory_search
+      type: filter_memory_pattern
+      exclude_patterns: ["ignore previous", "system prompt"]
+
+    # --- Heartbeat rules ---
+    - name: heartbeat_audit
+      hook_point: post_heartbeat
+      type: log_heartbeat
       log_level: info
 ```
 
@@ -1232,9 +1269,40 @@ hooks:
 |------|-------------|------------|
 | `log` | Log tool execution | `log_level` |
 
+**Pre-agent rules** (can block messages before they reach the LLM):
+
+| Type | Description | Key Fields |
+|------|-------------|------------|
+| `block_message_pattern` | Block messages matching substring patterns (case-insensitive) | `patterns`, `message` |
+
+**Post-agent rules** (transform LLM responses):
+
+| Type | Description | Key Fields |
+|------|-------------|------------|
+| `redact_response` | Replace regex patterns in responses | `patterns`, `replacement` |
+| `log_agent` | Log agent interactions | `log_level` |
+
+**Pre-memory rules** (can block memory storage -- anti-poisoning):
+
+| Type | Description | Key Fields |
+|------|-------------|------------|
+| `block_memory_pattern` | Block storing memories matching substring patterns | `patterns`, `message` |
+
+**Post-memory rules** (filter memory search results):
+
+| Type | Description | Key Fields |
+|------|-------------|------------|
+| `filter_memory_pattern` | Remove search results matching patterns | `exclude_patterns` |
+
+**Post-heartbeat rules** (observe heartbeat execution):
+
+| Type | Description | Key Fields |
+|------|-------------|------------|
+| `log_heartbeat` | Log heartbeat execution | `log_level` |
+
 ### Hook Priority
 
-Rules with lower `priority` numbers run first. If you omit `priority`, config rules default to 50. For pre-tool hooks, the first rule that blocks stops execution -- later rules do not run.
+Rules with lower `priority` numbers run first. If you omit `priority`, config rules default to 50. For pre-tool and pre-agent hooks, the first rule that blocks stops execution -- later rules do not run.
 
 ### Plugin Hooks
 

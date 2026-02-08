@@ -73,6 +73,16 @@ def _heartbeat_tick() -> None:
         _log_heartbeat("Heartbeat skipped (quiet hours)")
         return
 
+    # --- PRE hook ---
+    try:
+        from radar.hooks import run_pre_heartbeat_hooks
+        hook_result = run_pre_heartbeat_hooks(len(_event_queue))
+        if hook_result.blocked:
+            _log_heartbeat(f"Heartbeat skipped by hook: {hook_result.message}")
+            return
+    except Exception:
+        pass  # Don't let hook failures prevent heartbeats
+
     # Process due scheduled tasks
     try:
         from radar.scheduled_tasks import get_due_tasks, mark_task_executed
@@ -105,18 +115,29 @@ def _heartbeat_tick() -> None:
     message = _build_heartbeat_message(events)
 
     # Run agent with heartbeat message
+    success = True
+    error_msg = None
     try:
         from radar.agent import run
         _log_heartbeat("Heartbeat started", event_count=len(events))
         run(message, conversation_id=_get_heartbeat_conversation_id())
         _log_heartbeat("Heartbeat completed", event_count=len(events))
     except Exception as e:
+        success = False
+        error_msg = str(e)
         # Log error but don't crash scheduler
         import sys
         print(f"Heartbeat error: {e}", file=sys.stderr)
         _log_heartbeat("Heartbeat failed", error=str(e))
 
     _last_heartbeat = datetime.now()
+
+    # --- POST hook ---
+    try:
+        from radar.hooks import run_post_heartbeat_hooks
+        run_post_heartbeat_hooks(len(events), success, error_msg)
+    except Exception:
+        pass
 
 
 def _get_heartbeat_conversation_id() -> str:
