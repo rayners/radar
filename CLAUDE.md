@@ -916,6 +916,18 @@ Radar can create new tools dynamically through LLM-generated plugins. This enabl
   errors/               # Error logs for debugging
 ```
 
+### Plugin Scaffolding
+
+Use the CLI to scaffold a new plugin with boilerplate files:
+
+```bash
+radar plugin create my_tool                         # Local trust (default)
+radar plugin create my_tool -d "Description" -t sandbox  # Sandbox trust
+radar plugin create my_tool -o ~/my-plugins         # Custom output dir
+```
+
+Generates `manifest.yaml`, `tool.py`, `tests.yaml`, and `README.md`. The name must be a valid Python identifier (no hyphens, no leading underscore).
+
 ### Plugin Creation
 
 The LLM can use the `create_tool` meta-tool to generate new tools:

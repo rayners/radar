@@ -815,5 +815,136 @@ def plugin_approve(name: str):
         raise SystemExit(1)
 
 
+@plugin.command("create")
+@click.argument("name")
+@click.option("-d", "--description", default=None, help="Plugin description")
+@click.option(
+    "-t",
+    "--trust-level",
+    type=click.Choice(["sandbox", "local"]),
+    default="local",
+    help="Trust level (default: local)",
+)
+@click.option(
+    "-o",
+    "--output-dir",
+    type=click.Path(),
+    default=".",
+    help="Where to create the plugin directory (default: current dir)",
+)
+def plugin_create(name: str, description: str | None, trust_level: str, output_dir: str):
+    """Scaffold a new plugin directory with boilerplate files."""
+    import keyword
+    import re
+
+    import yaml
+
+    # Validate name is a valid Python identifier
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9_]*$", name) or keyword.iskeyword(name):
+        console.print(f"[red]Error: '{name}' is not a valid Python identifier[/red]")
+        raise SystemExit(1)
+
+    if name.startswith("_"):
+        console.print("[red]Error: plugin name must not start with underscore[/red]")
+        raise SystemExit(1)
+
+    output = Path(output_dir).expanduser().resolve()
+    plugin_dir = output / name
+
+    if plugin_dir.exists():
+        console.print(f"[red]Error: directory already exists: {plugin_dir}[/red]")
+        raise SystemExit(1)
+
+    # Resolve author from git config
+    try:
+        result = subprocess.run(
+            ["git", "config", "user.name"], capture_output=True, text=True, check=True
+        )
+        author = result.stdout.strip() or "unknown"
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        author = "unknown"
+
+    desc = description or f"A custom {name} plugin"
+
+    # Build manifest
+    manifest = {
+        "name": name,
+        "version": "1.0.0",
+        "description": desc,
+        "author": author,
+        "trust_level": trust_level,
+        "capabilities": ["tool"],
+        "tools": [
+            {
+                "name": name,
+                "description": desc,
+                "parameters": {
+                    "text": {"type": "string", "description": "Input text"},
+                },
+            }
+        ],
+    }
+
+    # Build tool.py
+    sandbox_note = ""
+    if trust_level == "sandbox":
+        sandbox_note = "# NOTE: sandbox trust — restricted builtins only (no open, import, etc.)\n"
+    tool_code = f'''{sandbox_note}def {name}(text: str) -> str:
+    """{{desc}}"""
+    return f"{{name}} result: {{{{text}}}}"
+'''.format(desc=desc, name=name)
+
+    # Build tests.yaml
+    tests = [
+        {
+            "name": "basic_test",
+            "input": {"text": "hello"},
+            "expected_contains": f"{name} result:",
+        },
+        {
+            "name": "empty_input",
+            "input": {"text": ""},
+            "expected_contains": f"{name} result:",
+        },
+    ]
+
+    # Build README
+    readme = f"""# {name}
+
+{desc}
+
+## Install
+
+```bash
+radar plugin install ./{name}
+radar plugin approve {name}
+```
+
+## Development
+
+Edit `tool.py` to implement your plugin logic. Update `manifest.yaml` to change metadata or add parameters.
+
+Trust level: `{trust_level}`
+"""
+
+    # Write files
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "manifest.yaml").write_text(yaml.dump(manifest, default_flow_style=False, sort_keys=False))
+    (plugin_dir / "tool.py").write_text(tool_code)
+    (plugin_dir / "tests.yaml").write_text(yaml.dump(tests, default_flow_style=False))
+    (plugin_dir / "README.md").write_text(readme)
+
+    console.print(f"[green]Created plugin scaffold: {plugin_dir}[/green]")
+    console.print()
+    console.print("Files:")
+    for f in ["manifest.yaml", "tool.py", "tests.yaml", "README.md"]:
+        console.print(f"  {f}")
+    console.print()
+    console.print("Next steps:")
+    console.print(f"  1. Edit [bold]{plugin_dir}/tool.py[/bold] to implement your logic")
+    console.print(f"  2. Run [bold]radar plugin install {plugin_dir}[/bold]")
+    console.print(f"  3. Run [bold]radar plugin approve {name}[/bold]")
+
+
 if __name__ == "__main__":
     cli()

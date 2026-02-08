@@ -8,7 +8,7 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (86 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (36 tests), `test_security.py` (87 tests), `test_config.py` (43 tests), `test_memory.py` (45 tests), `test_llm.py` (42 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (181 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (104 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests), `test_summaries.py` (41 tests), `test_documents.py` (43 tests), `test_retry.py` (21 tests), `test_hot_reload.py` (21 tests), `test_rss_reader.py` (45 tests) — **1159 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (86 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (36 tests), `test_security.py` (87 tests), `test_config.py` (43 tests), `test_memory.py` (45 tests), `test_llm.py` (42 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (193 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (104 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests), `test_summaries.py` (41 tests), `test_documents.py` (43 tests), `test_retry.py` (21 tests), `test_hot_reload.py` (21 tests), `test_rss_reader.py` (45 tests) — **1171 total**.
 
 - [x] **Core agent tests** - personality loading, system prompt building, Jinja2 template rendering, plugin prompt variables, run/ask orchestration (32 tests)
 - [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, retry with backoff, format conversion (42 tests)
@@ -290,7 +290,7 @@ Reducing friction for adding new tools and plugins.
 
 ### Plugin Lifecycle
 - [ ] **Plugin loading at startup** — Load all enabled plugins when daemon starts, not on first tool call. Currently a plugin created via chat isn't available until the tool registry is next queried.
-- [ ] **Plugin scaffolding CLI** — `radar plugin create <name>` to generate boilerplate file with `@tool` decorator, test cases, and manifest.
+- [x] **Plugin scaffolding CLI** — `radar plugin create <name>` generates manifest.yaml, tool.py, tests.yaml, and README.md (12 tests)
 - [ ] **Plugin persistent state** — Simple key-value store per plugin for cross-invocation state (e.g., a counter, last-run timestamp, cached data).
 - [x] **Plugin hook system** — Nine-point hook system (`pre_tool_call`, `post_tool_call`, `filter_tools`, `pre_agent_run`, `post_agent_run`, `pre_memory_store`, `post_memory_search`, `pre_heartbeat`, `post_heartbeat`) with config-driven rules in `radar.yaml` and plugin `hook` capability. Supports blocking, observing, filtering, and transforming at tool, agent, memory, and heartbeat boundaries. (96 tests in `test_hooks.py`)
 - [ ] **Plugin event hooks** — Plugins can register for events like `on_conversation_start`, `on_tool_error` to participate in the system lifecycle without being explicitly called by the LLM. (Note: `on_heartbeat` is now covered by the `pre_heartbeat`/`post_heartbeat` hook points.)
@@ -354,7 +354,7 @@ Ready-to-use configurations that demonstrate Radar's autonomous capabilities. Se
 **Medium Priority (Usability):**
 1. IMAP email (read-only) — highest scenario unlock count, enables briefing + bill tracking + inbox watch
 2. ~~Web page diff/monitor tool~~ (done — 50 tests)
-3. Plugin scaffolding CLI (`radar plugin create`)
+3. ~~Plugin scaffolding CLI~~ (done — `radar plugin create`, 12 tests)
 4. Template syntax validation for personality files
 5. Token/cost tracking
 6. ~~RSS feed reader~~ (done — bundled plugin, 45 tests)

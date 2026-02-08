@@ -1548,6 +1548,11 @@ LLM-generated plugins are always `sandbox`. The `local` trust level is only for 
 ### Plugin CLI Commands
 
 ```bash
+# Scaffold a new plugin
+radar plugin create my_tool
+radar plugin create my_tool -d "Does amazing things" -t sandbox
+radar plugin create my_tool -o ~/my-plugins
+
 # Install a plugin from a local directory
 radar plugin install ~/my-plugins/git_tools
 

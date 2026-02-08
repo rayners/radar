@@ -2028,3 +2028,114 @@ class TestBundledPlugins:
         """Missing bundled_disabled.json returns empty set."""
         loader, _ = loader_with_bundled
         assert loader._get_disabled_bundled() == set()
+
+
+# ===========================================================================
+# Plugin Create CLI
+# ===========================================================================
+
+
+class TestPluginCreateCLI:
+    """Tests for `radar plugin create` CLI command."""
+
+    def _invoke(self, args, **kwargs):
+        from click.testing import CliRunner
+
+        from radar.cli import cli
+
+        runner = CliRunner()
+        return runner.invoke(cli, ["plugin", "create"] + args, **kwargs)
+
+    def test_creates_all_files(self, tmp_path):
+        """Creates directory with manifest.yaml, tool.py, tests.yaml, README.md."""
+        result = self._invoke(["my_plugin", "-o", str(tmp_path)])
+        assert result.exit_code == 0
+        plugin_dir = tmp_path / "my_plugin"
+        assert (plugin_dir / "manifest.yaml").exists()
+        assert (plugin_dir / "tool.py").exists()
+        assert (plugin_dir / "tests.yaml").exists()
+        assert (plugin_dir / "README.md").exists()
+
+    def test_manifest_metadata(self, tmp_path):
+        """Manifest has correct name, trust_level, and tools list."""
+        self._invoke(["my_plugin", "-d", "Test desc", "-o", str(tmp_path)])
+        manifest = yaml.safe_load((tmp_path / "my_plugin" / "manifest.yaml").read_text())
+        assert manifest["name"] == "my_plugin"
+        assert manifest["trust_level"] == "local"
+        assert manifest["description"] == "Test desc"
+        assert manifest["version"] == "1.0.0"
+        tools = manifest["tools"]
+        assert len(tools) == 1
+        assert tools[0]["name"] == "my_plugin"
+
+    def test_tool_defines_matching_function(self, tmp_path):
+        """tool.py defines a function matching the plugin name."""
+        self._invoke(["my_plugin", "-o", str(tmp_path)])
+        code = (tmp_path / "my_plugin" / "tool.py").read_text()
+        assert "def my_plugin(text: str) -> str:" in code
+
+    def test_sandbox_trust_level(self, tmp_path):
+        """Sandbox trust level sets manifest and adds note in code."""
+        self._invoke(["my_plugin", "-t", "sandbox", "-o", str(tmp_path)])
+        manifest = yaml.safe_load((tmp_path / "my_plugin" / "manifest.yaml").read_text())
+        assert manifest["trust_level"] == "sandbox"
+        code = (tmp_path / "my_plugin" / "tool.py").read_text()
+        assert "sandbox" in code.lower()
+
+    def test_rejects_invalid_identifier(self, tmp_path):
+        """Rejects names with hyphens (not valid Python identifiers)."""
+        result = self._invoke(["my-tool", "-o", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "not a valid Python identifier" in result.output
+
+    def test_rejects_underscore_prefix(self, tmp_path):
+        """Rejects names starting with underscore."""
+        result = self._invoke(["_private", "-o", str(tmp_path)])
+        assert result.exit_code != 0
+
+    def test_rejects_existing_directory(self, tmp_path):
+        """Rejects if plugin directory already exists."""
+        (tmp_path / "my_plugin").mkdir()
+        result = self._invoke(["my_plugin", "-o", str(tmp_path)])
+        assert result.exit_code != 0
+        assert "already exists" in result.output
+
+    def test_generated_code_passes_validator(self, tmp_path):
+        """Generated code passes CodeValidator."""
+        self._invoke(["my_plugin", "-o", str(tmp_path)])
+        code = (tmp_path / "my_plugin" / "tool.py").read_text()
+        validator = CodeValidator()
+        is_valid, errors = validator.validate(code)
+        assert is_valid, f"Validation errors: {errors}"
+
+    def test_generated_tests_pass(self, tmp_path):
+        """Generated tests pass against generated code."""
+        self._invoke(["my_plugin", "-o", str(tmp_path)])
+        code = (tmp_path / "my_plugin" / "tool.py").read_text()
+        tests_data = yaml.safe_load((tmp_path / "my_plugin" / "tests.yaml").read_text())
+        test_cases = [TestCase.from_dict(t) for t in tests_data]
+        runner = TestRunner(timeout_seconds=5)
+        all_passed, results = runner.run_tests(code, test_cases, "my_plugin")
+        assert all_passed, f"Tests failed: {results}"
+
+    def test_installable_via_loader(self, tmp_path):
+        """Generated plugin is installable via install_plugin()."""
+        from radar.plugins.loader import PluginLoader
+
+        self._invoke(["my_plugin", "-o", str(tmp_path)])
+        loader = PluginLoader(plugins_dir=tmp_path / "plugins_home")
+        success, message = loader.install_plugin(tmp_path / "my_plugin")
+        assert success, f"Install failed: {message}"
+        assert "pending review" in message
+
+    def test_custom_description(self, tmp_path):
+        """Custom description populates manifest and tool.py."""
+        self._invoke(["my_plugin", "-d", "Does amazing things", "-o", str(tmp_path)])
+        manifest = yaml.safe_load((tmp_path / "my_plugin" / "manifest.yaml").read_text())
+        assert manifest["description"] == "Does amazing things"
+
+    def test_default_description(self, tmp_path):
+        """Default description when none provided."""
+        self._invoke(["my_plugin", "-o", str(tmp_path)])
+        manifest = yaml.safe_load((tmp_path / "my_plugin" / "manifest.yaml").read_text())
+        assert manifest["description"] == "A custom my_plugin plugin"
