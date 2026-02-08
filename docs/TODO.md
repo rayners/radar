@@ -8,7 +8,7 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (86 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (36 tests), `test_security.py` (87 tests), `test_config.py` (43 tests), `test_memory.py` (45 tests), `test_llm.py` (42 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (169 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (96 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests), `test_summaries.py` (41 tests), `test_documents.py` (43 tests), `test_retry.py` (21 tests), `test_hot_reload.py` (21 tests) — **1094 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (86 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (36 tests), `test_security.py` (87 tests), `test_config.py` (43 tests), `test_memory.py` (45 tests), `test_llm.py` (42 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (181 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (104 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests), `test_summaries.py` (41 tests), `test_documents.py` (43 tests), `test_retry.py` (21 tests), `test_hot_reload.py` (21 tests), `test_rss_reader.py` (45 tests) — **1159 total**.
 
 - [x] **Core agent tests** - personality loading, system prompt building, Jinja2 template rendering, plugin prompt variables, run/ask orchestration (32 tests)
 - [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, retry with backoff, format conversion (42 tests)
@@ -60,7 +60,7 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 ## 3. New Tools to Add
 
 ### Input Sources
-- [ ] **RSS/Atom feed reader** - monitor blogs, releases, news; filter by keywords
+- [x] **RSS/Atom feed reader** - bundled plugin with `subscribe_feed`, `list_feeds`, `check_feed`, `unsubscribe_feed` tools + heartbeat integration (45 tests)
 - [ ] **IMAP email monitor** - read-only inbox access for summarization, bill tracking, inbox watch, package tracking (see `docs/scenarios.md` for prompt injection mitigations)
 - [ ] **Webhook receiver** - generic endpoint for GitHub, Stripe, Zapier, n8n
 - [x] **CalDAV calendar** - khal CLI wrapper with JSON output, caching, heartbeat reminders (45 tests)
@@ -357,8 +357,8 @@ Ready-to-use configurations that demonstrate Radar's autonomous capabilities. Se
 3. Plugin scaffolding CLI (`radar plugin create`)
 4. Template syntax validation for personality files
 5. Token/cost tracking
-6. RSS feed reader
-7. Plugin event hooks (`on_heartbeat`, etc.)
+6. ~~RSS feed reader~~ (done — bundled plugin, 45 tests)
+7. ~~Plugin event hooks (`on_heartbeat`, etc.)~~ (done — HEARTBEAT_COLLECT hook point)
 8. Conversation export (markdown, JSON)
 
 **Lower Priority (Nice to Have):**

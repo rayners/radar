@@ -203,5 +203,6 @@ class Plugin:
     functions: dict[str, Callable] = field(default_factory=dict)
     enabled: bool = True
     path: Path | None = None
+    source: str = "user"  # "user" or "bundled"
     test_cases: list[TestCase] = field(default_factory=list)
     errors: list[ToolError] = field(default_factory=list)

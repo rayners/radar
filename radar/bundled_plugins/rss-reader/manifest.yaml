@@ -1,0 +1,34 @@
+name: rss-reader
+version: 1.0.0
+description: "RSS/Atom feed reader with periodic checking and new entry detection"
+author: radar
+trust_level: local
+capabilities: [tool, hook]
+tools:
+  - name: subscribe_feed
+    description: "Subscribe to an RSS or Atom feed for periodic checking"
+    parameters:
+      name: {type: string, description: "Short name for this feed"}
+      url: {type: string, description: "URL of the RSS/Atom feed"}
+      check_interval_minutes: {type: integer, description: "Minutes between checks (default: 60, min: 5)"}
+      max_entries: {type: integer, description: "Max entries to report per check (default: 10)"}
+  - name: list_feeds
+    description: "List all RSS/Atom feed subscriptions with status"
+    parameters:
+      show_disabled: {type: boolean, description: "Include paused feeds"}
+  - name: check_feed
+    description: "Manually check a feed for new entries"
+    parameters:
+      feed_id: {type: integer, description: "ID of the feed to check"}
+      url: {type: string, description: "URL for a one-off feed check"}
+  - name: unsubscribe_feed
+    description: "Pause, resume, or delete a feed subscription"
+    parameters:
+      feed_id: {type: integer, description: "ID of the feed"}
+      delete: {type: boolean, description: "Permanently delete instead of pause"}
+      resume: {type: boolean, description: "Resume a paused feed"}
+hooks:
+  - hook_point: heartbeat_collect
+    function: collect_feed_events
+    priority: 80
+    description: "Check due RSS feeds and return new entry events"

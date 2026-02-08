@@ -20,6 +20,7 @@ class HookPoint(Enum):
     POST_MEMORY_SEARCH = "post_memory_search"
     PRE_HEARTBEAT = "pre_heartbeat"
     POST_HEARTBEAT = "post_heartbeat"
+    HEARTBEAT_COLLECT = "heartbeat_collect"
 
 
 @dataclass
@@ -53,6 +54,7 @@ _hooks: dict[HookPoint, list[HookRegistration]] = {
     HookPoint.POST_MEMORY_SEARCH: [],
     HookPoint.PRE_HEARTBEAT: [],
     HookPoint.POST_HEARTBEAT: [],
+    HookPoint.HEARTBEAT_COLLECT: [],
 }
 
 
@@ -344,3 +346,31 @@ def run_post_heartbeat_hooks(
                 hook.name,
                 exc_info=True,
             )
+
+
+def run_heartbeat_collect_hooks() -> list[dict]:
+    """Run all heartbeat-collect hooks and return collected events.
+
+    Each callback should return a list of event dicts (or a single dict).
+    Results are merged into a flat list. Failing hooks are logged and skipped.
+    """
+    hooks_list = _hooks[HookPoint.HEARTBEAT_COLLECT]
+    if not hooks_list:
+        return []
+
+    events: list[dict] = []
+    for hook in hooks_list:
+        try:
+            result = hook.callback()
+            if isinstance(result, list):
+                events.extend(result)
+            elif isinstance(result, dict):
+                events.append(result)
+        except Exception:
+            logger.warning(
+                "Heartbeat-collect hook '%s' raised an exception (skipping)",
+                hook.name,
+                exc_info=True,
+            )
+
+    return events

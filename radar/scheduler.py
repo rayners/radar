@@ -202,6 +202,16 @@ def _heartbeat_tick() -> None:
     except Exception:
         pass
 
+    # Run heartbeat-collect hooks (e.g., RSS feed checks)
+    try:
+        from radar.hooks import run_heartbeat_collect_hooks
+        for event in run_heartbeat_collect_hooks():
+            event_type = event.get("type", "plugin_event")
+            data = event.get("data", event)
+            add_event(event_type, data)
+    except Exception as e:
+        _log_heartbeat("Heartbeat-collect hooks error", error=str(e))
+
     # Collect pending events
     events = _event_queue.copy()
     _event_queue.clear()

@@ -10,6 +10,7 @@ from radar.hooks import (
     list_hooks,
     register_hook,
     run_filter_tools_hooks,
+    run_heartbeat_collect_hooks,
     run_post_tool_hooks,
     run_pre_tool_hooks,
     run_pre_agent_hooks,
@@ -1739,3 +1740,122 @@ class TestNewConfigRules:
 
         hooks = list_hooks()
         assert len(hooks) == 5
+
+
+# ---- Heartbeat-Collect Hooks ----
+
+
+class TestHeartbeatCollectHooks:
+    """Test heartbeat-collect hook running."""
+
+    def test_no_hooks_empty(self):
+        result = run_heartbeat_collect_hooks()
+        assert result == []
+
+    def test_single_hook_returns_list(self):
+        events = [
+            {"type": "rss", "data": {"description": "New RSS entry"}},
+        ]
+
+        register_hook(HookRegistration(
+            name="rss_collector",
+            hook_point=HookPoint.HEARTBEAT_COLLECT,
+            callback=lambda: events,
+        ))
+
+        result = run_heartbeat_collect_hooks()
+        assert len(result) == 1
+        assert result[0]["type"] == "rss"
+
+    def test_single_hook_returns_dict(self):
+        """A hook returning a single dict is wrapped into a list."""
+        event = {"type": "single", "data": {"description": "One event"}}
+
+        register_hook(HookRegistration(
+            name="single",
+            hook_point=HookPoint.HEARTBEAT_COLLECT,
+            callback=lambda: event,
+        ))
+
+        result = run_heartbeat_collect_hooks()
+        assert len(result) == 1
+        assert result[0]["type"] == "single"
+
+    def test_multiple_hooks_merged(self):
+        """Multiple hooks' events are merged into a flat list."""
+        register_hook(HookRegistration(
+            name="hook_a",
+            hook_point=HookPoint.HEARTBEAT_COLLECT,
+            callback=lambda: [{"type": "a", "data": {}}],
+            priority=10,
+        ))
+        register_hook(HookRegistration(
+            name="hook_b",
+            hook_point=HookPoint.HEARTBEAT_COLLECT,
+            callback=lambda: [
+                {"type": "b1", "data": {}},
+                {"type": "b2", "data": {}},
+            ],
+            priority=20,
+        ))
+
+        result = run_heartbeat_collect_hooks()
+        assert len(result) == 3
+        types = [e["type"] for e in result]
+        assert types == ["a", "b1", "b2"]
+
+    def test_exception_isolation(self):
+        """Failing hook doesn't prevent other hooks from running."""
+        def bad_hook():
+            raise RuntimeError("crash")
+
+        register_hook(HookRegistration(
+            name="bad",
+            hook_point=HookPoint.HEARTBEAT_COLLECT,
+            callback=bad_hook,
+            priority=10,
+        ))
+        register_hook(HookRegistration(
+            name="good",
+            hook_point=HookPoint.HEARTBEAT_COLLECT,
+            callback=lambda: [{"type": "ok", "data": {}}],
+            priority=20,
+        ))
+
+        result = run_heartbeat_collect_hooks()
+        assert len(result) == 1
+        assert result[0]["type"] == "ok"
+
+    def test_hook_returns_empty_list(self):
+        """Hook returning empty list contributes nothing."""
+        register_hook(HookRegistration(
+            name="empty",
+            hook_point=HookPoint.HEARTBEAT_COLLECT,
+            callback=lambda: [],
+        ))
+
+        result = run_heartbeat_collect_hooks()
+        assert result == []
+
+    def test_hook_returns_non_list_non_dict_ignored(self):
+        """Hook returning non-list/non-dict is ignored."""
+        register_hook(HookRegistration(
+            name="weird",
+            hook_point=HookPoint.HEARTBEAT_COLLECT,
+            callback=lambda: "not a list",
+        ))
+
+        result = run_heartbeat_collect_hooks()
+        assert result == []
+
+    def test_unknown_heartbeat_collect_config_type(self):
+        """Config-driven heartbeat_collect rules return None (no config rules)."""
+        from radar.hooks_builtin import _build_hook
+
+        rule = {
+            "name": "bad",
+            "hook_point": "heartbeat_collect",
+            "type": "nonexistent_type",
+        }
+        reg = _build_hook(rule)
+        assert reg is None

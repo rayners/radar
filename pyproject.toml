@@ -29,6 +29,9 @@ dependencies = [
 local-embeddings = [
     "sentence-transformers>=2.2",  # Local embedding models (CPU, no API needed)
 ]
+rss = [
+    "feedparser>=6.0",  # RSS/Atom feed parsing
+]
 
 [project.scripts]
 radar = "radar.cli:cli"

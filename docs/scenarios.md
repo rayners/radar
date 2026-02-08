@@ -40,6 +40,10 @@ Tools available today and the scenarios they enable:
 | `store_conversation_summary` | Memory | Save summary as markdown file + semantic memory |
 | `search_documents` | Input | Search indexed document collections (hybrid FTS5 + semantic) |
 | `manage_documents` | Automation | Create, list, delete, index document collections |
+| `subscribe_feed` | Input | Subscribe to RSS/Atom feeds for periodic monitoring |
+| `list_feeds` | Input | List feed subscriptions with status |
+| `check_feed` | Input | Manual feed check or one-off URL fetch |
+| `unsubscribe_feed` | Automation | Pause, resume, or delete feed subscriptions |
 
 Infrastructure:
 
@@ -163,7 +167,7 @@ A read-only `email` tool connecting via IMAP.
 | ~~**Web page diff/monitor**~~ | ~~Changelog tracking, price drops, government notices~~ | ~~Low~~ (done) |
 | **Home Assistant API** | Smart home control, climate, security | Medium |
 | **Secure credential store** | Enables email + browser auth, per-service secrets | Low-Medium |
-| **RSS/Atom feed reader** | Blog monitoring, release tracking, news aggregation | Low |
+| ~~**RSS/Atom feed reader**~~ | ~~Blog monitoring, release tracking, news aggregation~~ | ~~Low~~ (done) |
 
 ---
 
@@ -200,7 +204,7 @@ Ranked by number of scenarios unlocked and practical impact:
 | 1 | **Email (IMAP read)** | Briefings, bill tracking, inbox watch, package tracking | Medium | Independently useful, simpler than browser |
 | 2 | **Browser automation** | Appointments, forms, price monitoring, content reading | High | Largest unlock, but complex to build safely |
 | ~~3~~ | ~~**Web page diff/monitor**~~ | ~~Changelog tracking, price drops, government notices~~ | ~~Low~~ | Done — `monitor_url`, `list_url_monitors`, `check_url`, `remove_monitor` |
-| 4 | **RSS/Atom feed reader** | Blog monitoring, release tracking, news | Low | Already in TODO.md |
+| ~~4~~ | ~~**RSS/Atom feed reader**~~ | ~~Blog monitoring, release tracking, news~~ | ~~Low~~ | Done — `subscribe_feed`, `list_feeds`, `check_feed`, `unsubscribe_feed` (bundled plugin) |
 | 5 | **Home Assistant API** | Smart home, climate control, security | Medium | REST API wrapper |
 | 6 | **Secure credential store** | Enables email + browser auth | Low-Medium | Foundation for #1 and #2 |
 

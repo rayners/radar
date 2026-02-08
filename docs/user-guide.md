@@ -945,6 +945,10 @@ Radar comes with a set of built-in tools that the LLM can call automatically bas
 | `store_conversation_summary` | Save a summary as markdown + semantic memory | (Called by the LLM after summarizing) |
 | `search_documents` | Search indexed document collections | "Search my notes for authentication" |
 | `manage_documents` | Create, list, delete, or index document collections | "Index my notes folder" |
+| `subscribe_feed` | Subscribe to an RSS/Atom feed for periodic checking | "Subscribe to the Python blog RSS feed" |
+| `list_feeds` | List all RSS/Atom feed subscriptions with status | "Show my RSS feeds" |
+| `check_feed` | Manually check a feed for new entries | "Check feed 1 for new posts" |
+| `unsubscribe_feed` | Pause, resume, or delete a feed subscription | "Pause feed 3" |
 
 Plugins can also provide tools -- use `radar plugin list` to see plugin-provided tools and their trust levels. A single plugin can bundle multiple related tools.
 

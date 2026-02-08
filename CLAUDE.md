@@ -979,6 +979,63 @@ Navigate to `/plugins` to:
 - View plugin details, code, versions, and errors
 - Manually edit plugin code
 
+## Bundled Plugins
+
+Bundled plugins ship in-repo at `radar/bundled_plugins/<name>/` and load directly from their package location — no copying, no install step. They're enabled by default and can be disabled.
+
+### How It Works
+
+- `PluginLoader.load_all()` scans `radar/bundled_plugins/` after user plugins
+- Disabled bundled plugins are tracked in `{plugins_dir}/bundled_disabled.json`
+- User-installed plugins with the same name take precedence
+- Bundled plugins appear in `list_plugins()` with `"source": "bundled"`
+- Enable/disable via `loader.enable_plugin(name)` / `loader.disable_plugin(name)`
+
+### Adding a Bundled Plugin
+
+```
+radar/bundled_plugins/
+  __init__.py              # empty package marker
+  my-plugin/
+    manifest.yaml          # same format as regular plugins
+    tool.py                # tool functions + hooks
+```
+
+Set `trust_level: local` in the manifest since bundled plugins are trusted code.
+
+### RSS/Atom Feed Reader
+
+The first bundled plugin. Monitors RSS/Atom feeds for new entries.
+
+```bash
+# Subscribe to a feed
+radar ask "Subscribe to https://blog.example.com/feed.xml as 'tech blog'"
+
+# List subscriptions
+radar ask "Show my RSS feeds"
+
+# Manual check
+radar ask "Check feed 1 for new posts"
+
+# Pause/resume/delete
+radar ask "Pause feed 2"
+radar ask "Resume feed 2"
+radar ask "Delete feed 3"
+```
+
+**Requires:** `pip install radar[rss]` (installs feedparser)
+
+Features:
+- Entry deduplication via `UNIQUE(feed_id, guid)` constraint
+- HTTP conditional requests (ETag/Last-Modified) for bandwidth savings
+- Auto-pause after 5 consecutive errors
+- Heartbeat-integrated via `HEARTBEAT_COLLECT` hook
+- Baseline entries stored on subscribe (not reported as new)
+
+Database tables in `memory.db`: `rss_feeds` (subscriptions + state), `feed_entries` (dedup tracking).
+
+Tools: `subscribe_feed`, `list_feeds`, `check_feed`, `unsubscribe_feed`
+
 ## Hook System
 
 Hooks intercept tool execution and tool list building. They provide a configurable policy layer on top of the hardcoded security in `radar/security.py`. Hooks run **before** the tool function is called, so a hook block prevents the tool's own security checks from needing to fire.
@@ -1000,6 +1057,7 @@ Two sources of hooks:
 | `post_memory_search` | After `semantic.search_memories()` computes results | Transform (can filter/rerank) |
 | `pre_heartbeat` | Before `scheduler._heartbeat_tick()` processes | Yes |
 | `post_heartbeat` | After `scheduler._heartbeat_tick()` completes | No (observe only) |
+| `heartbeat_collect` | During `_heartbeat_tick()`, after calendar reminders | N/A (returns event list) |
 
 ### Configuration
 

@@ -98,6 +98,8 @@ def _build_callback(
         return _build_pre_heartbeat_callback(rule_type, rule)
     elif hook_point == HookPoint.POST_HEARTBEAT:
         return _build_post_heartbeat_callback(rule_type, rule)
+    elif hook_point == HookPoint.HEARTBEAT_COLLECT:
+        return _build_heartbeat_collect_callback(rule_type, rule)
     return None
 
 
@@ -414,3 +416,14 @@ def _make_log_heartbeat(rule: dict) -> Any:
         log(log_level, f"Hook log: heartbeat ({status}, {event_count} events)")
 
     return callback
+
+
+# --- Heartbeat-collect callbacks ---
+
+
+def _build_heartbeat_collect_callback(rule_type: str, rule: dict) -> Any:
+    """Build a heartbeat-collect callback.
+
+    No config-driven rules for this hook point; only plugin hooks contribute.
+    """
+    return None

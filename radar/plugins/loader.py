@@ -49,7 +49,7 @@ class PluginLoader:
         self._plugins: dict[str, Plugin] = {}
 
     def load_all(self) -> list[Plugin]:
-        """Load all enabled plugins."""
+        """Load all enabled plugins (user-installed + bundled)."""
         plugins = []
 
         for plugin_dir in self.enabled_dir.iterdir():
@@ -67,7 +67,46 @@ class PluginLoader:
                         plugins.append(plugin)
                         self._plugins[plugin.name] = plugin
 
+        # Load bundled plugins (shipped in-repo)
+        disabled_bundled = self._get_disabled_bundled()
+        bundled_dir = self._get_bundled_dir()
+        if bundled_dir.is_dir():
+            for plugin_dir in bundled_dir.iterdir():
+                if plugin_dir.is_dir() and not plugin_dir.name.startswith("_"):
+                    if plugin_dir.name in disabled_bundled:
+                        continue
+                    if plugin_dir.name in self._plugins:
+                        continue  # Already loaded (user override)
+                    plugin = self._load_plugin(plugin_dir)
+                    if plugin:
+                        plugin.source = "bundled"
+                        plugins.append(plugin)
+                        self._plugins[plugin.name] = plugin
+
         return plugins
+
+    @staticmethod
+    def _get_bundled_dir() -> Path:
+        """Return the bundled plugins directory inside the radar package."""
+        return Path(__file__).parent.parent / "bundled_plugins"
+
+    def _get_disabled_bundled(self) -> set[str]:
+        """Read the set of disabled bundled plugin names."""
+        disabled_file = self.plugins_dir / "bundled_disabled.json"
+        if not disabled_file.exists():
+            return set()
+        try:
+            with open(disabled_file) as f:
+                data = json.load(f)
+            return set(data) if isinstance(data, list) else set()
+        except Exception:
+            return set()
+
+    def _save_disabled_bundled(self, disabled: set[str]) -> None:
+        """Save the set of disabled bundled plugin names."""
+        disabled_file = self.plugins_dir / "bundled_disabled.json"
+        with open(disabled_file, "w") as f:
+            json.dump(sorted(disabled), f, indent=2)
 
     def _load_plugin(self, plugin_dir: Path) -> Plugin | None:
         """Load a single plugin from directory."""
@@ -134,6 +173,38 @@ class PluginLoader:
                             "trust_level": manifest.get("trust_level", "sandbox"),
                             "enabled": enabled_link.exists(),
                             "status": "available",
+                            "tool_count": tool_count,
+                        }
+                    )
+
+        # Bundled plugins
+        disabled_bundled = self._get_disabled_bundled()
+        bundled_dir = self._get_bundled_dir()
+        if bundled_dir.is_dir():
+            # Track names already listed from available
+            available_names = {p["name"] for p in plugins}
+            for plugin_dir in bundled_dir.iterdir():
+                if plugin_dir.is_dir() and not plugin_dir.name.startswith("_"):
+                    manifest_file = plugin_dir / "manifest.yaml"
+                    if not manifest_file.exists():
+                        continue
+                    with open(manifest_file) as f:
+                        manifest = yaml.safe_load(f) or {}
+                    name = manifest.get("name", plugin_dir.name)
+                    if name in available_names:
+                        continue  # User override takes precedence
+                    tools_list = manifest.get("tools", [])
+                    tool_count = len(tools_list) if tools_list else 1
+                    plugins.append(
+                        {
+                            "name": name,
+                            "description": manifest.get("description", ""),
+                            "version": manifest.get("version", "1.0.0"),
+                            "author": manifest.get("author", "unknown"),
+                            "trust_level": manifest.get("trust_level", "local"),
+                            "enabled": plugin_dir.name not in disabled_bundled,
+                            "status": "available",
+                            "source": "bundled",
                             "tool_count": tool_count,
                         }
                     )
@@ -418,6 +489,16 @@ class PluginLoader:
 
     def enable_plugin(self, name: str) -> tuple[bool, str]:
         """Enable a plugin."""
+        # Check if it's a bundled plugin
+        bundled_dir = self._get_bundled_dir()
+        bundled_path = bundled_dir / name
+        if bundled_path.is_dir() and (bundled_path / "manifest.yaml").exists():
+            disabled = self._get_disabled_bundled()
+            disabled.discard(name)
+            self._save_disabled_bundled(disabled)
+            self._register_plugin(name, plugin_path=bundled_path)
+            return True, f"Plugin '{name}' enabled"
+
         available_path = self.available_dir / name
         if not available_path.exists():
             return False, f"Plugin '{name}' not found"
@@ -435,6 +516,16 @@ class PluginLoader:
 
     def disable_plugin(self, name: str) -> tuple[bool, str]:
         """Disable a plugin."""
+        # Check if it's a bundled plugin
+        bundled_dir = self._get_bundled_dir()
+        bundled_path = bundled_dir / name
+        if bundled_path.is_dir() and (bundled_path / "manifest.yaml").exists():
+            disabled = self._get_disabled_bundled()
+            disabled.add(name)
+            self._save_disabled_bundled(disabled)
+            self._unregister_plugin(name)
+            return True, f"Plugin '{name}' disabled"
+
         enabled_link = self.enabled_dir / name
         if enabled_link.exists() or enabled_link.is_symlink():
             enabled_link.unlink()
@@ -695,7 +786,7 @@ class PluginLoader:
             description=manifest.description,
         )]
 
-    def _register_plugin(self, name: str) -> bool:
+    def _register_plugin(self, name: str, plugin_path: Path | None = None) -> bool:
         """Register a plugin's tools.
 
         Dispatches based on trust level:
@@ -703,8 +794,13 @@ class PluginLoader:
         - local: importlib load with full Python access
 
         Plugins without the "tool" capability skip tool registration.
+
+        Args:
+            name: Plugin name.
+            plugin_path: Optional explicit path (for bundled plugins).
+                         Defaults to available_dir / name.
         """
-        available_path = self.available_dir / name
+        available_path = plugin_path or (self.available_dir / name)
         manifest_file = available_path / "manifest.yaml"
 
         if not manifest_file.exists():

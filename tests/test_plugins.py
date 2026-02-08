@@ -448,11 +448,21 @@ class TestVersionManager:
 
 @pytest.fixture
 def plugin_loader(isolated_data_dir):
-    """Create a PluginLoader with isolated data directory."""
+    """Create a PluginLoader with isolated data directory.
+
+    The bundled dir is pointed to an empty directory so that the real
+    bundled plugins don't interfere with tests.
+    """
     from radar.plugins.loader import PluginLoader
 
     plugins_dir = isolated_data_dir / "plugins"
     loader = PluginLoader(plugins_dir=plugins_dir)
+
+    # Point to empty dir so real bundled plugins aren't discovered
+    empty_bundled = isolated_data_dir / "empty_bundled"
+    empty_bundled.mkdir(exist_ok=True)
+    loader._get_bundled_dir = staticmethod(lambda: empty_bundled)
+
     return loader
 
 
@@ -1850,3 +1860,171 @@ class TestRegisterPluginGuard:
             ok = plugin_loader._register_plugin("with_tool")
         assert ok is True
         mock_reg.assert_called_once()
+
+
+# ===========================================================================
+# 8. Bundled Plugins
+# ===========================================================================
+
+
+class TestBundledPlugins:
+    """Test bundled plugin discovery, listing, enable/disable."""
+
+    @pytest.fixture
+    def loader_with_bundled(self, tmp_path):
+        """Create a PluginLoader with a mock bundled plugins directory."""
+        from radar.plugins.loader import PluginLoader
+
+        plugins_dir = tmp_path / "plugins"
+        loader = PluginLoader(plugins_dir=plugins_dir)
+
+        # Create a fake bundled plugin directory
+        bundled_dir = tmp_path / "bundled"
+        bundled_dir.mkdir()
+
+        plugin_dir = bundled_dir / "test-bundled"
+        plugin_dir.mkdir()
+        manifest = {
+            "name": "test-bundled",
+            "version": "1.0.0",
+            "description": "A bundled test plugin",
+            "author": "radar",
+            "trust_level": "local",
+            "capabilities": ["tool"],
+            "tools": [{"name": "bundled_tool", "description": "A tool", "parameters": {}}],
+        }
+        (plugin_dir / "manifest.yaml").write_text(yaml.dump(manifest))
+        (plugin_dir / "tool.py").write_text('def bundled_tool() -> str:\n    return "hello"')
+
+        # Patch _get_bundled_dir to use our fake directory
+        loader._get_bundled_dir = staticmethod(lambda: bundled_dir)
+
+        return loader, bundled_dir
+
+    def test_load_all_discovers_bundled(self, loader_with_bundled):
+        """load_all() discovers bundled plugins."""
+        loader, _ = loader_with_bundled
+        with patch("radar.tools.register_local_tool"):
+            plugins = loader.load_all()
+
+        names = [p.name for p in plugins]
+        assert "test-bundled" in names
+
+    def test_bundled_plugin_has_source_bundled(self, loader_with_bundled):
+        """Bundled plugins have source='bundled'."""
+        loader, _ = loader_with_bundled
+        with patch("radar.tools.register_local_tool"):
+            plugins = loader.load_all()
+
+        bundled = [p for p in plugins if p.name == "test-bundled"][0]
+        assert bundled.source == "bundled"
+
+    def test_list_plugins_includes_bundled(self, loader_with_bundled):
+        """list_plugins() includes bundled plugins with source marker."""
+        loader, _ = loader_with_bundled
+        plugins = loader.list_plugins()
+
+        bundled = [p for p in plugins if p["name"] == "test-bundled"]
+        assert len(bundled) == 1
+        assert bundled[0]["source"] == "bundled"
+        assert bundled[0]["enabled"] is True
+
+    def test_disable_bundled_plugin(self, loader_with_bundled):
+        """Disabling a bundled plugin adds it to bundled_disabled.json."""
+        loader, bundled_dir = loader_with_bundled
+
+        ok, msg = loader.disable_plugin("test-bundled")
+        assert ok is True
+
+        disabled = loader._get_disabled_bundled()
+        assert "test-bundled" in disabled
+
+    def test_disabled_bundled_not_loaded(self, loader_with_bundled):
+        """Disabled bundled plugins are skipped in load_all()."""
+        loader, _ = loader_with_bundled
+
+        loader.disable_plugin("test-bundled")
+        plugins = loader.load_all()
+
+        names = [p.name for p in plugins]
+        assert "test-bundled" not in names
+
+    def test_disabled_bundled_shown_as_disabled(self, loader_with_bundled):
+        """Disabled bundled plugins show enabled=False in list_plugins()."""
+        loader, _ = loader_with_bundled
+
+        loader.disable_plugin("test-bundled")
+        plugins = loader.list_plugins()
+
+        bundled = [p for p in plugins if p["name"] == "test-bundled"]
+        assert len(bundled) == 1
+        assert bundled[0]["enabled"] is False
+
+    def test_enable_bundled_plugin(self, loader_with_bundled):
+        """Enabling a disabled bundled plugin removes it from disabled set."""
+        loader, bundled_dir = loader_with_bundled
+
+        loader.disable_plugin("test-bundled")
+        assert "test-bundled" in loader._get_disabled_bundled()
+
+        with patch("radar.tools.register_local_tool"):
+            ok, msg = loader.enable_plugin("test-bundled")
+        assert ok is True
+        assert "test-bundled" not in loader._get_disabled_bundled()
+
+    def test_bundled_disabled_json_persistence(self, loader_with_bundled):
+        """bundled_disabled.json persists across loader instances."""
+        loader, bundled_dir = loader_with_bundled
+
+        loader.disable_plugin("test-bundled")
+
+        # Create a new loader with the same directories
+        from radar.plugins.loader import PluginLoader
+        loader2 = PluginLoader(plugins_dir=loader.plugins_dir)
+        loader2._get_bundled_dir = staticmethod(lambda: bundled_dir)
+
+        disabled = loader2._get_disabled_bundled()
+        assert "test-bundled" in disabled
+
+    def test_user_plugin_overrides_bundled(self, loader_with_bundled):
+        """User-installed plugin with same name takes precedence."""
+        loader, _ = loader_with_bundled
+
+        # Create same-named plugin in available + enabled
+        _make_plugin_dir(
+            loader.available_dir, "test-bundled",
+            code='def bundled_tool() -> str:\n    return "user version"',
+        )
+        enabled_link = loader.enabled_dir / "test-bundled"
+        enabled_link.symlink_to(loader.available_dir / "test-bundled")
+
+        plugins = loader.load_all()
+
+        # Should only have one plugin, the user version
+        bundled = [p for p in plugins if p.name == "test-bundled"]
+        assert len(bundled) == 1
+        assert bundled[0].source == "user"  # Not bundled
+
+    def test_register_plugin_with_explicit_path(self, loader_with_bundled):
+        """_register_plugin accepts plugin_path for bundled plugins."""
+        loader, bundled_dir = loader_with_bundled
+        bundled_path = bundled_dir / "test-bundled"
+
+        with patch("radar.tools.register_local_tool") as mock_reg:
+            ok = loader._register_plugin("test-bundled", plugin_path=bundled_path)
+
+        assert ok is True
+        mock_reg.assert_called_once()
+
+    def test_get_bundled_dir_returns_package_path(self):
+        """_get_bundled_dir returns path inside the radar package."""
+        from radar.plugins.loader import PluginLoader
+
+        bundled_dir = PluginLoader._get_bundled_dir()
+        assert bundled_dir.name == "bundled_plugins"
+        assert "radar" in str(bundled_dir)
+
+    def test_empty_disabled_file(self, loader_with_bundled):
+        """Missing bundled_disabled.json returns empty set."""
+        loader, _ = loader_with_bundled
+        assert loader._get_disabled_bundled() == set()
