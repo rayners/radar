@@ -84,6 +84,27 @@
         </div>
     </div>
 
+    <!-- Latest Summary -->
+    {% if latest_summary %}
+    <div class="card">
+        <div class="card__header">
+            <span class="card__title">Latest Summary</span>
+            <a href="/summaries" class="btn btn--ghost" style="padding: 2px 8px; font-size: 0.7rem;">View All</a>
+        </div>
+        <div class="card__body">
+            <div class="text-muted" style="font-size: 0.75rem; margin-bottom: var(--space-xs);">{{ latest_summary.date }}</div>
+            <div style="font-size: 0.85rem;">{{ latest_summary.preview }}</div>
+            {% if latest_summary.topics %}
+            <div class="mt-sm">
+                {% for topic in latest_summary.topics[:3] %}
+                <span class="activity-log__type activity-log__type--chat" style="font-size: 0.7rem;">{{ topic }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Notifications -->
     <div class="card">
         <div class="card__header">

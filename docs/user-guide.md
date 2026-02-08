@@ -20,6 +20,8 @@ This guide covers everything you need to get started and make the most of Radar 
 - [File Watchers](#file-watchers)
 - [Notifications](#notifications)
 - [Web Search](#web-search)
+- [Conversation Summaries](#conversation-summaries)
+- [Document Indexing](#document-indexing)
 - [Agent Skills](#agent-skills)
 - [Plugin System](#plugin-system)
 - [Hook System](#hook-system)
@@ -861,6 +863,10 @@ Radar comes with a set of built-in tools that the LLM can call automatically bas
 | `load_context` | Load a personality context document | (Called by the LLM when it needs reference material) |
 | `analyze_feedback` | Analyze chat feedback patterns | "Analyze recent feedback" |
 | `suggest_personality_update` | Propose a personality change | (Called by the LLM, not typically by users) |
+| `summarize_conversations` | Retrieve conversation data for a period | "Summarize today's conversations" |
+| `store_conversation_summary` | Save a summary as markdown + semantic memory | (Called by the LLM after summarizing) |
+| `search_documents` | Search indexed document collections | "Search my notes for authentication" |
+| `manage_documents` | Create, list, delete, or index document collections | "Index my notes folder" |
 
 Plugins can also provide tools -- use `radar plugin list` to see plugin-provided tools and their trust levels. A single plugin can bundle multiple related tools.
 
@@ -1148,6 +1154,123 @@ search:
 radar ask "Search for the latest Python release notes"
 radar ask "Search for AI news from this week"
 ```
+
+---
+
+## Conversation Summaries
+
+Radar can generate periodic digests of your conversations -- daily, weekly, or monthly. Summaries are stored as markdown files with YAML front matter and also indexed in semantic memory for `recall` access.
+
+### Summary Storage
+
+Summaries are written as markdown files in `~/.local/share/radar/summaries/`:
+
+```
+summaries/
+  daily/
+    2025-01-07.md
+    2025-01-08.md
+  weekly/
+    2025-W02.md
+  monthly/
+    2025-01.md
+```
+
+### On-Demand Summaries
+
+Ask Radar to summarize conversations:
+
+```bash
+radar ask "Summarize today's conversations"
+radar ask "What did we discuss this week?"
+radar ask "Generate a monthly summary for last month"
+```
+
+The LLM calls `summarize_conversations` to retrieve the conversation data, then calls `store_conversation_summary` to persist the result.
+
+### Automatic Summaries
+
+Summaries are generated automatically during heartbeat when the configured time arrives:
+
+```yaml
+# radar.yaml
+summaries:
+  enabled: true
+  daily_summary_time: "21:00"      # Generate daily summary at 9 PM
+  weekly_summary_day: "sun"         # Generate weekly summary on Sundays
+  monthly_summary_day: 1            # Generate monthly summary on 1st of month
+  auto_notify: false                # Send ntfy notification with summary
+  max_conversations_per_summary: 50
+```
+
+### Web UI
+
+Visit `/summaries` to browse, filter, and manually generate summaries.
+
+---
+
+## Document Indexing
+
+Radar can index local markdown files and search them using hybrid search (FTS5 keyword + semantic embeddings). This is inspired by [qmd](https://github.com/tobi/qmd).
+
+### Collections
+
+Documents are organized into collections -- named groups of files with a base path and glob patterns:
+
+```bash
+# Create a collection via chat
+radar ask "Index my notes folder at ~/Documents/notes"
+
+# Or configure in radar.yaml
+```
+
+```yaml
+# radar.yaml
+documents:
+  enabled: true
+  chunk_size: 800
+  generate_embeddings: true
+  collections:
+    - name: notes
+      base_path: ~/Documents/notes
+      patterns: ["*.md"]
+```
+
+### Search
+
+```bash
+# Search across all collections
+radar ask "Search my documents for authentication patterns"
+
+# The recall tool also includes document results automatically
+radar ask "What do I know about deployment?"
+```
+
+Three search modes are available:
+- **hybrid** (default) -- Reciprocal rank fusion of keyword + semantic results
+- **keyword** -- BM25 full-text search via FTS5 with porter stemming
+- **semantic** -- Cosine similarity on embeddings
+
+### Management
+
+```bash
+# List collections
+radar ask "Show my document collections"
+
+# Trigger re-indexing
+radar ask "Re-index my notes collection"
+
+# Delete a collection
+radar ask "Delete the notes collection"
+```
+
+### Heartbeat Integration
+
+Collections are automatically re-indexed during each heartbeat cycle. Only changed files are re-indexed (SHA-256 hash comparison). Conversation summaries are auto-registered as a collection.
+
+### Web UI
+
+Visit `/documents` to manage collections, trigger indexing, and search documents.
 
 ---
 

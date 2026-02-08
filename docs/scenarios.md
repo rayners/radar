@@ -36,6 +36,10 @@ Tools available today and the scenarios they enable:
 | `load_context` | Meta | Load personality context document on demand |
 | `analyze_feedback` | Meta | Analyze user feedback patterns |
 | `suggest_personality` | Meta | Propose personality improvements |
+| `summarize_conversations` | Memory | Retrieve conversation data for a period (daily/weekly/monthly) |
+| `store_conversation_summary` | Memory | Save summary as markdown file + semantic memory |
+| `search_documents` | Input | Search indexed document collections (hybrid FTS5 + semantic) |
+| `manage_documents` | Automation | Create, list, delete, index document collections |
 
 Infrastructure:
 

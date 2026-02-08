@@ -8,7 +8,7 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (81 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (87 tests), `test_config.py` (40 tests), `test_memory.py` (45 tests), `test_llm.py` (34 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (169 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (96 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests) — **964 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (81 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (27 tests), `test_security.py` (87 tests), `test_config.py` (40 tests), `test_memory.py` (45 tests), `test_llm.py` (34 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (169 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (96 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests), `test_summaries.py` (41 tests), `test_documents.py` (43 tests) — **1048 total**.
 
 - [x] **Core agent tests** - personality loading, system prompt building, Jinja2 template rendering, plugin prompt variables, run/ask orchestration (31 tests)
 - [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, format conversion (34 tests)
@@ -112,7 +112,7 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 ### Memory & Storage
 - [ ] Migrate conversations to SQLite (consistency + indexing)
 - [ ] Conversation archival with retention policy
-- [ ] Hybrid search (semantic + BM25/FTS5)
+- [x] Hybrid search (semantic + BM25/FTS5) — document indexing with FTS5 + cosine similarity and reciprocal rank fusion
 - [ ] Write locks for concurrent access safety
 - [ ] Search filters (date range, source, sentiment)
 
@@ -165,14 +165,14 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 - [ ] Cost estimation for API calls
 - [ ] Budget alerts and limits
 - [ ] Usage dashboard in web UI
-- [ ] Daily/weekly usage summaries
+- [x] Daily/weekly usage summaries — conversation summaries with heartbeat-driven auto-generation
 
 ### Context Management
 - [ ] Entity extraction and knowledge graphs
-- [ ] Auto-summarization for long conversations
+- [x] Auto-summarization for long conversations — periodic conversation digests (daily/weekly/monthly) via heartbeat
 - [ ] Memory decay with confidence scores
 - [ ] Context window optimization
-- [ ] "What did we discuss about X last week?" queries
+- [x] "What did we discuss about X last week?" queries — summaries stored in semantic memory, accessible via `recall`
 
 ### Multi-Model Support
 - [ ] Vision model support for image-based PDF pages
@@ -315,7 +315,7 @@ Ready-to-use configurations that demonstrate Radar's autonomous capabilities. Se
 ### Scenarios Needing Validation
 - [ ] **Meeting prep assistant** — recall person context + GitHub activity before calendar events
 - [ ] **Bill tracker from PDFs** — file watcher on Downloads + pdf_extract + schedule reminders
-- [ ] **Writing/journaling coach** — daily evening summary of conversations + journaling reminders
+- [x] **Writing/journaling coach** — daily evening summary of conversations + journaling reminders (conversation summaries + heartbeat integration)
 
 ### Capability Gaps (ranked by scenario unlock count)
 | # | Gap | Scenarios unlocked | Difficulty |

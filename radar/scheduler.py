@@ -157,6 +157,39 @@ def _heartbeat_tick() -> None:
     except Exception as e:
         _log_heartbeat("URL monitor processing error", error=str(e))
 
+    # Check for due conversation summaries
+    try:
+        from radar.summaries import check_summary_due
+        for period_type in ("daily", "weekly", "monthly"):
+            summary_data = check_summary_due(period_type)
+            if summary_data:
+                add_event("conversation_summary", {
+                    "description": f"Time to generate {period_type} conversation summary",
+                    "action": (
+                        f"Generate a {period_type} conversation summary from the following data. "
+                        f"Summarize the key topics, decisions, and outcomes. "
+                        f"Then call store_conversation_summary to save it.\n\n"
+                        f"{summary_data}"
+                    ),
+                })
+    except Exception as e:
+        _log_heartbeat("Summary check error", error=str(e))
+
+    # Re-index document collections
+    try:
+        from radar.config import get_config as _get_cfg
+        _cfg = _get_cfg()
+        if _cfg.documents.enabled:
+            from radar.documents import ensure_summaries_collection, index_collection, list_collections
+            ensure_summaries_collection()
+            for coll in list_collections():
+                try:
+                    index_collection(coll["name"])
+                except Exception as e:
+                    _log_heartbeat(f"Document index error: {coll['name']}", error=str(e))
+    except Exception as e:
+        _log_heartbeat("Document indexing error", error=str(e))
+
     # Calendar reminders
     try:
         from radar.tools.calendar import _get_reminders

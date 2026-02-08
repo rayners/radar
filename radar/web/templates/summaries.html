@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}Summaries - Radar{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-lg">
+    <h2 class="text-phosphor" style="font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.1em;">
+        CONVERSATION SUMMARIES
+    </h2>
+    <span class="text-muted" style="font-size: 0.8rem;">{{ total_count }} total</span>
+</div>
+
+<!-- Generate Summary -->
+<div class="card mb-lg">
+    <div class="card__header">
+        <span class="card__title">Generate Summary</span>
+    </div>
+    <div class="card__body">
+        <form hx-post="/api/summaries/generate"
+              hx-target="#generate-result"
+              hx-swap="innerHTML"
+              hx-indicator="#generate-indicator">
+            <div class="flex gap-md items-center">
+                <select name="period" class="input" style="max-width: 200px;">
+                    <option value="today">Today</option>
+                    <option value="yesterday">Yesterday</option>
+                    <option value="this_week">This Week</option>
+                    <option value="last_week">Last Week</option>
+                    <option value="this_month">This Month</option>
+                    <option value="last_month">Last Month</option>
+                </select>
+                <button type="submit" class="btn btn--primary">
+                    <span class="htmx-indicator" id="generate-indicator">...</span>
+                    <span>Generate</span>
+                </button>
+            </div>
+        </form>
+        <div id="generate-result" class="mt-md"></div>
+    </div>
+</div>
+
+<!-- Filter Tabs -->
+<div class="flex gap-md mb-lg">
+    <button class="btn btn--ghost"
+            hx-get="/api/summaries"
+            hx-target="#summaries-list"
+            hx-swap="innerHTML"
+            style="font-size: 0.8rem;">All</button>
+    <button class="btn btn--ghost"
+            hx-get="/api/summaries?period_type=daily"
+            hx-target="#summaries-list"
+            hx-swap="innerHTML"
+            style="font-size: 0.8rem;">Daily</button>
+    <button class="btn btn--ghost"
+            hx-get="/api/summaries?period_type=weekly"
+            hx-target="#summaries-list"
+            hx-swap="innerHTML"
+            style="font-size: 0.8rem;">Weekly</button>
+    <button class="btn btn--ghost"
+            hx-get="/api/summaries?period_type=monthly"
+            hx-target="#summaries-list"
+            hx-swap="innerHTML"
+            style="font-size: 0.8rem;">Monthly</button>
+</div>
+
+<!-- Summary List -->
+<div id="summaries-list">
+    {% for period_type in ['daily', 'weekly', 'monthly'] %}
+    {% set summaries = grouped_summaries.get(period_type, []) %}
+    {% if summaries %}
+    <h3 class="text-phosphor mb-md" style="font-size: 0.9rem; letter-spacing: 0.05em; text-transform: uppercase;">
+        {{ period_type }}
+    </h3>
+    {% for s in summaries %}
+    <div class="card mb-md">
+        <div class="card__header">
+            <span class="card__title">{{ s.metadata.get('date', s.filename) }}</span>
+            <span class="text-muted" style="font-size: 0.8rem;">
+                {{ s.metadata.get('conversations', 0) }} conversations
+            </span>
+        </div>
+        <div class="card__body">
+            <div style="white-space: pre-wrap; font-size: 0.85rem;">{{ s.content[:300] }}{% if s.content|length > 300 %}...{% endif %}</div>
+            {% if s.metadata.get('topics') %}
+            <div class="mt-sm">
+                {% for topic in s.metadata.topics[:5] %}
+                <span class="activity-log__type activity-log__type--chat">{{ topic }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endfor %}
+
+    {% if total_count == 0 %}
+    <div class="card">
+        <div class="card__body text-muted" style="text-align: center; padding: var(--space-xl);">
+            <p>No summaries yet.</p>
+            <p style="margin-top: var(--space-sm);">
+                Use the Generate button above or ask Radar to
+                <code style="color: var(--amber);">summarize today's conversations</code>.
+            </p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

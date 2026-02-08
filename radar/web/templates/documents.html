@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Documents - Radar{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-lg">
+    <h2 class="text-phosphor" style="font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.1em;">
+        DOCUMENT COLLECTIONS
+    </h2>
+</div>
+
+<!-- Search -->
+<div class="card mb-lg">
+    <div class="card__header">
+        <span class="card__title">Search Documents</span>
+    </div>
+    <div class="card__body">
+        <form hx-get="/api/documents/search"
+              hx-target="#search-results"
+              hx-swap="innerHTML"
+              hx-trigger="submit">
+            <div class="flex gap-md items-center mb-md">
+                <input type="text"
+                       name="q"
+                       class="input"
+                       placeholder="Search indexed documents..."
+                       autocomplete="off"
+                       style="flex: 1;">
+                <select name="search_type" class="input" style="max-width: 140px;">
+                    <option value="hybrid">Hybrid</option>
+                    <option value="keyword">Keyword</option>
+                    <option value="semantic">Semantic</option>
+                </select>
+                <button type="submit" class="btn btn--primary">Search</button>
+            </div>
+        </form>
+        <div id="search-results"></div>
+    </div>
+</div>
+
+<!-- Collections -->
+<div class="card mb-lg">
+    <div class="card__header">
+        <span class="card__title">Collections</span>
+        <button class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;"
+                onclick="document.getElementById('add-collection-form').style.display='block'">
+            + Add Collection
+        </button>
+    </div>
+    <div class="card__body">
+        <!-- Add Collection Form (hidden by default) -->
+        <div id="add-collection-form" style="display: none;" class="mb-lg">
+            <form hx-post="/api/documents/collections"
+                  hx-target="#collection-result"
+                  hx-swap="innerHTML">
+                <div class="flex gap-md mb-md">
+                    <input type="text" name="name" class="input" placeholder="Collection name" required style="flex: 1;">
+                    <input type="text" name="base_path" class="input" placeholder="Base path (e.g., ~/Documents/notes)" required style="flex: 2;">
+                </div>
+                <div class="flex gap-md mb-md">
+                    <input type="text" name="patterns" class="input" placeholder="Patterns (default: *.md)" value="*.md" style="flex: 1;">
+                    <input type="text" name="description" class="input" placeholder="Description (optional)" style="flex: 2;">
+                </div>
+                <div class="flex gap-md">
+                    <button type="submit" class="btn btn--primary">Create</button>
+                    <button type="button" class="btn btn--ghost"
+                            onclick="this.closest('#add-collection-form').style.display='none'">Cancel</button>
+                </div>
+            </form>
+            <div id="collection-result" class="mt-md"></div>
+        </div>
+
+        <!-- Collection List -->
+        {% if collections %}
+        <div id="collections-list">
+            {% for c in collections %}
+            <div class="fact mb-md" id="collection-{{ c.name }}">
+                <span class="fact__category">{{ c.name }}</span>
+                <div class="fact__content">
+                    <div class="fact__value">{{ c.base_path }} ({{ c.patterns }})</div>
+                    <div class="fact__meta">
+                        {{ c.file_count }} files, {{ c.chunk_count }} chunks
+                        {% if c.last_indexed %} — Last indexed: {{ c.last_indexed }}{% endif %}
+                        {% if c.description %} — {{ c.description }}{% endif %}
+                    </div>
+                </div>
+                <div class="fact__actions" style="display: flex; gap: 4px;">
+                    <button class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;"
+                            hx-post="/api/documents/collections/{{ c.name }}/index"
+                            hx-target="#collection-{{ c.name }}-status"
+                            hx-swap="innerHTML">
+                        Re-index
+                    </button>
+                    <button class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;"
+                            hx-delete="/api/documents/collections/{{ c.name }}"
+                            hx-target="#collection-{{ c.name }}"
+                            hx-swap="outerHTML"
+                            hx-confirm="Delete collection '{{ c.name }}' and all indexed data?">
+                        Delete
+                    </button>
+                </div>
+            </div>
+            <div id="collection-{{ c.name }}-status" class="mb-sm"></div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-muted" style="text-align: center; padding: var(--space-xl);">
+            <p>No document collections configured.</p>
+            <p style="margin-top: var(--space-sm);">
+                Click "+ Add Collection" to index a directory of markdown files.
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -173,6 +173,29 @@ class WebMonitorConfig:
 
 
 @dataclass
+class SummariesConfig:
+    """Conversation summary configuration."""
+
+    enabled: bool = True
+    daily_summary_time: str = "21:00"
+    weekly_summary_day: str = "sun"
+    monthly_summary_day: int = 1
+    auto_notify: bool = False
+    max_conversations_per_summary: int = 50
+
+
+@dataclass
+class DocumentsConfig:
+    """Document indexing configuration."""
+
+    enabled: bool = True
+    chunk_size: int = 800
+    chunk_overlap_pct: float = 0.1
+    generate_embeddings: bool = True
+    collections: list[dict] = field(default_factory=list)
+
+
+@dataclass
 class SkillsConfig:
     """Agent Skills configuration."""
 
@@ -196,6 +219,8 @@ class Config:
     hooks: HooksConfig = field(default_factory=HooksConfig)
     skills: SkillsConfig = field(default_factory=SkillsConfig)
     web_monitor: WebMonitorConfig = field(default_factory=WebMonitorConfig)
+    summaries: SummariesConfig = field(default_factory=SummariesConfig)
+    documents: DocumentsConfig = field(default_factory=DocumentsConfig)
     system_prompt: str = ""
     max_tool_iterations: int = 10
     watch_paths: list[dict] = field(default_factory=list)
@@ -223,6 +248,8 @@ class Config:
         hooks_data = data.get("hooks", {})
         skills_data = data.get("skills", {})
         web_monitor_data = data.get("web_monitor", {})
+        summaries_data = data.get("summaries", {})
+        documents_data = data.get("documents", {})
 
         # Backward compatibility: if 'ollama' section exists but not 'llm', migrate
         if ollama_data and not llm_data:
@@ -326,6 +353,21 @@ class Config:
                 max_content_size=web_monitor_data.get("max_content_size", WebMonitorConfig.max_content_size),
                 max_diff_length=web_monitor_data.get("max_diff_length", WebMonitorConfig.max_diff_length),
                 max_error_count=web_monitor_data.get("max_error_count", WebMonitorConfig.max_error_count),
+            ),
+            summaries=SummariesConfig(
+                enabled=summaries_data.get("enabled", SummariesConfig.enabled),
+                daily_summary_time=summaries_data.get("daily_summary_time", SummariesConfig.daily_summary_time),
+                weekly_summary_day=summaries_data.get("weekly_summary_day", SummariesConfig.weekly_summary_day),
+                monthly_summary_day=summaries_data.get("monthly_summary_day", SummariesConfig.monthly_summary_day),
+                auto_notify=summaries_data.get("auto_notify", SummariesConfig.auto_notify),
+                max_conversations_per_summary=summaries_data.get("max_conversations_per_summary", SummariesConfig.max_conversations_per_summary),
+            ),
+            documents=DocumentsConfig(
+                enabled=documents_data.get("enabled", DocumentsConfig.enabled),
+                chunk_size=documents_data.get("chunk_size", DocumentsConfig.chunk_size),
+                chunk_overlap_pct=documents_data.get("chunk_overlap_pct", DocumentsConfig.chunk_overlap_pct),
+                generate_embeddings=documents_data.get("generate_embeddings", DocumentsConfig.generate_embeddings),
+                collections=documents_data.get("collections", []),
             ),
             system_prompt=data.get("system_prompt", ""),
             max_tool_iterations=data.get("max_tool_iterations", 10),

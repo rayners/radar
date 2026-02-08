@@ -55,8 +55,10 @@ RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API
 - `radar/hooks.py` - Hook system for intercepting tool execution and filtering tool lists
 - `radar/hooks_builtin.py` - Config-driven hook builders (block patterns, time restrict, etc.)
 - `radar/url_monitors.py` - URL monitor CRUD, fetching, diffing, heartbeat integration
+- `radar/summaries.py` - Conversation summary file I/O, scanning, formatting, heartbeat due-checking
+- `radar/documents.py` - Document indexing with FTS5 + semantic hybrid search, collection management
 - `radar/scheduler.py` - APScheduler heartbeat with quiet hours + event queue
-- Heartbeat flow: `_heartbeat_tick()` checks due scheduled tasks → injects them as events via `add_event("scheduled_task", ...)` → checks due URL monitors → also checks calendar reminders → runs `agent.run()` with the compiled event message + active personality context
+- Heartbeat flow: `_heartbeat_tick()` checks due scheduled tasks → injects them as events via `add_event("scheduled_task", ...)` → checks due URL monitors → checks due conversation summaries → re-indexes document collections → checks calendar reminders → runs `agent.run()` with the compiled event message + active personality context
 - `radar/scheduled_tasks.py` - Scheduled task CRUD (DB in `memory.db`, table `scheduled_tasks`)
 - `radar/watchers.py` - File system monitoring with watchdog
 - `radar/security.py` - Path blocklists and command safety checks
@@ -530,7 +532,7 @@ The unit file is written to `~/.config/systemd/user/radar.service` and uses `rad
 
 FastAPI + HTMX dashboard at `http://localhost:8420` when daemon is running.
 
-Pages: Dashboard, Chat, History, Memory, Personalities, Plugins, Tasks, Config, Logs
+Pages: Dashboard, Chat, History, Summaries, Documents, Memory, Personalities, Plugins, Tasks, Config, Logs
 
 Mobile responsive with hamburger menu for sidebar navigation.
 

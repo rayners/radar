@@ -41,6 +41,19 @@ async def dashboard(request: Request):
         }
     )
 
+    # Get latest summary
+    try:
+        from radar.summaries import get_latest_summary
+        latest_summary = get_latest_summary("daily")
+        if latest_summary:
+            context["latest_summary"] = {
+                "date": latest_summary.get("metadata", {}).get("date", latest_summary.get("filename", "")),
+                "preview": latest_summary.get("content", "")[:150],
+                "topics": latest_summary.get("metadata", {}).get("topics", []),
+            }
+    except Exception:
+        pass
+
     # Load plugin widgets and pre-render templates through sandboxed Jinja2
     try:
         import jinja2.sandbox
