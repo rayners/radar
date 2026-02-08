@@ -21,6 +21,8 @@ radar ask "question"     # One-shot question
 radar chat               # Interactive chat
 radar config             # Show configuration
 radar history            # View conversation history
+radar export <id>        # Export conversation (JSON default)
+radar export <id> -f markdown -o out.md  # Export as Markdown to file
 
 # Daemon mode
 radar start              # Start daemon (daemonizes by default)
@@ -57,6 +59,7 @@ RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API
 - `radar/url_monitors.py` - URL monitor CRUD, fetching, diffing, heartbeat integration
 - `radar/summaries.py` - Conversation summary file I/O, scanning, formatting, heartbeat due-checking
 - `radar/documents.py` - Document indexing with FTS5 + semantic hybrid search, collection management
+- `radar/export.py` - Conversation export (JSON array, Markdown transcript)
 - `radar/retry.py` - Exponential backoff + jitter for API calls (LLM, embedding, URL monitors)
 - `radar/scheduler.py` - APScheduler heartbeat with quiet hours + event queue
 - Heartbeat flow: `_heartbeat_tick()` checks due scheduled tasks → injects them as events via `add_event("scheduled_task", ...)` → checks due URL monitors → checks due conversation summaries → re-indexes document collections → checks calendar reminders → runs `agent.run()` with the compiled event message + active personality context

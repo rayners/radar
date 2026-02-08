@@ -8,7 +8,7 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (86 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (36 tests), `test_security.py` (87 tests), `test_config.py` (43 tests), `test_memory.py` (45 tests), `test_llm.py` (42 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (193 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (104 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests), `test_summaries.py` (41 tests), `test_documents.py` (43 tests), `test_retry.py` (21 tests), `test_hot_reload.py` (21 tests), `test_rss_reader.py` (45 tests) — **1171 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (86 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (36 tests), `test_security.py` (87 tests), `test_config.py` (43 tests), `test_memory.py` (45 tests), `test_llm.py` (42 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (20 tests), `test_plugins.py` (193 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (104 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests), `test_summaries.py` (41 tests), `test_documents.py` (43 tests), `test_retry.py` (21 tests), `test_hot_reload.py` (21 tests), `test_rss_reader.py` (45 tests), `test_export.py` (23 tests) — **1194 total**.
 
 - [x] **Core agent tests** - personality loading, system prompt building, Jinja2 template rendering, plugin prompt variables, run/ask orchestration (32 tests)
 - [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, retry with backoff, format conversion (42 tests)
@@ -47,7 +47,7 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 - [x] `/api/history` with filter/pagination — HTMX endpoint with type filter, search, offset/limit pagination
 - [x] Conversation search (full-text) — case-insensitive substring search across message content
 - [ ] Conversation search (semantic) — embedding-based search
-- [ ] Export conversations as markdown/JSON
+- [x] Export conversations as markdown/JSON — `radar export` CLI + `/api/export/{id}` web API (23 tests)
 - [ ] Conversation archival/deletion
 
 ### General UI
@@ -237,7 +237,7 @@ Natural language task scheduling via chat:
 ## 9. User Experience
 
 - [ ] Multiple profiles (work/personal contexts with separate memories, prompts, permissions)
-- [ ] Conversation export (markdown, JSON)
+- [x] Conversation export (markdown, JSON) — `radar export` CLI command + `/api/export/{id}` web endpoint
 - [ ] Memory import/export and backup/restore
 - [ ] Mobile app or PWA
 - [ ] Voice input/output
@@ -359,7 +359,7 @@ Ready-to-use configurations that demonstrate Radar's autonomous capabilities. Se
 5. Token/cost tracking
 6. ~~RSS feed reader~~ (done — bundled plugin, 45 tests)
 7. ~~Plugin event hooks (`on_heartbeat`, etc.)~~ (done — HEARTBEAT_COLLECT hook point)
-8. Conversation export (markdown, JSON)
+8. ~~Conversation export (markdown, JSON)~~ (done — CLI + web API, 23 tests)
 
 **Lower Priority (Nice to Have):**
 1. Browser automation (Playwright) — high impact but complex to build safely

@@ -166,10 +166,12 @@ from radar.web.routes.plugins import router as plugins_router
 from radar.web.routes.health import router as health_router
 from radar.web.routes.summaries import router as summaries_router
 from radar.web.routes.documents import router as documents_router
+from radar.web.routes.export import router as export_router
 
 for _r in [auth_router, dashboard_router, chat_router, tasks_router,
            memory_router, config_router, logs_router, personalities_router,
-           plugins_router, health_router, summaries_router, documents_router]:
+           plugins_router, health_router, summaries_router, documents_router,
+           export_router]:
     app.include_router(_r)
 
 

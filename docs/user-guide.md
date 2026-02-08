@@ -460,6 +460,31 @@ radar history
 radar history -n 20
 ```
 
+### Exporting Conversations
+
+Export any conversation as JSON or Markdown for sharing, archiving, or processing.
+
+```bash
+# Export as JSON (default)
+radar export <conversation_id>
+
+# Export as Markdown
+radar export <conversation_id> -f markdown
+
+# Save to a file
+radar export <conversation_id> -o conversation.json
+radar export <conversation_id> -f markdown -o conversation.md
+```
+
+The JSON format produces a clean array of message objects. The Markdown format produces a human-readable transcript with headings, timestamps, and tool calls formatted as fenced code blocks.
+
+When the daemon is running, you can also export via the web API:
+
+```
+GET /api/export/{conversation_id}?format=json
+GET /api/export/{conversation_id}?format=markdown
+```
+
 ### Daemon Management
 
 The daemon runs the scheduler and web dashboard together. It daemonizes by default (detaches from your terminal).

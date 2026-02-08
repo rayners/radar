@@ -217,6 +217,30 @@ def history(limit: int):
 
 
 @cli.command()
+@click.argument("conversation_id")
+@click.option("--format", "-f", "fmt", type=click.Choice(["json", "markdown"]), default="json", help="Export format (default: json)")
+@click.option("--output", "-o", "output_file", default=None, help="Write to file instead of stdout")
+def export(conversation_id: str, fmt: str, output_file: str | None):
+    """Export a conversation as JSON or Markdown."""
+    from radar.export import export_json, export_markdown
+
+    try:
+        if fmt == "json":
+            content = export_json(conversation_id)
+        else:
+            content = export_markdown(conversation_id)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
+        raise SystemExit(1)
+
+    if output_file:
+        Path(output_file).write_text(content)
+        console.print(f"[green]Exported to {output_file}[/green]")
+    else:
+        console.print(content)
+
+
+@cli.command()
 @click.option("--host", "-h", default=None, help="Host to bind to (default: from config or 127.0.0.1)")
 @click.option("--port", "-p", default=None, type=int, help="Port to bind to (default: from config or 8420)")
 @click.option("--foreground", "-f", is_flag=True, help="Run in foreground (don't daemonize)")
