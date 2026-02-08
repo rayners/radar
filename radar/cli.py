@@ -241,6 +241,32 @@ def export(conversation_id: str, fmt: str, output_file: str | None):
 
 
 @cli.command()
+@click.argument("conversation_id")
+@click.option("--force", "-f", is_flag=True, help="Skip confirmation prompt")
+def delete(conversation_id: str, force: bool):
+    """Delete a conversation by ID."""
+    from radar.memory import delete_conversation, get_messages
+
+    # Show preview before confirming
+    messages = get_messages(conversation_id, limit=1)
+    if messages:
+        preview = messages[0].get("content", "") or "(no content)"
+        if len(preview) > 60:
+            preview = preview[:60] + "..."
+        console.print(f"[dim]Conversation {conversation_id[:8]}...: {preview}[/dim]")
+
+    if not force:
+        click.confirm("Delete this conversation? This cannot be undone", abort=True)
+
+    success, message = delete_conversation(conversation_id)
+    if success:
+        console.print(f"[green]{message}[/green]")
+    else:
+        console.print(f"[red]{message}[/red]")
+        raise SystemExit(1)
+
+
+@cli.command()
 @click.option("--host", "-h", default=None, help="Host to bind to (default: from config or 127.0.0.1)")
 @click.option("--port", "-p", default=None, type=int, help="Port to bind to (default: from config or 8420)")
 @click.option("--foreground", "-f", is_flag=True, help="Run in foreground (don't daemonize)")

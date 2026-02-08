@@ -10,6 +10,7 @@ from radar.memory import (
     add_message,
     count_tool_calls_today,
     create_conversation,
+    delete_conversation,
     get_messages,
     get_messages_for_display,
     get_recent_activity,
@@ -427,3 +428,67 @@ class TestGetRecentActivity:
         # Should be sorted by time descending (second message has later timestamp)
         assert activity[0]["message"] == "second"
         assert activity[1]["message"] == "first"
+
+
+class TestDeleteConversation:
+    """delete_conversation removes JSONL files and cleans up feedback."""
+
+    def test_deletes_jsonl_file(self, isolated_data_dir):
+        cid = create_conversation()
+        add_message(cid, "user", "hello")
+        conv_path = isolated_data_dir / "conversations" / f"{cid}.jsonl"
+        assert conv_path.exists()
+        success, msg = delete_conversation(cid)
+        assert success is True
+        assert not conv_path.exists()
+
+    def test_returns_false_for_nonexistent(self, isolated_data_dir):
+        success, msg = delete_conversation("nonexistent-id")
+        assert success is False
+        assert "not found" in msg
+
+    def test_protects_heartbeat_conversation(self, isolated_data_dir):
+        cid = create_conversation()
+        add_message(cid, "user", "heartbeat msg")
+        hb_file = isolated_data_dir / "heartbeat_conversation"
+        hb_file.write_text(cid)
+        success, msg = delete_conversation(cid)
+        assert success is False
+        assert "heartbeat" in msg.lower()
+        # File should still exist
+        conv_path = isolated_data_dir / "conversations" / f"{cid}.jsonl"
+        assert conv_path.exists()
+
+    def test_cleans_up_feedback_records(self, isolated_data_dir):
+        from radar.feedback import store_feedback
+        from radar.semantic import _get_connection
+
+        cid = create_conversation()
+        add_message(cid, "user", "hello")
+        add_message(cid, "assistant", "world")
+        store_feedback(cid, 1, "positive", "world")
+
+        # Verify feedback exists
+        conn = _get_connection()
+        rows = conn.execute(
+            "SELECT COUNT(*) FROM feedback WHERE conversation_id = ?", (cid,)
+        ).fetchone()
+        assert rows[0] == 1
+        conn.close()
+
+        delete_conversation(cid)
+
+        # Verify feedback cleaned up
+        conn = _get_connection()
+        rows = conn.execute(
+            "SELECT COUNT(*) FROM feedback WHERE conversation_id = ?", (cid,)
+        ).fetchone()
+        assert rows[0] == 0
+        conn.close()
+
+    def test_get_messages_empty_after_delete(self, isolated_data_dir):
+        cid = create_conversation()
+        add_message(cid, "user", "hello")
+        assert len(get_messages(cid)) == 1
+        delete_conversation(cid)
+        assert get_messages(cid) == []

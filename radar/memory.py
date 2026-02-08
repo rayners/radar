@@ -96,6 +96,40 @@ def _get_heartbeat_conversation_id() -> str | None:
     return None
 
 
+def delete_conversation(conversation_id: str) -> tuple[bool, str]:
+    """Delete a conversation and clean up associated data.
+
+    Args:
+        conversation_id: The conversation ID to delete.
+
+    Returns:
+        (success, message) tuple.
+    """
+    # Protect heartbeat conversation
+    heartbeat_id = _get_heartbeat_conversation_id()
+    if heartbeat_id and conversation_id == heartbeat_id:
+        return False, "Cannot delete the heartbeat conversation"
+
+    conv_path = _get_conversation_path(conversation_id)
+    if not conv_path.exists():
+        return False, f"Conversation {conversation_id} not found"
+
+    conv_path.unlink()
+
+    # Best-effort cleanup of feedback records
+    try:
+        from radar.semantic import _get_connection
+
+        conn = _get_connection()
+        conn.execute("DELETE FROM feedback WHERE conversation_id = ?", (conversation_id,))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+    return True, f"Conversation {conversation_id} deleted"
+
+
 def get_recent_conversations(
     limit: int = 20,
     offset: int = 0,

@@ -212,14 +212,25 @@ async def api_history(
             summary = summary[:80] + "..."
         tool_count = conv.get("tool_count", 0)
         conv_id = escape(conv.get("id", ""))
+        delete_btn = ""
+        if conv_type != "heartbeat":
+            delete_btn = (
+                f' <button class="btn btn--ghost" style="padding: 2px 8px; font-size: 0.7rem;"'
+                f' hx-delete="/api/conversations/{conv_id}"'
+                f' hx-target="closest tr" hx-swap="outerHTML"'
+                f' hx-confirm="Delete this conversation? This cannot be undone.">'
+                f'&#10005;</button>'
+            )
         html_parts.append(
             f"<tr>"
             f'<td><span style="font-variant-numeric: tabular-nums;">{ts}</span></td>'
             f'<td><span class="activity-log__type activity-log__type--{conv_type}">{conv_type}</span></td>'
             f"<td>{summary}</td>"
             f'<td style="text-align: center;">{tool_count}</td>'
-            f'<td><a href="/chat?continue={conv_id}" class="btn btn--ghost" '
-            f'style="padding: 2px 8px; font-size: 0.7rem;">Continue</a></td>'
+            f'<td><div class="flex gap-sm">'
+            f'<a href="/chat?continue={conv_id}" class="btn btn--ghost" '
+            f'style="padding: 2px 8px; font-size: 0.7rem;">Continue</a>'
+            f'{delete_btn}</div></td>'
             f"</tr>"
         )
 
@@ -243,6 +254,23 @@ async def api_history(
         )
 
     return HTMLResponse("".join(html_parts))
+
+
+@router.delete("/api/conversations/{conversation_id}")
+async def api_conversation_delete(conversation_id: str):
+    """Delete a conversation."""
+    from radar.memory import delete_conversation
+
+    success, message = delete_conversation(conversation_id)
+    if success:
+        return HTMLResponse("")
+    if "not found" in message:
+        return HTMLResponse(
+            f'<div class="text-error">{message}</div>', status_code=404
+        )
+    return HTMLResponse(
+        f'<div class="text-error">{message}</div>', status_code=400
+    )
 
 
 @router.get("/memory", response_class=HTMLResponse)

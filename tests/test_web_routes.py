@@ -233,6 +233,31 @@ class TestApiHistory:
         assert "2025-01-15 10:30" in resp.text
 
 
+# ===== Conversation Delete Routes =====
+
+
+class TestConversationDeleteRoutes:
+    """Tests for DELETE /api/conversations/{id}."""
+
+    @patch("radar.memory.delete_conversation", return_value=(True, "Deleted"))
+    def test_successful_delete(self, mock_del, client):
+        resp = client.delete("/api/conversations/abc-123")
+        assert resp.status_code == 200
+        assert resp.text == ""
+        mock_del.assert_called_once_with("abc-123")
+
+    @patch("radar.memory.delete_conversation", return_value=(False, "Conversation xyz not found"))
+    def test_not_found(self, mock_del, client):
+        resp = client.delete("/api/conversations/xyz")
+        assert resp.status_code == 404
+
+    @patch("radar.memory.delete_conversation", return_value=(False, "Cannot delete the heartbeat conversation"))
+    def test_heartbeat_rejection(self, mock_del, client):
+        resp = client.delete("/api/conversations/hb-id")
+        assert resp.status_code == 400
+        assert "heartbeat" in resp.text
+
+
 # ===== Chat API Routes =====
 
 

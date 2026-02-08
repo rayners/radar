@@ -34,7 +34,7 @@
                     <th style="width: 100px;">Type</th>
                     <th>Summary</th>
                     <th style="width: 80px;">Tools</th>
-                    <th style="width: 100px;"></th>
+                    <th style="width: 140px;"></th>
                 </tr>
             </thead>
             <tbody>
@@ -51,9 +51,19 @@
                     <td>{{ conv.summary | truncate(80) }}</td>
                     <td style="text-align: center;">{{ conv.tool_count }}</td>
                     <td>
-                        <a href="/chat?continue={{ conv.id }}" class="btn btn--ghost" style="padding: 2px 8px; font-size: 0.7rem;">
-                            Continue
-                        </a>
+                        <div class="flex gap-sm">
+                            <a href="/chat?continue={{ conv.id }}" class="btn btn--ghost" style="padding: 2px 8px; font-size: 0.7rem;">
+                                Continue
+                            </a>
+                            {% if conv.type != 'heartbeat' %}
+                            <button class="btn btn--ghost" style="padding: 2px 8px; font-size: 0.7rem;"
+                                    hx-delete="/api/conversations/{{ conv.id }}"
+                                    hx-target="closest tr" hx-swap="outerHTML"
+                                    hx-confirm="Delete this conversation? This cannot be undone.">
+                                &#10005;
+                            </button>
+                            {% endif %}
+                        </div>
                     </td>
                 </tr>
                 {% else %}

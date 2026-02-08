@@ -397,3 +397,46 @@ class TestGetUnitPath:
         assert path.name == "radar.service"
         assert "systemd" in str(path)
         assert "user" in str(path)
+
+
+# ===== delete command =====
+
+
+class TestDeleteCommand:
+    """Tests for radar delete."""
+
+    @patch("radar.memory.get_messages", return_value=[{"content": "hello"}])
+    @patch("radar.memory.delete_conversation", return_value=(True, "Conversation abc deleted"))
+    def test_delete_with_force(self, mock_del, mock_msgs, runner):
+        result = runner.invoke(cli, ["delete", "abc", "--force"])
+        assert result.exit_code == 0
+        assert "deleted" in result.output.lower()
+        mock_del.assert_called_once_with("abc")
+
+    @patch("radar.memory.get_messages", return_value=[])
+    @patch("radar.memory.delete_conversation", return_value=(False, "Conversation xyz not found"))
+    def test_nonexistent_conversation(self, mock_del, mock_msgs, runner):
+        result = runner.invoke(cli, ["delete", "xyz", "--force"])
+        assert result.exit_code == 1
+        assert "not found" in result.output
+
+    @patch("radar.memory.get_messages", return_value=[{"content": "hello"}])
+    @patch("radar.memory.delete_conversation", return_value=(True, "Conversation abc deleted"))
+    def test_delete_with_confirmation_yes(self, mock_del, mock_msgs, runner):
+        result = runner.invoke(cli, ["delete", "abc"], input="y\n")
+        assert result.exit_code == 0
+        assert "deleted" in result.output.lower()
+
+    @patch("radar.memory.get_messages", return_value=[{"content": "hello"}])
+    @patch("radar.memory.delete_conversation")
+    def test_delete_aborted(self, mock_del, mock_msgs, runner):
+        result = runner.invoke(cli, ["delete", "abc"], input="n\n")
+        assert result.exit_code == 1
+        mock_del.assert_not_called()
+
+    @patch("radar.memory.get_messages", return_value=[{"content": "heartbeat"}])
+    @patch("radar.memory.delete_conversation", return_value=(False, "Cannot delete the heartbeat conversation"))
+    def test_heartbeat_rejection(self, mock_del, mock_msgs, runner):
+        result = runner.invoke(cli, ["delete", "hb-id", "--force"])
+        assert result.exit_code == 1
+        assert "heartbeat" in result.output.lower()

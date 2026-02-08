@@ -485,6 +485,26 @@ GET /api/export/{conversation_id}?format=json
 GET /api/export/{conversation_id}?format=markdown
 ```
 
+### Deleting Conversations
+
+Delete a conversation permanently. The heartbeat conversation is protected from deletion.
+
+```bash
+# Delete with confirmation prompt
+radar delete <conversation_id>
+
+# Delete without confirmation
+radar delete <conversation_id> --force
+```
+
+When the daemon is running, you can also delete via the web API:
+
+```
+DELETE /api/conversations/{conversation_id}
+```
+
+The history page in the web dashboard includes a delete button (&#10005;) on each conversation row (except the heartbeat conversation).
+
 ### Daemon Management
 
 The daemon runs the scheduler and web dashboard together. It daemonizes by default (detaches from your terminal).
