@@ -39,6 +39,7 @@ radar/
 ├── url_monitors.py     # URL monitor CRUD, fetching, diffing (SQLite memory.db)
 ├── watchers.py         # File system monitoring with watchdog
 ├── feedback.py         # User feedback collection + personality suggestions
+├── retry.py            # Exponential backoff + jitter for API calls
 ├── logging.py          # Structured logging with stats tracking
 ├── cli.py              # Click-based CLI entry point
 ├── config/             # Configuration package
@@ -1861,6 +1862,43 @@ def test_status_command():
         result = runner.invoke(cli, ["status"])
         assert result.exit_code == 0
 ```
+
+---
+
+## Retry and Error Handling
+
+### `radar/retry.py`
+
+The retry module provides utilities for handling transient API failures with exponential backoff and jitter:
+
+- `compute_delay(attempt, base_delay, max_delay)` -- full jitter: `random.uniform(0, min(max_delay, base_delay * 2^attempt))`
+- `is_retryable_httpx_error(exc)` -- classifies httpx exceptions (retryable: timeout, connect, 429/502/503/504)
+- `is_retryable_openai_error(exc)` -- classifies OpenAI SDK exceptions by status_code or error text
+- `log_retry(provider, model, attempt, max_retries, error, delay)` -- structured logging of retry attempts
+
+### Retry Integration Points
+
+Retry loops are inline (not decorator-based) to give precise control over what gets retried:
+
+- **LLM calls** (`radar/llm.py`) -- wraps `httpx.post()` in `_chat_ollama` and `client.chat.completions.create()` in `_chat_openai`. Retries exhaust first on the primary model, then fallback triggers with fresh retries.
+- **Embedding calls** (`radar/semantic.py`) -- wraps the HTTP call in `_get_embedding_ollama` and `_get_embedding_openai`. Local embeddings (`_get_embedding_local`) are CPU-only and don't retry.
+- **URL monitor fetches** (`radar/url_monitors.py`) -- wraps `httpx.get()` in `fetch_url_content`. The existing error-counting and auto-pause in `check_monitor` still fires after retries are exhausted.
+
+### Configuration
+
+Retry is controlled via `RetryConfig` in `radar/config/schema.py`:
+
+```yaml
+retry:
+  max_retries: 3        # 0 = disable
+  base_delay: 1.0       # seconds
+  max_delay: 30.0       # seconds cap
+  llm_retries: true
+  embedding_retries: true
+  url_monitor_retries: true
+```
+
+Each subsystem can be independently disabled. Setting `max_retries: 0` disables all retries.
 
 ---
 

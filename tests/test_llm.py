@@ -24,13 +24,18 @@ from radar.llm import (
 
 
 def _make_config(provider="ollama", model="test-model", base_url="http://localhost:11434",
-                 fallback_model="", max_tool_iterations=10):
+                 fallback_model="", max_tool_iterations=10,
+                 max_retries=0, llm_retries=True):
     """Build a minimal config-like object for LLM tests."""
     llm = SimpleNamespace(
         provider=provider, model=model, base_url=base_url,
         api_key="", fallback_model=fallback_model,
     )
-    return SimpleNamespace(llm=llm, max_tool_iterations=max_tool_iterations)
+    retry = SimpleNamespace(
+        max_retries=max_retries, base_delay=0.01, max_delay=0.05,
+        llm_retries=llm_retries, embedding_retries=True, url_monitor_retries=True,
+    )
+    return SimpleNamespace(llm=llm, max_tool_iterations=max_tool_iterations, retry=retry)
 
 
 def _make_ollama_response(content, tool_calls=None, status_code=200):
@@ -441,3 +446,185 @@ class TestChatDispatch:
         mock_config.return_value = _make_config(provider="openai")
         chat([{"role": "user", "content": "hi"}])
         mock_openai.assert_called_once()
+
+
+# ── _chat_ollama retry ────────────────────────────────────────────
+
+
+class TestChatOllamaRetry:
+    """_chat_ollama retries transient errors before giving up."""
+
+    @patch("radar.llm.time.sleep")
+    @patch("radar.llm.log_retry")
+    @patch("radar.llm._log_api_call")
+    @patch("radar.llm.httpx.post")
+    def test_retry_on_timeout_then_success(self, mock_post, mock_log, mock_log_retry, mock_sleep):
+        """Timeout on first attempt, success on second."""
+        success_resp = _make_ollama_response("Hello!")
+        mock_post.side_effect = [httpx.TimeoutException("timeout"), success_resp]
+
+        config = _make_config(max_retries=2)
+        msg, _ = _chat_ollama(
+            [{"role": "user", "content": "hi"}],
+            use_tools=False, config=config,
+        )
+        assert msg["content"] == "Hello!"
+        assert mock_post.call_count == 2
+        mock_sleep.assert_called_once()  # One sleep between attempts
+
+    @patch("radar.llm.time.sleep")
+    @patch("radar.llm.log_retry")
+    @patch("radar.llm._log_api_call")
+    @patch("radar.llm.httpx.post")
+    def test_no_retry_on_400(self, mock_post, mock_log, mock_log_retry, mock_sleep):
+        """400 errors are not retryable — fails immediately."""
+        error_response = MagicMock(spec=httpx.Response)
+        error_response.status_code = 400
+        error_response.text = "Bad request"
+        mock_post.side_effect = httpx.HTTPStatusError(
+            "400", request=MagicMock(), response=error_response
+        )
+
+        config = _make_config(max_retries=3)
+        with pytest.raises(RuntimeError, match="400"):
+            _chat_ollama(
+                [{"role": "user", "content": "hi"}],
+                use_tools=False, config=config,
+            )
+        assert mock_post.call_count == 1
+        mock_sleep.assert_not_called()
+
+    @patch("radar.llm.time.sleep")
+    @patch("radar.llm.log_retry")
+    @patch("radar.llm._log_api_call")
+    @patch("radar.llm._log_fallback")
+    @patch("radar.llm.httpx.post")
+    def test_retry_exhausted_then_fallback_on_429(self, mock_post, mock_fallback_log,
+                                                   mock_log, mock_log_retry, mock_sleep):
+        """429 retries exhaust, then fallback model is tried."""
+        error_response = MagicMock(spec=httpx.Response)
+        error_response.status_code = 429
+        error_response.text = "Rate limit"
+        rate_exc = httpx.HTTPStatusError("429", request=MagicMock(), response=error_response)
+
+        success_resp = _make_ollama_response("Fallback answer!")
+        # 2 retries (3 total attempts) of 429, then success with fallback
+        mock_post.side_effect = [rate_exc, rate_exc, rate_exc, success_resp]
+
+        config = _make_config(max_retries=2, fallback_model="fallback-model")
+        msg, _ = _chat_ollama(
+            [{"role": "user", "content": "hi"}],
+            use_tools=False, config=config,
+        )
+        assert msg["content"] == "Fallback answer!"
+        # 3 attempts on primary (1 + 2 retries) + 1 on fallback
+        assert mock_post.call_count == 4
+        # Verify fallback model was used in the last call
+        last_payload = mock_post.call_args_list[3][1]["json"]
+        assert last_payload["model"] == "fallback-model"
+
+    @patch("radar.llm.time.sleep")
+    @patch("radar.llm._log_api_call")
+    @patch("radar.llm.httpx.post")
+    def test_retries_disabled(self, mock_post, mock_log, mock_sleep):
+        """With max_retries=0, no retry happens."""
+        mock_post.side_effect = httpx.TimeoutException("timeout")
+
+        config = _make_config(max_retries=0)
+        with pytest.raises(RuntimeError, match="timed out"):
+            _chat_ollama(
+                [{"role": "user", "content": "hi"}],
+                use_tools=False, config=config,
+            )
+        assert mock_post.call_count == 1
+        mock_sleep.assert_not_called()
+
+    @patch("radar.llm.time.sleep")
+    @patch("radar.llm._log_api_call")
+    @patch("radar.llm.httpx.post")
+    def test_retries_disabled_via_flag(self, mock_post, mock_log, mock_sleep):
+        """With llm_retries=False, no retry even with max_retries > 0."""
+        mock_post.side_effect = httpx.TimeoutException("timeout")
+
+        config = _make_config(max_retries=3, llm_retries=False)
+        with pytest.raises(RuntimeError, match="timed out"):
+            _chat_ollama(
+                [{"role": "user", "content": "hi"}],
+                use_tools=False, config=config,
+            )
+        assert mock_post.call_count == 1
+        mock_sleep.assert_not_called()
+
+
+# ── _chat_openai retry ───────────────────────────────────────────
+
+
+class TestChatOpenaiRetry:
+    """_chat_openai retries transient errors before giving up."""
+
+    @patch("radar.llm.time.sleep")
+    @patch("radar.llm.log_retry")
+    @patch("radar.llm._log_api_call")
+    def test_retry_on_timeout_then_success(self, mock_log, mock_log_retry, mock_sleep):
+        mock_client = MagicMock()
+
+        timeout_exc = Exception("Request timed out")
+        final_msg = _make_openai_message("Success!")
+
+        mock_client.chat.completions.create.side_effect = [
+            timeout_exc,
+            SimpleNamespace(choices=[SimpleNamespace(message=final_msg)]),
+        ]
+
+        config = _make_config(provider="openai", max_retries=2)
+        with patch("openai.OpenAI", return_value=mock_client):
+            msg, _ = _chat_openai(
+                [{"role": "user", "content": "hi"}],
+                use_tools=False, config=config,
+            )
+        assert msg["content"] == "Success!"
+        assert mock_client.chat.completions.create.call_count == 2
+
+    @patch("radar.llm.time.sleep")
+    @patch("radar.llm._log_api_call")
+    def test_no_retry_on_400(self, mock_log, mock_sleep):
+        mock_client = MagicMock()
+
+        exc = Exception("Bad request")
+        exc.status_code = 400
+        mock_client.chat.completions.create.side_effect = exc
+
+        config = _make_config(provider="openai", max_retries=3)
+        with patch("openai.OpenAI", return_value=mock_client):
+            with pytest.raises(RuntimeError, match="Bad request"):
+                _chat_openai(
+                    [{"role": "user", "content": "hi"}],
+                    use_tools=False, config=config,
+                )
+        assert mock_client.chat.completions.create.call_count == 1
+        mock_sleep.assert_not_called()
+
+    @patch("radar.llm.time.sleep")
+    @patch("radar.llm.log_retry")
+    @patch("radar.llm._log_api_call")
+    @patch("radar.llm._log_fallback")
+    def test_retry_exhausted_then_fallback(self, mock_fallback_log, mock_log,
+                                            mock_log_retry, mock_sleep):
+        mock_client = MagicMock()
+
+        rate_exc = Exception("Rate limit exceeded")
+        rate_exc.status_code = 429
+        final_msg = _make_openai_message("Fallback!")
+
+        mock_client.chat.completions.create.side_effect = [
+            rate_exc, rate_exc,  # 2 attempts (1 + 1 retry) on primary
+            SimpleNamespace(choices=[SimpleNamespace(message=final_msg)]),
+        ]
+
+        config = _make_config(provider="openai", max_retries=1, fallback_model="fallback")
+        with patch("openai.OpenAI", return_value=mock_client):
+            msg, _ = _chat_openai(
+                [{"role": "user", "content": "hi"}],
+                use_tools=False, config=config,
+            )
+        assert msg["content"] == "Fallback!"

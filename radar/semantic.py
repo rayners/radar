@@ -2,12 +2,14 @@
 
 import sqlite3
 import struct
+import time
 from datetime import datetime
 from pathlib import Path
 
 import httpx
 
 from radar.config import get_config, get_data_paths
+from radar.retry import compute_delay, is_retryable_httpx_error, is_retryable_openai_error, log_retry
 
 # Cache for local embedding model
 _local_model = None
@@ -176,15 +178,41 @@ def _get_embedding_ollama(text: str, config) -> list[float]:
     base_url = config.embedding.base_url or config.llm.base_url
     url = f"{base_url.rstrip('/')}/api/embed"
 
-    response = httpx.post(
-        url,
-        json={
-            "model": config.embedding.model,
-            "input": text,
-        },
-        timeout=60,
-    )
-    response.raise_for_status()
+    retry_cfg = config.retry if hasattr(config, "retry") else None
+    max_retries = (retry_cfg.max_retries if retry_cfg and retry_cfg.embedding_retries else 0)
+
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            response = httpx.post(
+                url,
+                json={
+                    "model": config.embedding.model,
+                    "input": text,
+                },
+                timeout=60,
+            )
+            response.raise_for_status()
+            last_error = None
+            break
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError) as e:
+            last_error = e
+            if attempt < max_retries and is_retryable_httpx_error(e):
+                delay = compute_delay(
+                    attempt,
+                    retry_cfg.base_delay if retry_cfg else 1.0,
+                    retry_cfg.max_delay if retry_cfg else 30.0,
+                )
+                log_retry("ollama-embedding", config.embedding.model, attempt, max_retries, e, delay)
+                time.sleep(delay)
+                continue
+            break
+
+    if last_error is not None:
+        if isinstance(last_error, httpx.HTTPStatusError):
+            raise RuntimeError(f"Embedding error: {last_error.response.status_code} - {last_error.response.text}")
+        raise RuntimeError(f"Embedding request failed: {last_error}")
+
     data = response.json()
 
     # Ollama returns embeddings as a list (for batch support)
@@ -204,10 +232,35 @@ def _get_embedding_openai(text: str, config) -> list[float]:
     api_key = config.embedding.api_key or config.llm.api_key or "not-needed"
 
     client = OpenAI(base_url=base_url, api_key=api_key)
-    response = client.embeddings.create(
-        model=config.embedding.model,
-        input=[text],
-    )
+
+    retry_cfg = config.retry if hasattr(config, "retry") else None
+    max_retries = (retry_cfg.max_retries if retry_cfg and retry_cfg.embedding_retries else 0)
+
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            response = client.embeddings.create(
+                model=config.embedding.model,
+                input=[text],
+            )
+            last_error = None
+            break
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries and is_retryable_openai_error(e):
+                delay = compute_delay(
+                    attempt,
+                    retry_cfg.base_delay if retry_cfg else 1.0,
+                    retry_cfg.max_delay if retry_cfg else 30.0,
+                )
+                log_retry("openai-embedding", config.embedding.model, attempt, max_retries, e, delay)
+                time.sleep(delay)
+                continue
+            break
+
+    if last_error is not None:
+        raise RuntimeError(f"Embedding request failed: {last_error}")
+
     return response.data[0].embedding
 
 

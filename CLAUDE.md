@@ -57,6 +57,7 @@ RADAR_LLM_PROVIDER=openai RADAR_LLM_BASE_URL=https://api.openai.com/v1 RADAR_API
 - `radar/url_monitors.py` - URL monitor CRUD, fetching, diffing, heartbeat integration
 - `radar/summaries.py` - Conversation summary file I/O, scanning, formatting, heartbeat due-checking
 - `radar/documents.py` - Document indexing with FTS5 + semantic hybrid search, collection management
+- `radar/retry.py` - Exponential backoff + jitter for API calls (LLM, embedding, URL monitors)
 - `radar/scheduler.py` - APScheduler heartbeat with quiet hours + event queue
 - Heartbeat flow: `_heartbeat_tick()` checks due scheduled tasks → injects them as events via `add_event("scheduled_task", ...)` → checks due URL monitors → checks due conversation summaries → re-indexes document collections → checks calendar reminders → runs `agent.run()` with the compiled event message + active personality context
 - `radar/scheduled_tasks.py` - Scheduled task CRUD (DB in `memory.db`, table `scheduled_tasks`)
@@ -324,6 +325,22 @@ Behavior:
 - Only one fallback attempt per turn — if the fallback model also fails, the error propagates
 - The failed attempt doesn't count toward `max_tool_iterations`
 - Works mid-tool-loop: tool results from the primary model stay in context
+
+### Retry with Exponential Backoff
+
+All API calls (LLM, embedding, URL monitors) retry transient errors with exponential backoff and jitter:
+
+```yaml
+retry:
+  max_retries: 3          # 0 = disable
+  base_delay: 1.0         # seconds
+  max_delay: 30.0         # seconds cap
+  llm_retries: true       # Retry LLM calls
+  embedding_retries: true # Retry embedding calls
+  url_monitor_retries: true # Retry URL monitor fetches
+```
+
+Retries exhaust before fallback triggers. Each subsystem can be independently disabled. The retry utility lives in `radar/retry.py`.
 
 ### Models Tested
 

@@ -97,10 +97,10 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 ## 4. Architecture Improvements
 
 ### Error Handling & Resilience
-- [ ] Exponential backoff + jitter for API calls
+- [x] Exponential backoff + jitter for API calls — `radar/retry.py` with `compute_delay()` using full jitter
 - [ ] Circuit breaker for flaky services
-- [ ] Retry logic for LLM/embedding calls
-- [ ] Detailed error logging with context
+- [x] Retry logic for LLM/embedding calls — inline retry loops in `radar/llm.py` and `radar/semantic.py`, configurable via `RetryConfig`
+- [x] Detailed error logging with context — `log_retry()` logs provider, model, attempt, delay, and error type
 - [x] Health check endpoint (`/health`) — basic + `?check_services=true` for LLM/embedding/DB pings
 
 ### Configuration

@@ -12,6 +12,7 @@ from radar.config import (
     DataPaths,
     EmbeddingConfig,
     LLMConfig,
+    RetryConfig,
     ToolsConfig,
     WebConfig,
     _apply_env_overrides,
@@ -199,6 +200,36 @@ class TestConfigFromDict:
             "ollama": {"model": "llama3.2"},
         })
         assert cfg.llm.model == "gpt-4o"
+
+    def test_retry_defaults(self):
+        cfg = Config.from_dict({})
+        assert cfg.retry.max_retries == 3
+        assert cfg.retry.base_delay == 1.0
+        assert cfg.retry.max_delay == 30.0
+        assert cfg.retry.llm_retries is True
+        assert cfg.retry.embedding_retries is True
+        assert cfg.retry.url_monitor_retries is True
+
+    def test_retry_section_parsed(self):
+        cfg = Config.from_dict({"retry": {
+            "max_retries": 5,
+            "base_delay": 2.0,
+            "max_delay": 60.0,
+            "llm_retries": False,
+            "embedding_retries": False,
+            "url_monitor_retries": False,
+        }})
+        assert cfg.retry.max_retries == 5
+        assert cfg.retry.base_delay == 2.0
+        assert cfg.retry.max_delay == 60.0
+        assert cfg.retry.llm_retries is False
+        assert cfg.retry.embedding_retries is False
+        assert cfg.retry.url_monitor_retries is False
+
+    def test_retry_partial_override(self):
+        cfg = Config.from_dict({"retry": {"max_retries": 0}})
+        assert cfg.retry.max_retries == 0
+        assert cfg.retry.base_delay == 1.0  # default preserved
 
 
 # ── _apply_env_overrides ──────────────────────────────────────────

@@ -1,11 +1,13 @@
 """LLM client with tool call support for Ollama and OpenAI-compatible APIs."""
 
 import json
+import time
 from typing import Any
 
 import httpx
 
 from radar.config import get_config
+from radar.retry import compute_delay, is_retryable_httpx_error, is_retryable_openai_error, log_retry
 from radar.tools import execute_tool, get_tools_schema
 
 
@@ -109,6 +111,8 @@ def _chat_ollama(
     active_model = model_override or config.llm.model
     effective_fallback = fallback_model_override or config.llm.fallback_model
     fell_back = False
+    retry_cfg = config.retry if hasattr(config, "retry") else None
+    max_retries = (retry_cfg.max_retries if retry_cfg and retry_cfg.llm_retries else 0)
 
     while iterations < config.max_tool_iterations:
         iterations += 1
@@ -121,28 +125,46 @@ def _chat_ollama(
         if tools:
             payload["tools"] = tools
 
-        try:
-            _log_api_call("ollama", active_model)
-            response = httpx.post(url, json=payload, timeout=120)
-            response.raise_for_status()
-        except httpx.TimeoutException:
-            raise RuntimeError("Ollama request timed out")
-        except httpx.HTTPStatusError as e:
-            status_code = e.response.status_code
-            error_text = e.response.text
-            if (
-                not fell_back
-                and effective_fallback
-                and _is_rate_limit_error(status_code, error_text)
-            ):
-                _log_fallback(active_model, effective_fallback, status_code, error_text)
-                active_model = effective_fallback
-                fell_back = True
-                iterations -= 1  # Don't count failed attempt
-                continue
-            raise RuntimeError(f"Ollama error: {status_code} - {error_text}")
-        except httpx.ConnectError:
-            raise RuntimeError(f"Cannot connect to Ollama at {effective_base_url}")
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                _log_api_call("ollama", active_model)
+                response = httpx.post(url, json=payload, timeout=120)
+                response.raise_for_status()
+                last_error = None
+                break  # success
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError) as e:
+                last_error = e
+                if attempt < max_retries and is_retryable_httpx_error(e):
+                    delay = compute_delay(
+                        attempt,
+                        retry_cfg.base_delay if retry_cfg else 1.0,
+                        retry_cfg.max_delay if retry_cfg else 30.0,
+                    )
+                    log_retry("ollama", active_model, attempt, max_retries, e, delay)
+                    time.sleep(delay)
+                    continue
+                break  # non-retryable or retries exhausted
+
+        if last_error is not None:
+            if isinstance(last_error, httpx.HTTPStatusError):
+                status_code = last_error.response.status_code
+                error_text = last_error.response.text
+                if (
+                    not fell_back
+                    and effective_fallback
+                    and _is_rate_limit_error(status_code, error_text)
+                ):
+                    _log_fallback(active_model, effective_fallback, status_code, error_text)
+                    active_model = effective_fallback
+                    fell_back = True
+                    iterations -= 1  # Don't count failed attempt
+                    continue
+                raise RuntimeError(f"Ollama error: {status_code} - {error_text}")
+            elif isinstance(last_error, httpx.TimeoutException):
+                raise RuntimeError("Ollama request timed out")
+            elif isinstance(last_error, httpx.ConnectError):
+                raise RuntimeError(f"Cannot connect to Ollama at {effective_base_url}")
 
         data = response.json()
         assistant_message = data.get("message", {})
@@ -205,6 +227,8 @@ def _chat_openai(
     active_model = model_override or config.llm.model
     effective_fallback = fallback_model_override or config.llm.fallback_model
     fell_back = False
+    retry_cfg = config.retry if hasattr(config, "retry") else None
+    max_retries = (retry_cfg.max_retries if retry_cfg and retry_cfg.llm_retries else 0)
 
     # Convert tools to OpenAI format
     openai_tools = _convert_tools_to_openai(tools) if tools else None
@@ -219,12 +243,29 @@ def _chat_openai(
         if openai_tools:
             kwargs["tools"] = openai_tools
 
-        try:
-            _log_api_call("openai", active_model)
-            response = client.chat.completions.create(**kwargs)
-        except Exception as e:
-            status_code = getattr(e, "status_code", None)
-            error_text = str(e)
+        last_error = None
+        for attempt in range(max_retries + 1):
+            try:
+                _log_api_call("openai", active_model)
+                response = client.chat.completions.create(**kwargs)
+                last_error = None
+                break  # success
+            except Exception as e:
+                last_error = e
+                if attempt < max_retries and is_retryable_openai_error(e):
+                    delay = compute_delay(
+                        attempt,
+                        retry_cfg.base_delay if retry_cfg else 1.0,
+                        retry_cfg.max_delay if retry_cfg else 30.0,
+                    )
+                    log_retry("openai", active_model, attempt, max_retries, e, delay)
+                    time.sleep(delay)
+                    continue
+                break  # non-retryable or retries exhausted
+
+        if last_error is not None:
+            status_code = getattr(last_error, "status_code", None)
+            error_text = str(last_error)
             if (
                 not fell_back
                 and effective_fallback
@@ -235,7 +276,7 @@ def _chat_openai(
                 fell_back = True
                 iterations -= 1
                 continue
-            raise RuntimeError(f"OpenAI API error: {e}")
+            raise RuntimeError(f"OpenAI API error: {last_error}")
 
         assistant_message = response.choices[0].message
         all_messages.append(_openai_message_to_dict(assistant_message))

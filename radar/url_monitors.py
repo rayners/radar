@@ -3,6 +3,7 @@
 import difflib
 import hashlib
 import json
+import time
 import zlib
 from datetime import datetime, timedelta
 from html.parser import HTMLParser
@@ -11,6 +12,7 @@ from typing import Any
 import httpx
 
 from radar.config import get_config
+from radar.retry import compute_delay, is_retryable_httpx_error, log_retry
 from radar.semantic import _get_connection
 
 
@@ -96,12 +98,34 @@ def fetch_url_content(
     if last_modified:
         req_headers["If-Modified-Since"] = last_modified
 
-    response = httpx.get(url, headers=req_headers, timeout=wm.fetch_timeout, follow_redirects=True)
+    retry_cfg = config.retry if hasattr(config, "retry") else None
+    max_retries = (retry_cfg.max_retries if retry_cfg and retry_cfg.url_monitor_retries else 0)
 
-    if response.status_code == 304:
-        return None
+    last_error = None
+    response = None
+    for attempt in range(max_retries + 1):
+        try:
+            response = httpx.get(url, headers=req_headers, timeout=wm.fetch_timeout, follow_redirects=True)
+            if response.status_code == 304:
+                return None
+            response.raise_for_status()
+            last_error = None
+            break
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError) as e:
+            last_error = e
+            if attempt < max_retries and is_retryable_httpx_error(e):
+                delay = compute_delay(
+                    attempt,
+                    retry_cfg.base_delay if retry_cfg else 1.0,
+                    retry_cfg.max_delay if retry_cfg else 30.0,
+                )
+                log_retry("url-monitor", url, attempt, max_retries, e, delay)
+                time.sleep(delay)
+                continue
+            break
 
-    response.raise_for_status()
+    if last_error is not None:
+        raise last_error
 
     content = response.text
     if len(content) > wm.max_content_size:

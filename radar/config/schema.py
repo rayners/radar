@@ -196,6 +196,18 @@ class DocumentsConfig:
 
 
 @dataclass
+class RetryConfig:
+    """Retry with exponential backoff configuration."""
+
+    max_retries: int = 3  # 0 = disable retries
+    base_delay: float = 1.0  # seconds
+    max_delay: float = 30.0  # seconds cap
+    llm_retries: bool = True
+    embedding_retries: bool = True
+    url_monitor_retries: bool = True
+
+
+@dataclass
 class SkillsConfig:
     """Agent Skills configuration."""
 
@@ -221,6 +233,7 @@ class Config:
     web_monitor: WebMonitorConfig = field(default_factory=WebMonitorConfig)
     summaries: SummariesConfig = field(default_factory=SummariesConfig)
     documents: DocumentsConfig = field(default_factory=DocumentsConfig)
+    retry: RetryConfig = field(default_factory=RetryConfig)
     system_prompt: str = ""
     max_tool_iterations: int = 10
     watch_paths: list[dict] = field(default_factory=list)
@@ -250,6 +263,7 @@ class Config:
         web_monitor_data = data.get("web_monitor", {})
         summaries_data = data.get("summaries", {})
         documents_data = data.get("documents", {})
+        retry_data = data.get("retry", {})
 
         # Backward compatibility: if 'ollama' section exists but not 'llm', migrate
         if ollama_data and not llm_data:
@@ -368,6 +382,14 @@ class Config:
                 chunk_overlap_pct=documents_data.get("chunk_overlap_pct", DocumentsConfig.chunk_overlap_pct),
                 generate_embeddings=documents_data.get("generate_embeddings", DocumentsConfig.generate_embeddings),
                 collections=documents_data.get("collections", []),
+            ),
+            retry=RetryConfig(
+                max_retries=retry_data.get("max_retries", RetryConfig.max_retries),
+                base_delay=retry_data.get("base_delay", RetryConfig.base_delay),
+                max_delay=retry_data.get("max_delay", RetryConfig.max_delay),
+                llm_retries=retry_data.get("llm_retries", RetryConfig.llm_retries),
+                embedding_retries=retry_data.get("embedding_retries", RetryConfig.embedding_retries),
+                url_monitor_retries=retry_data.get("url_monitor_retries", RetryConfig.url_monitor_retries),
             ),
             system_prompt=data.get("system_prompt", ""),
             max_tool_iterations=data.get("max_tool_iterations", 10),

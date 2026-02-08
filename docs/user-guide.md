@@ -309,6 +309,22 @@ llm:
 
 The fallback is sticky for the conversation turn -- once triggered, all remaining tool-loop iterations use the fallback model.
 
+### Retry with Exponential Backoff
+
+Radar automatically retries transient errors (timeouts, connection failures, HTTP 429/502/503/504) with exponential backoff and jitter. This makes the system resilient to brief network blips and rate limits.
+
+```yaml
+retry:
+  max_retries: 3          # Number of retries (0 = disable)
+  base_delay: 1.0         # Base delay in seconds
+  max_delay: 30.0         # Maximum delay cap in seconds
+  llm_retries: true       # Retry LLM API calls
+  embedding_retries: true # Retry embedding API calls
+  url_monitor_retries: true # Retry URL monitor fetches
+```
+
+Retries are enabled by default with sensible settings. The delay between retries uses exponential backoff with full jitter to avoid thundering herd problems. When retries are exhausted on a rate-limited model and `fallback_model` is configured, the fallback model gets its own fresh set of retries.
+
 ### Embedding Providers
 
 Radar uses embeddings for semantic memory (the `remember` and `recall` tools). Four providers are available:

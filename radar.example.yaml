@@ -24,6 +24,15 @@ tools:
   # Timeout for exec tool (seconds)
   exec_timeout: 30
 
+# Retry with exponential backoff for transient errors
+# retry:
+#   max_retries: 3          # Number of retries (0 = disable)
+#   base_delay: 1.0         # Base delay in seconds
+#   max_delay: 30.0         # Maximum delay cap
+#   llm_retries: true       # Retry LLM API calls
+#   embedding_retries: true # Retry embedding API calls
+#   url_monitor_retries: true # Retry URL monitor fetches
+
 # Maximum number of tool call iterations before stopping
 max_tool_iterations: 10
 
