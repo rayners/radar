@@ -1,8 +1,17 @@
 """Configuration dataclasses for Radar."""
 
+import dataclasses
 import warnings
 from dataclasses import dataclass, field
 from typing import Any
+
+
+def _dc_from_dict(cls, data: dict[str, Any]):
+    """Construct a dataclass from a dict, using class defaults for missing keys."""
+    return cls(**{
+        f.name: data.get(f.name, f.default if f.default is not dataclasses.MISSING else f.default_factory())
+        for f in dataclasses.fields(cls)
+    })
 
 
 @dataclass
@@ -251,19 +260,6 @@ class Config:
         llm_data = data.get("llm", {})
         embedding_data = data.get("embedding", {})
         ollama_data = data.get("ollama", {})
-        notify_data = data.get("notifications", {})
-        tools_data = data.get("tools", {})
-        heartbeat_data = data.get("heartbeat", {})
-        web_data = data.get("web", {})
-        plugins_data = data.get("plugins", {})
-        personality_evolution_data = data.get("personality_evolution", {})
-        search_data = data.get("search", {})
-        hooks_data = data.get("hooks", {})
-        skills_data = data.get("skills", {})
-        web_monitor_data = data.get("web_monitor", {})
-        summaries_data = data.get("summaries", {})
-        documents_data = data.get("documents", {})
-        retry_data = data.get("retry", {})
 
         # Backward compatibility: if 'ollama' section exists but not 'llm', migrate
         if ollama_data and not llm_data:
@@ -297,109 +293,24 @@ class Config:
                 stacklevel=2,
             )
 
-        return cls(
-            llm=LLMConfig(
-                provider=llm_data.get("provider", LLMConfig.provider),
-                model=llm_data.get("model", LLMConfig.model),
-                base_url=llm_data.get("base_url", LLMConfig.base_url),
-                api_key=llm_data.get("api_key", LLMConfig.api_key),
-                fallback_model=llm_data.get("fallback_model", LLMConfig.fallback_model),
-            ),
-            embedding=EmbeddingConfig(
-                provider=embedding_data.get("provider", EmbeddingConfig.provider),
-                model=embedding_data.get("model", EmbeddingConfig.model),
-                base_url=embedding_data.get("base_url", EmbeddingConfig.base_url),
-                api_key=embedding_data.get("api_key", EmbeddingConfig.api_key),
-            ),
-            notifications=NotifyConfig(
-                url=notify_data.get("url", NotifyConfig.url),
-                topic=notify_data.get("topic", NotifyConfig.topic),
-            ),
-            tools=ToolsConfig(
-                max_file_size=tools_data.get("max_file_size", ToolsConfig.max_file_size),
-                exec_timeout=tools_data.get("exec_timeout", ToolsConfig.exec_timeout),
-                exec_mode=tools_data.get("exec_mode", ToolsConfig.exec_mode),
-                extra_dirs=tools_data.get("extra_dirs", []),
-            ),
-            heartbeat=HeartbeatConfig(
-                interval_minutes=heartbeat_data.get("interval_minutes", HeartbeatConfig.interval_minutes),
-                quiet_hours_start=heartbeat_data.get("quiet_hours_start", HeartbeatConfig.quiet_hours_start),
-                quiet_hours_end=heartbeat_data.get("quiet_hours_end", HeartbeatConfig.quiet_hours_end),
-            ),
-            web=WebConfig(
-                host=web_data.get("host", WebConfig.host),
-                port=web_data.get("port", WebConfig.port),
-                auth_token=web_data.get("auth_token", WebConfig.auth_token),
-            ),
-            plugins=PluginsConfig(
-                max_debug_attempts=plugins_data.get("max_debug_attempts", PluginsConfig.max_debug_attempts),
-                test_timeout_seconds=plugins_data.get("test_timeout_seconds", PluginsConfig.test_timeout_seconds),
-                max_code_size_bytes=plugins_data.get("max_code_size_bytes", PluginsConfig.max_code_size_bytes),
-                allow_llm_generated=plugins_data.get("allow_llm_generated", PluginsConfig.allow_llm_generated),
-                auto_approve=plugins_data.get("auto_approve", PluginsConfig.auto_approve),
-                auto_approve_if_tests_pass=plugins_data.get("auto_approve_if_tests_pass", PluginsConfig.auto_approve_if_tests_pass),
-            ),
-            personality_evolution=PersonalityEvolutionConfig(
-                allow_suggestions=personality_evolution_data.get("allow_suggestions", PersonalityEvolutionConfig.allow_suggestions),
-                auto_approve_suggestions=personality_evolution_data.get("auto_approve_suggestions", PersonalityEvolutionConfig.auto_approve_suggestions),
-                min_feedback_for_analysis=personality_evolution_data.get("min_feedback_for_analysis", PersonalityEvolutionConfig.min_feedback_for_analysis),
-            ),
-            search=WebSearchConfig(
-                provider=search_data.get("provider", WebSearchConfig.provider),
-                brave_api_key=search_data.get("brave_api_key", WebSearchConfig.brave_api_key),
-                searxng_url=search_data.get("searxng_url", WebSearchConfig.searxng_url),
-                max_results=search_data.get("max_results", WebSearchConfig.max_results),
-                safe_search=search_data.get("safe_search", WebSearchConfig.safe_search),
-            ),
-            hooks=HooksConfig(
-                enabled=hooks_data.get("enabled", HooksConfig.enabled),
-                rules=hooks_data.get("rules", []),
-            ),
-            skills=SkillsConfig(
-                enabled=skills_data.get("enabled", SkillsConfig.enabled),
-                dirs=skills_data.get("dirs", []),
-            ),
-            web_monitor=WebMonitorConfig(
-                default_interval_minutes=web_monitor_data.get("default_interval_minutes", WebMonitorConfig.default_interval_minutes),
-                min_interval_minutes=web_monitor_data.get("min_interval_minutes", WebMonitorConfig.min_interval_minutes),
-                fetch_timeout=web_monitor_data.get("fetch_timeout", WebMonitorConfig.fetch_timeout),
-                user_agent=web_monitor_data.get("user_agent", WebMonitorConfig.user_agent),
-                max_content_size=web_monitor_data.get("max_content_size", WebMonitorConfig.max_content_size),
-                max_diff_length=web_monitor_data.get("max_diff_length", WebMonitorConfig.max_diff_length),
-                max_error_count=web_monitor_data.get("max_error_count", WebMonitorConfig.max_error_count),
-            ),
-            summaries=SummariesConfig(
-                enabled=summaries_data.get("enabled", SummariesConfig.enabled),
-                daily_summary_time=summaries_data.get("daily_summary_time", SummariesConfig.daily_summary_time),
-                weekly_summary_day=summaries_data.get("weekly_summary_day", SummariesConfig.weekly_summary_day),
-                monthly_summary_day=summaries_data.get("monthly_summary_day", SummariesConfig.monthly_summary_day),
-                auto_notify=summaries_data.get("auto_notify", SummariesConfig.auto_notify),
-                max_conversations_per_summary=summaries_data.get("max_conversations_per_summary", SummariesConfig.max_conversations_per_summary),
-            ),
-            documents=DocumentsConfig(
-                enabled=documents_data.get("enabled", DocumentsConfig.enabled),
-                chunk_size=documents_data.get("chunk_size", DocumentsConfig.chunk_size),
-                chunk_overlap_pct=documents_data.get("chunk_overlap_pct", DocumentsConfig.chunk_overlap_pct),
-                generate_embeddings=documents_data.get("generate_embeddings", DocumentsConfig.generate_embeddings),
-                collections=documents_data.get("collections", []),
-            ),
-            retry=RetryConfig(
-                max_retries=retry_data.get("max_retries", RetryConfig.max_retries),
-                base_delay=retry_data.get("base_delay", RetryConfig.base_delay),
-                max_delay=retry_data.get("max_delay", RetryConfig.max_delay),
-                llm_retries=retry_data.get("llm_retries", RetryConfig.llm_retries),
-                embedding_retries=retry_data.get("embedding_retries", RetryConfig.embedding_retries),
-                url_monitor_retries=retry_data.get("url_monitor_retries", RetryConfig.url_monitor_retries),
-            ),
-            system_prompt=data.get("system_prompt", ""),
-            max_tool_iterations=data.get("max_tool_iterations", 10),
-            watch_paths=data.get("watch_paths", []),
-            personality=data.get("personality", "default"),
-            data_dir=data.get("data_dir", ""),
-            # Keep deprecated fields for backward compatibility
-            ollama=OllamaConfig(
-                base_url=ollama_data.get("base_url", OllamaConfig.base_url),
-                model=ollama_data.get("model", OllamaConfig.model),
-            ),
-            embedding_model=data.get("embedding_model", "nomic-embed-text"),
-        )
+        # Build section overrides for fields with non-matching config keys
+        section_data = {
+            "llm": llm_data,
+            "embedding": embedding_data,
+            "notifications": data.get("notifications", {}),
+            "ollama": ollama_data,
+        }
+
+        # Build all dataclass-typed fields generically
+        kwargs: dict[str, Any] = {}
+        for f in dataclasses.fields(cls):
+            if dataclasses.is_dataclass(f.type if isinstance(f.type, type) else None):
+                dc_cls = f.type
+                dc_data = section_data.get(f.name) if f.name in section_data else data.get(f.name, {})
+                kwargs[f.name] = _dc_from_dict(dc_cls, dc_data)
+            else:
+                # Scalar fields (system_prompt, max_tool_iterations, etc.)
+                default = f.default if f.default is not dataclasses.MISSING else f.default_factory()
+                kwargs[f.name] = data.get(f.name, default)
+
+        return cls(**kwargs)

@@ -31,6 +31,18 @@ class PersonalityConfig:
     base_url: str | None = None
     api_key_env: str | None = None
 
+    def chat_kwargs(self) -> dict[str, Any]:
+        """Build keyword arguments for llm.chat() from personality overrides."""
+        return {
+            "model_override": self.model,
+            "fallback_model_override": self.fallback_model,
+            "tools_include": self.tools_include,
+            "tools_exclude": self.tools_exclude,
+            "provider_override": self.provider,
+            "base_url_override": self.base_url,
+            "api_key_override": os.environ.get(self.api_key_env) if self.api_key_env else None,
+        }
+
 
 def parse_personality(raw: str) -> PersonalityConfig:
     """Parse a personality file, extracting optional YAML front matter.
@@ -376,16 +388,7 @@ def run(
     api_messages = [system_message] + messages_to_api_format(stored_messages)
 
     # Call LLM with tool support
-    final_message, all_messages = chat(
-        api_messages,
-        model_override=pc.model,
-        fallback_model_override=pc.fallback_model,
-        tools_include=pc.tools_include,
-        tools_exclude=pc.tools_exclude,
-        provider_override=pc.provider,
-        base_url_override=pc.base_url,
-        api_key_override=os.environ.get(pc.api_key_env) if pc.api_key_env else None,
-    )
+    final_message, all_messages = chat(api_messages, **pc.chat_kwargs())
 
     # Store all new messages from the interaction
     # Skip system message and messages we already have stored
@@ -427,16 +430,7 @@ def ask(user_message: str, personality: str | None = None) -> str:
     system_message = {"role": "system", "content": prompt}
     user_msg = {"role": "user", "content": user_message}
 
-    final_message, _ = chat(
-        [system_message, user_msg],
-        model_override=pc.model,
-        fallback_model_override=pc.fallback_model,
-        tools_include=pc.tools_include,
-        tools_exclude=pc.tools_exclude,
-        provider_override=pc.provider,
-        base_url_override=pc.base_url,
-        api_key_override=os.environ.get(pc.api_key_env) if pc.api_key_env else None,
-    )
+    final_message, _ = chat([system_message, user_msg], **pc.chat_kwargs())
     response_text = final_message.get("content", "")
 
     # --- POST hook ---

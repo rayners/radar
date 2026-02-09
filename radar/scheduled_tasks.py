@@ -130,9 +130,7 @@ def get_task(task_id: int) -> dict[str, Any] | None:
     try:
         cursor = conn.execute("SELECT * FROM scheduled_tasks WHERE id = ?", (task_id,))
         row = cursor.fetchone()
-        if row:
-            return dict(row)
-        return None
+        return dict(row) if row else None
     finally:
         conn.close()
 
@@ -145,14 +143,8 @@ def list_tasks(enabled_only: bool = False) -> list[dict[str, Any]]:
     """
     conn = _get_connection()
     try:
-        if enabled_only:
-            cursor = conn.execute(
-                "SELECT * FROM scheduled_tasks WHERE enabled = 1 ORDER BY created_at DESC"
-            )
-        else:
-            cursor = conn.execute(
-                "SELECT * FROM scheduled_tasks ORDER BY created_at DESC"
-            )
+        where = "WHERE enabled = 1 " if enabled_only else ""
+        cursor = conn.execute(f"SELECT * FROM scheduled_tasks {where}ORDER BY created_at DESC")
         return [dict(row) for row in cursor.fetchall()]
     finally:
         conn.close()
@@ -246,16 +238,8 @@ def mark_task_executed(task_id: int) -> None:
     now = datetime.now()
 
     if task["schedule_type"] == "once":
-        # Disable one-time tasks after execution
-        conn = _get_connection()
-        try:
-            conn.execute(
-                "UPDATE scheduled_tasks SET last_run = ?, enabled = 0, next_run = NULL WHERE id = ?",
-                (_to_sqlite_datetime(now), task_id),
-            )
-            conn.commit()
-        finally:
-            conn.close()
+        sql = "UPDATE scheduled_tasks SET last_run = ?, enabled = 0, next_run = NULL WHERE id = ?"
+        params = (_to_sqlite_datetime(now), task_id)
     else:
         next_run = compute_next_run(
             task["schedule_type"],
@@ -264,15 +248,15 @@ def mark_task_executed(task_id: int) -> None:
             task["interval_minutes"],
             task["run_at"],
         )
-        conn = _get_connection()
-        try:
-            conn.execute(
-                "UPDATE scheduled_tasks SET last_run = ?, next_run = ? WHERE id = ?",
-                (_to_sqlite_datetime(now), _to_sqlite_datetime(next_run), task_id),
-            )
-            conn.commit()
-        finally:
-            conn.close()
+        sql = "UPDATE scheduled_tasks SET last_run = ?, next_run = ? WHERE id = ?"
+        params = (_to_sqlite_datetime(now), _to_sqlite_datetime(next_run), task_id)
+
+    conn = _get_connection()
+    try:
+        conn.execute(sql, params)
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def format_schedule(task: dict[str, Any]) -> str:

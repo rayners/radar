@@ -50,6 +50,50 @@ def is_retryable_openai_error(exc: Exception) -> bool:
     )
 
 
+def retry_call(
+    fn,
+    *,
+    max_retries: int,
+    retry_cfg,
+    is_retryable_fn,
+    provider: str,
+    label: str,
+):
+    """Call fn() with retry on transient errors.
+
+    Args:
+        fn: Callable to invoke (no arguments).
+        max_retries: Maximum number of retries (0 = no retries).
+        retry_cfg: RetryConfig with base_delay and max_delay.
+        is_retryable_fn: Callable(Exception) -> bool.
+        provider: Provider name for logging (e.g. "ollama-embedding").
+        label: Model or URL label for logging.
+
+    Returns:
+        The return value of fn().
+
+    Raises:
+        The last exception if all retries are exhausted.
+    """
+    last_error = None
+    for attempt in range(max_retries + 1):
+        try:
+            return fn()
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries and is_retryable_fn(e):
+                delay = compute_delay(
+                    attempt,
+                    retry_cfg.base_delay,
+                    retry_cfg.max_delay,
+                )
+                log_retry(provider, label, attempt, max_retries, e, delay)
+                time.sleep(delay)
+                continue
+            break
+    raise last_error
+
+
 def log_retry(
     provider: str,
     model: str,

@@ -79,12 +79,9 @@ def conversation_to_text(conversation_id: str) -> str:
                 tool_summaries.append(f"[Tool: {name}({args_str})]")
 
             tool_text = "\n".join(tool_summaries)
-            if content and tool_text:
-                parts.append(f"## Assistant\n{tool_text}\n{content}\n")
-            elif content:
-                parts.append(f"## Assistant\n{content}\n")
-            elif tool_text:
-                parts.append(f"## Assistant\n{tool_text}\n")
+            body = "\n".join(filter(None, [tool_text, content]))
+            if body:
+                parts.append(f"## Assistant\n{body}\n")
 
     return "\n".join(parts)
 

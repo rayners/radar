@@ -1,6 +1,6 @@
 """Scheduler for heartbeat and event processing."""
 
-from datetime import datetime, time
+from datetime import datetime
 from typing import Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -177,8 +177,7 @@ def _heartbeat_tick() -> None:
 
     # Re-index document collections
     try:
-        from radar.config import get_config as _get_cfg
-        _cfg = _get_cfg()
+        _cfg = get_config()
         if _cfg.documents.enabled:
             from radar.documents import ensure_summaries_collection, index_collection, list_collections
             ensure_summaries_collection()
@@ -303,8 +302,6 @@ def trigger_heartbeat() -> str:
 
 def get_status() -> dict[str, Any]:
     """Get scheduler status information."""
-    global _scheduler, _last_heartbeat, _event_queue
-
     config = get_config()
 
     running = _scheduler is not None and _scheduler.running
@@ -334,8 +331,6 @@ def add_event(event_type: str, data: dict[str, Any]) -> None:
         event_type: Type of event (e.g., "file_created", "file_modified")
         data: Event data dictionary
     """
-    global _event_queue
-
     _event_queue.append({
         "type": event_type,
         "data": data,

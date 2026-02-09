@@ -100,51 +100,6 @@ class TestRunner:
 
     def _create_safe_namespace(self) -> dict:
         """Create a restricted namespace for code execution."""
-        # Start with basic builtins
-        safe_builtins = {
-            "True": True,
-            "False": False,
-            "None": None,
-            "abs": abs,
-            "all": all,
-            "any": any,
-            "bool": bool,
-            "chr": chr,
-            "dict": dict,
-            "divmod": divmod,
-            "enumerate": enumerate,
-            "filter": filter,
-            "float": float,
-            "format": format,
-            "frozenset": frozenset,
-            "hash": hash,
-            "hex": hex,
-            "int": int,
-            "isinstance": isinstance,
-            "issubclass": issubclass,
-            "iter": iter,
-            "len": len,
-            "list": list,
-            "map": map,
-            "max": max,
-            "min": min,
-            "next": next,
-            "oct": oct,
-            "ord": ord,
-            "pow": pow,
-            "print": print,  # Allow print for debugging
-            "range": range,
-            "repr": repr,
-            "reversed": reversed,
-            "round": round,
-            "set": set,
-            "slice": slice,
-            "sorted": sorted,
-            "str": str,
-            "sum": sum,
-            "tuple": tuple,
-            "type": type,
-            "zip": zip,
-        }
+        from radar.plugins.sandbox import SAFE_BUILTINS
 
-        return {"__builtins__": safe_builtins}
+        return {"__builtins__": SAFE_BUILTINS}

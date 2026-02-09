@@ -5,14 +5,18 @@ import json
 from radar.memory import _get_conversation_path, get_messages, get_messages_for_display
 
 
+def _require_conversation(conversation_id: str) -> None:
+    """Raise ValueError if conversation does not exist."""
+    if not _get_conversation_path(conversation_id).exists():
+        raise ValueError(f"Conversation not found: {conversation_id}")
+
+
 def export_json(conversation_id: str) -> str:
     """Export conversation as a JSON array string.
 
     Raises ValueError if the conversation does not exist.
     """
-    conv_path = _get_conversation_path(conversation_id)
-    if not conv_path.exists():
-        raise ValueError(f"Conversation not found: {conversation_id}")
+    _require_conversation(conversation_id)
 
     messages = get_messages(conversation_id)
     # Strip internal 'id' field added by get_messages
@@ -25,9 +29,7 @@ def export_markdown(conversation_id: str) -> str:
 
     Raises ValueError if the conversation does not exist.
     """
-    conv_path = _get_conversation_path(conversation_id)
-    if not conv_path.exists():
-        raise ValueError(f"Conversation not found: {conversation_id}")
+    _require_conversation(conversation_id)
 
     # Build a {line_id: timestamp} map from raw messages
     raw_messages = get_messages(conversation_id)

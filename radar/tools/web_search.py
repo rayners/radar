@@ -51,15 +51,10 @@ def _search_brave(query: str, num_results: int, time_range: str | None) -> list[
     response.raise_for_status()
     data = response.json()
 
-    results = []
-    for item in data.get("web", {}).get("results", []):
-        results.append({
-            "title": item.get("title", ""),
-            "url": item.get("url", ""),
-            "description": item.get("description", ""),
-        })
-
-    return results[:num_results]
+    return [
+        {"title": item.get("title", ""), "url": item.get("url", ""), "description": item.get("description", "")}
+        for item in data.get("web", {}).get("results", [])
+    ][:num_results]
 
 
 def _search_duckduckgo(query: str, num_results: int, time_range: str | None) -> list[dict]:
@@ -109,15 +104,10 @@ def _search_duckduckgo(query: str, num_results: int, time_range: str | None) -> 
             except Exception:
                 continue
 
-    results = []
-    for item in raw_results:
-        results.append({
-            "title": item.get("title", ""),
-            "url": item.get("href", ""),
-            "description": item.get("body", ""),
-        })
-
-    return results
+    return [
+        {"title": item.get("title", ""), "url": item.get("href", ""), "description": item.get("body", "")}
+        for item in raw_results
+    ]
 
 
 def _search_searxng(query: str, num_results: int, time_range: str | None) -> list[dict]:
@@ -146,16 +136,9 @@ def _search_searxng(query: str, num_results: int, time_range: str | None) -> lis
         "pageno": 1,
     }
 
-    # Map time_range to SearXNG's time_range parameter
+    # SearXNG uses the same time_range values as our API
     if time_range:
-        time_map = {
-            "day": "day",
-            "week": "week",
-            "month": "month",
-            "year": "year",
-        }
-        if time_range in time_map:
-            params["time_range"] = time_map[time_range]
+        params["time_range"] = time_range
 
     response = httpx.get(
         f"{base_url}/search",
@@ -165,15 +148,10 @@ def _search_searxng(query: str, num_results: int, time_range: str | None) -> lis
     response.raise_for_status()
     data = response.json()
 
-    results = []
-    for item in data.get("results", []):
-        results.append({
-            "title": item.get("title", ""),
-            "url": item.get("url", ""),
-            "description": item.get("content", ""),
-        })
-
-    return results[:num_results]
+    return [
+        {"title": item.get("title", ""), "url": item.get("url", ""), "description": item.get("content", "")}
+        for item in data.get("results", [])
+    ][:num_results]
 
 
 def _format_results(query: str, results: list[dict], provider: str) -> str:

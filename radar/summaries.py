@@ -25,20 +25,9 @@ def get_summaries_dir() -> Path:
     return base
 
 
-def _label_for_period(period_type: str, date_or_label: str) -> str:
-    """Normalize a date/label string for the given period type.
-
-    For daily: expects ISO date "2025-01-07" → "2025-01-07"
-    For weekly: expects ISO week "2025-W02" → "2025-W02"
-    For monthly: expects "2025-01" → "2025-01"
-    """
-    return date_or_label
-
-
 def get_summary_path(period_type: str, date_or_label: str) -> Path:
     """Get the expected file path for a summary."""
-    label = _label_for_period(period_type, date_or_label)
-    return get_summaries_dir() / period_type / f"{label}.md"
+    return get_summaries_dir() / period_type / f"{date_or_label}.md"
 
 
 def summary_exists(period_type: str, date_or_label: str) -> bool:
@@ -373,18 +362,15 @@ def check_summary_due(period_type: str) -> str | None:
         Formatted conversation string if summary is due, None otherwise.
     """
     config = get_config()
-    summaries_config = getattr(config, "summaries", None)
-    if summaries_config and not summaries_config.enabled:
+    sc = config.summaries
+    if not sc.enabled:
         return None
 
     now = datetime.now()
 
     if period_type == "daily":
         # Check if configured time has passed
-        summary_time_str = "21:00"
-        if summaries_config:
-            summary_time_str = summaries_config.daily_summary_time
-        hour, minute = map(int, summary_time_str.split(":"))
+        hour, minute = map(int, sc.daily_summary_time.split(":"))
 
         if now.hour < hour or (now.hour == hour and now.minute < minute):
             return None
@@ -402,12 +388,8 @@ def check_summary_due(period_type: str) -> str | None:
         return format_conversations_for_llm(conversations)
 
     if period_type == "weekly":
-        day_of_week = "sun"
-        if summaries_config:
-            day_of_week = summaries_config.weekly_summary_day
-
         day_map = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
-        target_day = day_map.get(day_of_week.lower()[:3], 6)
+        target_day = day_map.get(sc.weekly_summary_day.lower()[:3], 6)
         if now.weekday() != target_day:
             return None
 
@@ -426,11 +408,7 @@ def check_summary_due(period_type: str) -> str | None:
         return format_conversations_for_llm(conversations)
 
     if period_type == "monthly":
-        summary_day = 1
-        if summaries_config:
-            summary_day = summaries_config.monthly_summary_day
-
-        if now.day != summary_day:
+        if now.day != sc.monthly_summary_day:
             return None
 
         # Summarize last month

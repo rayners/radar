@@ -22,6 +22,22 @@ _external_tool_mtimes: dict[str, float] = {}
 _plugin_tools: dict[str, set[str]] = {}
 
 
+def _build_tool_schema(name: str, description: str, parameters: dict[str, Any]) -> dict:
+    """Build a tool schema dict from name, description, and parameters."""
+    return {
+        "type": "function",
+        "function": {
+            "name": name,
+            "description": description,
+            "parameters": {
+                "type": "object",
+                "properties": parameters,
+                "required": [k for k, v in parameters.items() if not v.get("optional", False)],
+            },
+        },
+    }
+
+
 def tool(
     name: str,
     description: str,
@@ -36,18 +52,7 @@ def tool(
     """
 
     def decorator(func: Callable) -> Callable:
-        schema = {
-            "type": "function",
-            "function": {
-                "name": name,
-                "description": description,
-                "parameters": {
-                    "type": "object",
-                    "properties": parameters,
-                    "required": [k for k, v in parameters.items() if not v.get("optional", False)],
-                },
-            },
-        }
+        schema = _build_tool_schema(name, description, parameters)
         _registry[name] = (func, schema)
 
         @wraps(func)
@@ -163,68 +168,12 @@ def register_dynamic_tool(
     Returns:
         True if registration succeeded, False otherwise.
     """
-    # Create the tool schema
-    schema = {
-        "type": "function",
-        "function": {
-            "name": name,
-            "description": description,
-            "parameters": {
-                "type": "object",
-                "properties": parameters,
-                "required": [k for k, v in parameters.items() if not v.get("optional", False)],
-            },
-        },
-    }
+    schema = _build_tool_schema(name, description, parameters)
 
     # Create a safe namespace for execution
-    safe_builtins = {
-        "True": True,
-        "False": False,
-        "None": None,
-        "abs": abs,
-        "all": all,
-        "any": any,
-        "bool": bool,
-        "chr": chr,
-        "dict": dict,
-        "divmod": divmod,
-        "enumerate": enumerate,
-        "filter": filter,
-        "float": float,
-        "format": format,
-        "frozenset": frozenset,
-        "hash": hash,
-        "hex": hex,
-        "int": int,
-        "isinstance": isinstance,
-        "issubclass": issubclass,
-        "iter": iter,
-        "len": len,
-        "list": list,
-        "map": map,
-        "max": max,
-        "min": min,
-        "next": next,
-        "oct": oct,
-        "ord": ord,
-        "pow": pow,
-        "print": print,
-        "range": range,
-        "repr": repr,
-        "reversed": reversed,
-        "round": round,
-        "set": set,
-        "slice": slice,
-        "sorted": sorted,
-        "str": str,
-        "sum": sum,
-        "tuple": tuple,
-        "type": type,
-        "zip": zip,
-    }
+    from radar.plugins.sandbox import SAFE_BUILTINS
 
-    namespace: dict[str, Any] = {"__builtins__": safe_builtins}
+    namespace: dict[str, Any] = {"__builtins__": SAFE_BUILTINS}
     if extra_namespace:
         # Filter out dunder keys to prevent overriding __builtins__
         namespace.update(
@@ -287,18 +236,7 @@ def register_local_tool(
     Returns:
         True if registration succeeded.
     """
-    schema = {
-        "type": "function",
-        "function": {
-            "name": name,
-            "description": description,
-            "parameters": {
-                "type": "object",
-                "properties": parameters,
-                "required": [k for k, v in parameters.items() if not v.get("optional", False)],
-            },
-        },
-    }
+    schema = _build_tool_schema(name, description, parameters)
     _registry[name] = (func, schema)
     if plugin_name:
         _plugin_tools.setdefault(plugin_name, set()).add(name)

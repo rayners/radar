@@ -452,6 +452,17 @@ def personality():
     pass
 
 
+def _extract_description(content: str, max_len: int = 60) -> str:
+    """Extract first non-heading, non-front-matter line as a description."""
+    for line in content.split("\n"):
+        line = line.strip()
+        if line and not line.startswith("#") and not line.startswith("---"):
+            if len(line) > max_len:
+                return line[:max_len] + "..."
+            return line
+    return ""
+
+
 @personality.command("list")
 def personality_list():
     """List available personalities."""
@@ -476,16 +487,7 @@ def personality_list():
     # Flat .md files
     for pfile in sorted(personalities_dir.glob("*.md")):
         name = pfile.stem
-        content = pfile.read_text()
-        description = ""
-        for line in content.split("\n"):
-            line = line.strip()
-            if line and not line.startswith("#") and not line.startswith("---"):
-                description = line[:60]
-                if len(line) > 60:
-                    description += "..."
-                break
-        entries.append((name, description, "file"))
+        entries.append((name, _extract_description(pfile.read_text()), "file"))
 
     # Directory-based personalities
     for d in sorted(personalities_dir.iterdir()):
@@ -494,16 +496,7 @@ def personality_list():
             # Skip if a flat file with same name exists (flat takes precedence in listing)
             if any(e[0] == name for e in entries):
                 continue
-            content = (d / "PERSONALITY.md").read_text()
-            description = ""
-            for line in content.split("\n"):
-                line = line.strip()
-                if line and not line.startswith("#") and not line.startswith("---"):
-                    description = line[:60]
-                    if len(line) > 60:
-                        description += "..."
-                    break
-            entries.append((name, description, "directory"))
+            entries.append((name, _extract_description((d / "PERSONALITY.md").read_text()), "directory"))
 
     if not entries:
         console.print("[dim]No personalities found[/dim]")
@@ -594,6 +587,10 @@ def personality_create(name: str, directory: bool):
 
     personalities_dir = get_personalities_dir()
 
+    # Generate content from template (same for both formats)
+    content = DEFAULT_PERSONALITY.replace("# Default", f"# {name.title()}")
+    content = content.replace("A practical, local-first AI assistant.", f"A custom personality for {name}.")
+
     if directory:
         personality_dir = personalities_dir / name
         personality_file = personality_dir / "PERSONALITY.md"
@@ -602,13 +599,8 @@ def personality_create(name: str, directory: bool):
             console.print(f"[red]Personality '{name}' already exists[/red]")
             raise SystemExit(1)
 
-        # Create directory structure
         personality_dir.mkdir(parents=True)
         (personality_dir / "context").mkdir()
-
-        # Create from template
-        content = DEFAULT_PERSONALITY.replace("# Default", f"# {name.title()}")
-        content = content.replace("A practical, local-first AI assistant.", f"A custom personality for {name}.")
         personality_file.write_text(content)
 
         console.print(f"[green]Created directory personality: {name}[/green]")
@@ -621,9 +613,6 @@ def personality_create(name: str, directory: bool):
             console.print(f"[red]Personality '{name}' already exists[/red]")
             raise SystemExit(1)
 
-        # Create from template with customized name
-        content = DEFAULT_PERSONALITY.replace("# Default", f"# {name.title()}")
-        content = content.replace("A practical, local-first AI assistant.", f"A custom personality for {name}.")
         personality_file.write_text(content)
 
         console.print(f"[green]Created personality: {name}[/green]")

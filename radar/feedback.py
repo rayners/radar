@@ -94,19 +94,7 @@ def get_unprocessed_feedback(limit: int = 50) -> list[dict[str, Any]]:
             """,
             (limit,),
         )
-        rows = cursor.fetchall()
-        return [
-            {
-                "id": row["id"],
-                "conversation_id": row["conversation_id"],
-                "message_index": row["message_index"],
-                "sentiment": row["sentiment"],
-                "response_content": row["response_content"],
-                "user_comment": row["user_comment"],
-                "created_at": row["created_at"],
-            }
-            for row in rows
-        ]
+        return [dict(row) for row in cursor.fetchall()]
     finally:
         conn.close()
 
@@ -132,20 +120,7 @@ def get_all_feedback(limit: int = 100) -> list[dict[str, Any]]:
             """,
             (limit,),
         )
-        rows = cursor.fetchall()
-        return [
-            {
-                "id": row["id"],
-                "conversation_id": row["conversation_id"],
-                "message_index": row["message_index"],
-                "sentiment": row["sentiment"],
-                "response_content": row["response_content"],
-                "user_comment": row["user_comment"],
-                "created_at": row["created_at"],
-                "processed": bool(row["processed"]),
-            }
-            for row in rows
-        ]
+        return [dict(row) for row in cursor.fetchall()]
     finally:
         conn.close()
 
@@ -229,19 +204,7 @@ def get_pending_suggestions() -> list[dict[str, Any]]:
             ORDER BY created_at DESC
             """
         )
-        rows = cursor.fetchall()
-        return [
-            {
-                "id": row["id"],
-                "personality_name": row["personality_name"],
-                "suggestion_type": row["suggestion_type"],
-                "content": row["content"],
-                "reason": row["reason"],
-                "source": row["source"],
-                "created_at": row["created_at"],
-            }
-            for row in rows
-        ]
+        return [dict(row) for row in cursor.fetchall()]
     finally:
         conn.close()
 
@@ -267,19 +230,7 @@ def get_suggestion(suggestion_id: int) -> dict[str, Any] | None:
             (suggestion_id,),
         )
         row = cursor.fetchone()
-        if row:
-            return {
-                "id": row["id"],
-                "personality_name": row["personality_name"],
-                "suggestion_type": row["suggestion_type"],
-                "content": row["content"],
-                "reason": row["reason"],
-                "source": row["source"],
-                "status": row["status"],
-                "created_at": row["created_at"],
-                "applied_at": row["applied_at"],
-            }
-        return None
+        return dict(row) if row else None
     finally:
         conn.close()
 

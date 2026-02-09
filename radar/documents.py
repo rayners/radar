@@ -495,53 +495,37 @@ def search_fts(
     """
     conn = _get_connection()
     try:
-        if collection:
-            cursor = conn.execute(
-                """
-                SELECT dc.content, dc.id AS chunk_id,
-                       rank AS bm25_rank,
-                       df.file_path,
-                       dcol.name AS collection_name
-                FROM document_chunks_fts fts
-                JOIN document_chunks dc ON fts.rowid = dc.id
-                JOIN document_files df ON dc.file_id = df.id
-                JOIN document_collections dcol ON df.collection_id = dcol.id
-                WHERE document_chunks_fts MATCH ?
-                AND dcol.name = ?
-                ORDER BY rank
-                LIMIT ?
-                """,
-                (query, collection, limit),
-            )
-        else:
-            cursor = conn.execute(
-                """
-                SELECT dc.content, dc.id AS chunk_id,
-                       rank AS bm25_rank,
-                       df.file_path,
-                       dcol.name AS collection_name
-                FROM document_chunks_fts fts
-                JOIN document_chunks dc ON fts.rowid = dc.id
-                JOIN document_files df ON dc.file_id = df.id
-                JOIN document_collections dcol ON df.collection_id = dcol.id
-                WHERE document_chunks_fts MATCH ?
-                ORDER BY rank
-                LIMIT ?
-                """,
-                (query, limit),
-            )
+        collection_filter = "AND dcol.name = ?" if collection else ""
+        params = (query, collection, limit) if collection else (query, limit)
+        cursor = conn.execute(
+            f"""
+            SELECT dc.content, dc.id AS chunk_id,
+                   rank AS bm25_rank,
+                   df.file_path,
+                   dcol.name AS collection_name
+            FROM document_chunks_fts fts
+            JOIN document_chunks dc ON fts.rowid = dc.id
+            JOIN document_files df ON dc.file_id = df.id
+            JOIN document_collections dcol ON df.collection_id = dcol.id
+            WHERE document_chunks_fts MATCH ?
+            {collection_filter}
+            ORDER BY rank
+            LIMIT ?
+            """,
+            params,
+        )
 
-        results = []
-        for row in cursor.fetchall():
-            results.append({
+        return [
+            {
                 "content": row["content"],
                 "chunk_id": row["chunk_id"],
                 "bm25_rank": row["bm25_rank"],
                 "file_path": row["file_path"],
                 "collection": row["collection_name"],
                 "search_type": "fts",
-            })
-        return results
+            }
+            for row in cursor.fetchall()
+        ]
     finally:
         conn.close()
 
@@ -571,32 +555,21 @@ def search_semantic(
 
     conn = _get_connection()
     try:
-        if collection:
-            cursor = conn.execute(
-                """
-                SELECT dc.id AS chunk_id, dc.content, dc.embedding,
-                       df.file_path,
-                       dcol.name AS collection_name
-                FROM document_chunks dc
-                JOIN document_files df ON dc.file_id = df.id
-                JOIN document_collections dcol ON df.collection_id = dcol.id
-                WHERE dc.embedding IS NOT NULL
-                AND dcol.name = ?
-                """,
-                (collection,),
-            )
-        else:
-            cursor = conn.execute(
-                """
-                SELECT dc.id AS chunk_id, dc.content, dc.embedding,
-                       df.file_path,
-                       dcol.name AS collection_name
-                FROM document_chunks dc
-                JOIN document_files df ON dc.file_id = df.id
-                JOIN document_collections dcol ON df.collection_id = dcol.id
-                WHERE dc.embedding IS NOT NULL
-                """
-            )
+        collection_filter = "AND dcol.name = ?" if collection else ""
+        params = (collection,) if collection else ()
+        cursor = conn.execute(
+            f"""
+            SELECT dc.id AS chunk_id, dc.content, dc.embedding,
+                   df.file_path,
+                   dcol.name AS collection_name
+            FROM document_chunks dc
+            JOIN document_files df ON dc.file_id = df.id
+            JOIN document_collections dcol ON df.collection_id = dcol.id
+            WHERE dc.embedding IS NOT NULL
+            {collection_filter}
+            """,
+            params,
+        )
 
         results = []
         for row in cursor.fetchall():

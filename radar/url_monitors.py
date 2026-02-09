@@ -3,7 +3,6 @@
 import difflib
 import hashlib
 import json
-import time
 import zlib
 from datetime import datetime, timedelta
 from html.parser import HTMLParser
@@ -12,7 +11,7 @@ from typing import Any
 import httpx
 
 from radar.config import get_config
-from radar.retry import compute_delay, is_retryable_httpx_error, log_retry
+from radar.retry import is_retryable_httpx_error, retry_call
 from radar.semantic import _get_connection
 
 
@@ -98,34 +97,23 @@ def fetch_url_content(
     if last_modified:
         req_headers["If-Modified-Since"] = last_modified
 
-    retry_cfg = config.retry if hasattr(config, "retry") else None
-    max_retries = (retry_cfg.max_retries if retry_cfg and retry_cfg.url_monitor_retries else 0)
+    retry_cfg = config.retry
+    max_retries = (retry_cfg.max_retries if retry_cfg.url_monitor_retries else 0)
 
-    last_error = None
-    response = None
-    for attempt in range(max_retries + 1):
-        try:
-            response = httpx.get(url, headers=req_headers, timeout=wm.fetch_timeout, follow_redirects=True)
-            if response.status_code == 304:
-                return None
-            response.raise_for_status()
-            last_error = None
-            break
-        except (httpx.TimeoutException, httpx.ConnectError, httpx.HTTPStatusError) as e:
-            last_error = e
-            if attempt < max_retries and is_retryable_httpx_error(e):
-                delay = compute_delay(
-                    attempt,
-                    retry_cfg.base_delay if retry_cfg else 1.0,
-                    retry_cfg.max_delay if retry_cfg else 30.0,
-                )
-                log_retry("url-monitor", url, attempt, max_retries, e, delay)
-                time.sleep(delay)
-                continue
-            break
+    def _do_fetch():
+        resp = httpx.get(url, headers=req_headers, timeout=wm.fetch_timeout, follow_redirects=True)
+        if resp.status_code == 304:
+            return None
+        resp.raise_for_status()
+        return resp
 
-    if last_error is not None:
-        raise last_error
+    response = retry_call(
+        _do_fetch, max_retries=max_retries, retry_cfg=retry_cfg,
+        is_retryable_fn=is_retryable_httpx_error, provider="url-monitor", label=url,
+    )
+
+    if response is None:
+        return None
 
     content = response.text
     if len(content) > wm.max_content_size:
@@ -155,8 +143,11 @@ def compute_diff(old_text: str, new_text: str) -> dict[str, Any]:
     old_lines = old_text.splitlines(keepends=True)
     new_lines = new_text.splitlines(keepends=True)
     diff_lines = list(difflib.unified_diff(old_lines, new_lines, fromfile="before", tofile="after", lineterm=""))
-    change_size = len([l for l in diff_lines if l.startswith("+") and not l.startswith("+++")]) + \
-                  len([l for l in diff_lines if l.startswith("-") and not l.startswith("---")])
+    change_size = sum(
+        1 for line in diff_lines
+        if (line.startswith("+") and not line.startswith("+++"))
+        or (line.startswith("-") and not line.startswith("---"))
+    )
 
     diff_text = "\n".join(diff_lines)
     if len(diff_text) > max_len:
@@ -233,12 +224,8 @@ def list_monitors(enabled_only: bool = False) -> list[dict[str, Any]]:
     """List all monitors."""
     conn = _get_connection()
     try:
-        if enabled_only:
-            cursor = conn.execute(
-                "SELECT * FROM url_monitors WHERE enabled = 1 ORDER BY created_at DESC"
-            )
-        else:
-            cursor = conn.execute("SELECT * FROM url_monitors ORDER BY created_at DESC")
+        where = "WHERE enabled = 1 " if enabled_only else ""
+        cursor = conn.execute(f"SELECT * FROM url_monitors {where}ORDER BY created_at DESC")
         return [dict(row) for row in cursor.fetchall()]
     finally:
         conn.close()

@@ -52,20 +52,14 @@ class PluginLoader:
         """Load all enabled plugins (user-installed + bundled)."""
         plugins = []
 
-        for plugin_dir in self.enabled_dir.iterdir():
-            if plugin_dir.is_dir():
-                plugin = self._load_plugin(plugin_dir)
-                if plugin:
-                    plugins.append(plugin)
-                    self._plugins[plugin.name] = plugin
-            elif plugin_dir.is_symlink():
-                # Follow symlink to actual plugin
-                target = plugin_dir.resolve()
-                if target.is_dir():
-                    plugin = self._load_plugin(target)
-                    if plugin:
-                        plugins.append(plugin)
-                        self._plugins[plugin.name] = plugin
+        for entry in self.enabled_dir.iterdir():
+            plugin_dir = entry.resolve() if entry.is_symlink() else entry
+            if not plugin_dir.is_dir():
+                continue
+            plugin = self._load_plugin(plugin_dir)
+            if plugin:
+                plugins.append(plugin)
+                self._plugins[plugin.name] = plugin
 
         # Load bundled plugins (shipped in-repo)
         disabled_bundled = self._get_disabled_bundled()
@@ -680,21 +674,10 @@ class PluginLoader:
                     funcs[pv_def.name] = func
         else:
             # Sandbox: restricted namespace
-            safe_builtins = {
-                "True": True, "False": False, "None": None,
-                "abs": abs, "all": all, "any": any, "bool": bool, "chr": chr,
-                "dict": dict, "divmod": divmod, "enumerate": enumerate,
-                "filter": filter, "float": float, "format": format,
-                "frozenset": frozenset, "hash": hash, "hex": hex, "int": int,
-                "isinstance": isinstance, "issubclass": issubclass, "iter": iter,
-                "len": len, "list": list, "map": map, "max": max, "min": min,
-                "next": next, "oct": oct, "ord": ord, "pow": pow, "print": print,
-                "range": range, "repr": repr, "reversed": reversed, "round": round,
-                "set": set, "slice": slice, "sorted": sorted, "str": str,
-                "sum": sum, "tuple": tuple, "type": type, "zip": zip,
-            }
+            from radar.plugins.sandbox import SAFE_BUILTINS
+
             code = code_file.read_text()
-            namespace: dict = {"__builtins__": safe_builtins}
+            namespace: dict = {"__builtins__": SAFE_BUILTINS}
             try:
                 compiled = compile(code, str(code_file), "exec")
                 exec(compiled, namespace)  # noqa: S102 — validated plugin code
@@ -721,20 +704,7 @@ class PluginLoader:
         if not scripts_dir.is_dir():
             return {}
 
-        # Same safe builtins used by register_dynamic_tool — no open/import/eval
-        safe_builtins = {
-            "True": True, "False": False, "None": None,
-            "abs": abs, "all": all, "any": any, "bool": bool, "chr": chr,
-            "dict": dict, "divmod": divmod, "enumerate": enumerate,
-            "filter": filter, "float": float, "format": format,
-            "frozenset": frozenset, "hash": hash, "hex": hex, "int": int,
-            "isinstance": isinstance, "issubclass": issubclass, "iter": iter,
-            "len": len, "list": list, "map": map, "max": max, "min": min,
-            "next": next, "oct": oct, "ord": ord, "pow": pow, "print": print,
-            "range": range, "repr": repr, "reversed": reversed, "round": round,
-            "set": set, "slice": slice, "sorted": sorted, "str": str,
-            "sum": sum, "tuple": tuple, "type": type, "zip": zip,
-        }
+        from radar.plugins.sandbox import SAFE_BUILTINS
 
         namespace = {}
         for script_file in sorted(scripts_dir.glob("*.py")):
@@ -744,7 +714,7 @@ class PluginLoader:
                 continue
 
             # Execute in restricted namespace with safe builtins only
-            script_ns: dict = {"__builtins__": safe_builtins}
+            script_ns: dict = {"__builtins__": SAFE_BUILTINS}
             try:
                 compiled = compile(code, str(script_file), "exec")
                 exec(compiled, script_ns)  # noqa: S102 — validated plugin code

@@ -111,8 +111,8 @@ def _chat_ollama(
     active_model = model_override or config.llm.model
     effective_fallback = fallback_model_override or config.llm.fallback_model
     fell_back = False
-    retry_cfg = config.retry if hasattr(config, "retry") else None
-    max_retries = (retry_cfg.max_retries if retry_cfg and retry_cfg.llm_retries else 0)
+    retry_cfg = config.retry
+    max_retries = (retry_cfg.max_retries if retry_cfg.llm_retries else 0)
 
     while iterations < config.max_tool_iterations:
         iterations += 1
@@ -138,8 +138,8 @@ def _chat_ollama(
                 if attempt < max_retries and is_retryable_httpx_error(e):
                     delay = compute_delay(
                         attempt,
-                        retry_cfg.base_delay if retry_cfg else 1.0,
-                        retry_cfg.max_delay if retry_cfg else 30.0,
+                        retry_cfg.base_delay,
+                        retry_cfg.max_delay,
                     )
                     log_retry("ollama", active_model, attempt, max_retries, e, delay)
                     time.sleep(delay)
@@ -227,8 +227,8 @@ def _chat_openai(
     active_model = model_override or config.llm.model
     effective_fallback = fallback_model_override or config.llm.fallback_model
     fell_back = False
-    retry_cfg = config.retry if hasattr(config, "retry") else None
-    max_retries = (retry_cfg.max_retries if retry_cfg and retry_cfg.llm_retries else 0)
+    retry_cfg = config.retry
+    max_retries = (retry_cfg.max_retries if retry_cfg.llm_retries else 0)
 
     # Convert tools to OpenAI format
     openai_tools = _convert_tools_to_openai(tools) if tools else None
@@ -255,8 +255,8 @@ def _chat_openai(
                 if attempt < max_retries and is_retryable_openai_error(e):
                     delay = compute_delay(
                         attempt,
-                        retry_cfg.base_delay if retry_cfg else 1.0,
-                        retry_cfg.max_delay if retry_cfg else 30.0,
+                        retry_cfg.base_delay,
+                        retry_cfg.max_delay,
                     )
                     log_retry("openai", active_model, attempt, max_retries, e, delay)
                     time.sleep(delay)

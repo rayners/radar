@@ -74,33 +74,19 @@ def _build_hook(rule: dict) -> HookRegistration | None:
     )
 
 
+_CALLBACK_BUILDERS: dict[HookPoint, Any] = {}  # populated after definitions below
+
+
 def _build_callback(
     hook_point: HookPoint,
     rule_type: str,
     rule: dict,
 ) -> Any:
     """Build a callback function for a rule type."""
-    if hook_point == HookPoint.PRE_TOOL_CALL:
-        return _build_pre_callback(rule_type, rule)
-    elif hook_point == HookPoint.POST_TOOL_CALL:
-        return _build_post_callback(rule_type, rule)
-    elif hook_point == HookPoint.FILTER_TOOLS:
-        return _build_filter_callback(rule_type, rule)
-    elif hook_point == HookPoint.PRE_AGENT_RUN:
-        return _build_pre_agent_callback(rule_type, rule)
-    elif hook_point == HookPoint.POST_AGENT_RUN:
-        return _build_post_agent_callback(rule_type, rule)
-    elif hook_point == HookPoint.PRE_MEMORY_STORE:
-        return _build_pre_memory_callback(rule_type, rule)
-    elif hook_point == HookPoint.POST_MEMORY_SEARCH:
-        return _build_post_memory_callback(rule_type, rule)
-    elif hook_point == HookPoint.PRE_HEARTBEAT:
-        return _build_pre_heartbeat_callback(rule_type, rule)
-    elif hook_point == HookPoint.POST_HEARTBEAT:
-        return _build_post_heartbeat_callback(rule_type, rule)
-    elif hook_point == HookPoint.HEARTBEAT_COLLECT:
-        return _build_heartbeat_collect_callback(rule_type, rule)
-    return None
+    builder = _CALLBACK_BUILDERS.get(hook_point)
+    if builder is None:
+        return None
+    return builder(rule_type, rule)
 
 
 # --- Pre-tool callbacks ---
@@ -427,3 +413,18 @@ def _build_heartbeat_collect_callback(rule_type: str, rule: dict) -> Any:
     No config-driven rules for this hook point; only plugin hooks contribute.
     """
     return None
+
+
+# Populate the dispatch dict now that all builder functions are defined.
+_CALLBACK_BUILDERS.update({
+    HookPoint.PRE_TOOL_CALL: _build_pre_callback,
+    HookPoint.POST_TOOL_CALL: _build_post_callback,
+    HookPoint.FILTER_TOOLS: _build_filter_callback,
+    HookPoint.PRE_AGENT_RUN: _build_pre_agent_callback,
+    HookPoint.POST_AGENT_RUN: _build_post_agent_callback,
+    HookPoint.PRE_MEMORY_STORE: _build_pre_memory_callback,
+    HookPoint.POST_MEMORY_SEARCH: _build_post_memory_callback,
+    HookPoint.PRE_HEARTBEAT: _build_pre_heartbeat_callback,
+    HookPoint.POST_HEARTBEAT: _build_post_heartbeat_callback,
+    HookPoint.HEARTBEAT_COLLECT: _build_heartbeat_collect_callback,
+})
