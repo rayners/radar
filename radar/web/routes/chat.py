@@ -1,5 +1,6 @@
 """Chat API routes."""
 
+import asyncio
 import json
 from html import escape
 
@@ -21,7 +22,7 @@ async def api_ask(request: Request):
         return HTMLResponse('<div class="text-muted">No message provided</div>')
 
     personality = form.get("personality") or None
-    response = ask(message, personality=personality)
+    response = await asyncio.to_thread(ask, message, personality=personality)
 
     return HTMLResponse(
         f"""
@@ -51,7 +52,9 @@ async def api_chat(request: Request):
         return HTMLResponse("")
 
     personality = form.get("personality") or None
-    response, new_conversation_id = run(message, conversation_id, personality=personality)
+    response, new_conversation_id = await asyncio.to_thread(
+        run, message, conversation_id, personality=personality
+    )
 
     # Get message index for feedback (count messages in conversation)
     messages = get_messages(new_conversation_id)

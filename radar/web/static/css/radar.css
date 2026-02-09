@@ -1100,6 +1100,11 @@ textarea.input {
 /* ===== HTMX LOADING STATES ===== */
 .htmx-request {
   opacity: 0.7;
+}
+
+.htmx-request .btn,
+.htmx-request input,
+.htmx-request textarea {
   pointer-events: none;
 }
 
