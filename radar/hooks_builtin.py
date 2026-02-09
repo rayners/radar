@@ -13,8 +13,43 @@ from radar.hooks import HookPoint, HookRegistration, HookResult, register_hook
 logger = logging.getLogger("radar.hooks")
 
 
+DEFAULT_SAFETY_RULES: list[dict] = [
+    {
+        "name": "block_injection_phrases",
+        "hook_point": "pre_agent_run",
+        "type": "block_message_pattern",
+        "patterns": [
+            "ignore previous instructions",
+            "ignore all previous",
+            "disregard previous instructions",
+            "override system prompt",
+            "new system prompt",
+        ],
+        "message": "Message blocked: detected prompt injection attempt",
+        "priority": 10,
+    },
+    {
+        "name": "anti_memory_poisoning",
+        "hook_point": "pre_memory_store",
+        "type": "block_memory_pattern",
+        "patterns": [
+            "ignore previous instructions",
+            "override system prompt",
+            "you are now",
+            "new instructions:",
+        ],
+        "message": "Memory blocked: contains instruction-like content",
+        "priority": 10,
+    },
+]
+
+
 def load_config_hooks() -> int:
     """Load hooks from config and register them.
+
+    When hooks are enabled but no user rules are configured, baseline safety
+    rules are applied automatically (prompt injection blocking, memory
+    anti-poisoning).
 
     Returns count of hooks registered.
     """
@@ -27,8 +62,12 @@ def load_config_hooks() -> int:
     if not config.hooks.enabled:
         return 0
 
+    rules = config.hooks.rules
+    if not rules:
+        rules = DEFAULT_SAFETY_RULES
+
     count = 0
-    for rule in config.hooks.rules:
+    for rule in rules:
         try:
             registration = _build_hook(rule)
             if registration:

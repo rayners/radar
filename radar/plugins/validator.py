@@ -8,16 +8,17 @@ class CodeValidator:
 
     # Forbidden imports that could be dangerous
     FORBIDDEN_IMPORTS = {
-        "os",
-        "subprocess",
-        "sys",
-        "socket",
-        "shutil",
-        "multiprocessing",
-        "threading",
-        "ctypes",
-        "pickle",
-        "marshal",
+        # System / process
+        "os", "subprocess", "sys", "shutil",
+        "multiprocessing", "threading", "ctypes", "signal",
+        # Serialization
+        "pickle", "marshal",
+        # Network
+        "socket", "urllib", "http", "requests", "httpx", "aiohttp",
+        # Dynamic imports / code execution
+        "importlib", "runpy", "code", "codeop",
+        # Filesystem
+        "tempfile", "pathlib", "glob", "fnmatch",
     }
 
     # Forbidden function calls

@@ -451,3 +451,72 @@ class TestAddEvent:
         mod.add_event("b", {"y": 2})
         mod.add_event("c", {"z": 3})
         assert len(mod._event_queue) == 3
+
+
+# ---------------------------------------------------------------------------
+# _content_boundary()
+# ---------------------------------------------------------------------------
+
+
+class TestContentBoundary:
+    def test_output_format(self):
+        result = mod._content_boundary("hello world", "url_monitor")
+        assert result.startswith("<external_data_")
+        assert 'source="url_monitor"' in result
+        assert "hello world" in result
+        # Closing tag matches opening
+        open_tag = result.split(">")[0].lstrip("<").split()[0]
+        assert f"</{open_tag}>" in result
+
+    def test_nonce_is_16_hex_chars(self):
+        result = mod._content_boundary("x", "test")
+        # Tag format: <external_data_{16 hex chars} source="test">
+        tag_name = result.split(">")[0].lstrip("<").split()[0]
+        nonce = tag_name.replace("external_data_", "")
+        assert len(nonce) == 16
+        assert all(c in "0123456789abcdef" for c in nonce)
+
+    def test_unique_nonces(self):
+        r1 = mod._content_boundary("a", "src")
+        r2 = mod._content_boundary("a", "src")
+        tag1 = r1.split(">")[0].lstrip("<").split()[0]
+        tag2 = r2.split(">")[0].lstrip("<").split()[0]
+        assert tag1 != tag2
+
+    def test_multiline_content(self):
+        content = "line1\nline2\nline3"
+        result = mod._content_boundary(content, "rss_feed")
+        assert "line1\nline2\nline3" in result
+
+
+# ---------------------------------------------------------------------------
+# _content_boundary integration with _build_heartbeat_message
+# ---------------------------------------------------------------------------
+
+
+class TestHeartbeatMessageWithBoundary:
+    @pytest.fixture(autouse=True)
+    def _fix_time(self):
+        MockDatetime._fixed_now = datetime(2025, 6, 1, 10, 30, 0)
+        with patch.object(mod, "datetime", MockDatetime):
+            yield
+
+    def test_url_changed_event_contains_boundary(self):
+        """URL monitor events should have nonce-tagged boundaries in action."""
+        action = (
+            f"The monitored URL 'test' has changed. "
+            f"Changes (5 lines):\n"
+            f"{mod._content_boundary('+ new line', 'url_monitor')}\n\n"
+            f"Summarize what changed and notify the user."
+        )
+        events = [{
+            "type": "url_changed",
+            "data": {
+                "description": "URL changed: test",
+                "path": "",
+                "action": action,
+            },
+        }]
+        msg = mod._build_heartbeat_message(events)
+        assert "<external_data_" in msg
+        assert 'source="url_monitor"' in msg

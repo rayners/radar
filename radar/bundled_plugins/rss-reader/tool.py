@@ -558,6 +558,8 @@ def collect_feed_events() -> list[dict]:
         conn.commit()
 
         if new_entries:
+            from radar.scheduler import _content_boundary
+
             entry_text = _format_entries(new_entries, max_entries)
             events.append({
                 "type": "rss_new_entries",
@@ -566,7 +568,7 @@ def collect_feed_events() -> list[dict]:
                     "action": (
                         f"The RSS feed '{name}' ({url}) has "
                         f"{len(new_entries)} new entry(ies):\n\n"
-                        f"{entry_text}\n\n"
+                        f"{_content_boundary(entry_text, 'rss_feed')}\n\n"
                         f"Summarize the new entries and notify the user."
                     ),
                 },

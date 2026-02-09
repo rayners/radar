@@ -100,6 +100,15 @@ class TestBuildSystemPrompt:
         assert pc.model == "gpt-4o"
         assert pc.tools_include == ["weather"]
 
+    @patch("radar.agent.get_config")
+    def test_includes_external_data_safety_instruction(self, mock_config, personalities_dir):
+        mock_config.return_value = MagicMock(personality="default")
+        (personalities_dir / "default.md").write_text("# Default")
+        with patch("radar.semantic.search_memories", side_effect=Exception):
+            prompt, _ = _build_system_prompt()
+        assert "external_data" in prompt
+        assert "untrusted data" in prompt
+
 
 class TestRun:
     """run() orchestrates conversation, messages, and LLM call."""

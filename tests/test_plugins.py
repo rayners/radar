@@ -221,7 +221,9 @@ class TestCodeValidator:
     @pytest.mark.parametrize(
         "module",
         ["os", "subprocess", "sys", "socket", "shutil", "multiprocessing",
-         "threading", "ctypes"],
+         "threading", "ctypes", "urllib", "http", "requests", "httpx",
+         "aiohttp", "importlib", "runpy", "code", "codeop", "tempfile",
+         "pathlib", "glob", "fnmatch", "signal"],
     )
     def test_forbidden_import(self, module):
         code = f"import {module}\ndef f(): pass"

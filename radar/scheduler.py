@@ -1,11 +1,27 @@
 """Scheduler for heartbeat and event processing."""
 
+import secrets
 from datetime import datetime
 from typing import Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from radar.config import get_config, get_data_paths
+
+
+def _content_boundary(content: str, source: str) -> str:
+    """Wrap untrusted external content in a nonce-tagged boundary.
+
+    The tag name includes a random nonce so an attacker cannot craft content
+    that closes the boundary — they would need to guess the nonce.
+    """
+    nonce = secrets.token_hex(8)
+    tag = f"external_data_{nonce}"
+    return (
+        f"<{tag} source=\"{source}\">\n"
+        f"{content}\n"
+        f"</{tag}>"
+    )
 
 # Global state
 _scheduler: BackgroundScheduler | None = None
@@ -148,7 +164,7 @@ def _heartbeat_tick() -> None:
                         "action": (
                             f"The monitored URL '{monitor['name']}' has changed. "
                             f"Changes ({change['change_size']} lines):\n"
-                            f"{change['diff_summary']}\n\n"
+                            f"{_content_boundary(change['diff_summary'], 'url_monitor')}\n\n"
                             f"Summarize what changed and notify the user."
                         ),
                     })
@@ -169,7 +185,7 @@ def _heartbeat_tick() -> None:
                         f"Generate a {period_type} conversation summary from the following data. "
                         f"Summarize the key topics, decisions, and outcomes. "
                         f"Then call store_conversation_summary to save it.\n\n"
-                        f"{summary_data}"
+                        f"{_content_boundary(summary_data, 'conversation_summary')}"
                     ),
                 })
     except Exception as e:

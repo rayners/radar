@@ -8,16 +8,16 @@ This consolidates ideas from `PROJECT.md` (Phases 3-4) and the former `phase3-id
 
 ## 1. Testing & Quality (Critical Gap)
 
-Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (95 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (36 tests), `test_security.py` (87 tests), `test_config.py` (43 tests), `test_memory.py` (50 tests), `test_llm.py` (42 tests), `test_agent.py` (32 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (25 tests), `test_plugins.py` (193 tests), `test_scheduler.py` (42 tests), `test_hooks.py` (104 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests), `test_summaries.py` (41 tests), `test_documents.py` (44 tests), `test_retry.py` (21 tests), `test_hot_reload.py` (21 tests), `test_rss_reader.py` (45 tests), `test_export.py` (23 tests), `test_conversation_search.py` (15 tests) — **1229 total**.
+Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests), `test_web_routes.py` (95 tests), `test_tool_discovery.py` (16 tests), `test_tool_framework.py` (31 tests), `test_personality_frontmatter.py` (36 tests), `test_security.py` (87 tests), `test_config.py` (43 tests), `test_memory.py` (50 tests), `test_llm.py` (42 tests), `test_agent.py` (33 tests), `test_calendar.py` (45 tests), `test_cli_daemon.py` (25 tests), `test_plugins.py` (207 tests), `test_scheduler.py` (47 tests), `test_hooks.py` (106 tests), `test_integration.py` (7 tests), `test_skills.py` (33 tests), `test_personality_directory.py` (23 tests), `test_url_monitors.py` (50 tests), `test_summaries.py` (41 tests), `test_documents.py` (44 tests), `test_retry.py` (21 tests), `test_hot_reload.py` (21 tests), `test_rss_reader.py` (45 tests), `test_export.py` (23 tests), `test_conversation_search.py` (15 tests) — **1251 total**.
 
-- [x] **Core agent tests** - personality loading, system prompt building, Jinja2 template rendering, plugin prompt variables, run/ask orchestration (32 tests)
+- [x] **Core agent tests** - personality loading, system prompt building, Jinja2 template rendering, plugin prompt variables, run/ask orchestration (33 tests)
 - [x] **LLM integration tests** - mock Ollama/OpenAI, tool call parsing, rate limit fallback, retry with backoff, format conversion (42 tests)
 - [x] **Tool framework tests** - registration, execution, parameter validation (31 tests)
 - [x] **Security tests** - path blocklist, command validation, write-only blocks, edge cases (87 tests)
 - [x] **Memory tests** - JSONL operations, display formatting, conversation listing, tool call counting, activity feed, enriched history (45 tests)
 - [x] **Config tests** - YAML loading, env var overrides, deprecated field migration, DataPaths, RetryConfig (43 tests)
-- [x] **Scheduler tests** - heartbeat ticks, quiet hours, event queuing (42 tests)
-- [x] **Plugin tests** - code validation, sandboxed execution, version rollback, manifest capabilities, widgets, personality bundling, helper scripts, multi-tool registration, local trust, plugin install CLI, prompt variables (169 tests across all 5 modules)
+- [x] **Scheduler tests** - heartbeat ticks, quiet hours, event queuing, content boundaries (47 tests)
+- [x] **Plugin tests** - code validation, sandboxed execution, version rollback, manifest capabilities, widgets, personality bundling, helper scripts, multi-tool registration, local trust, plugin install CLI, prompt variables (207 tests across all 5 modules)
 - [x] **Web route tests** - FastAPI endpoints, HTMX responses, config save, activity API, history API (86 tests across all 11 route modules)
 - [x] **Integration test harness** - full conversation flow with mock LLM (7 tests)
 
@@ -130,6 +130,9 @@ Test files: `test_feedback.py` (16 tests), `test_scheduled_tasks.py` (49 tests),
 - [ ] Proper path parsing for security checks
 - [ ] Tool "dry run" mode with simulated results
 - [x] Per-profile tool permissions (allowlist/blocklist) — personality front matter `tools.include`/`tools.exclude`
+- [x] External content injection defense — nonce-tagged `<external_data_...>` boundaries around URL monitor diffs, RSS entries, and summaries; system prompt instruction to treat as untrusted data
+- [x] Plugin validator expanded — blocks network (`urllib`, `http`, `requests`, `httpx`, `aiohttp`), dynamic imports (`importlib`, `runpy`), filesystem (`tempfile`, `pathlib`, `glob`), and more
+- [x] Default safety hooks — baseline `pre_agent_run` injection blocking + `pre_memory_store` anti-poisoning rules applied when no user rules configured
 
 ### Integrations Architecture
 - [ ] Common interface: `poll()` for pull-based, `handle_event()` for push-based
@@ -292,7 +295,7 @@ Reducing friction for adding new tools and plugins.
 - [ ] **Plugin loading at startup** — Load all enabled plugins when daemon starts, not on first tool call. Currently a plugin created via chat isn't available until the tool registry is next queried.
 - [x] **Plugin scaffolding CLI** — `radar plugin create <name>` generates manifest.yaml, tool.py, tests.yaml, and README.md (12 tests)
 - [ ] **Plugin persistent state** — Simple key-value store per plugin for cross-invocation state (e.g., a counter, last-run timestamp, cached data).
-- [x] **Plugin hook system** — Nine-point hook system (`pre_tool_call`, `post_tool_call`, `filter_tools`, `pre_agent_run`, `post_agent_run`, `pre_memory_store`, `post_memory_search`, `pre_heartbeat`, `post_heartbeat`) with config-driven rules in `radar.yaml` and plugin `hook` capability. Supports blocking, observing, filtering, and transforming at tool, agent, memory, and heartbeat boundaries. (96 tests in `test_hooks.py`)
+- [x] **Plugin hook system** — Nine-point hook system (`pre_tool_call`, `post_tool_call`, `filter_tools`, `pre_agent_run`, `post_agent_run`, `pre_memory_store`, `post_memory_search`, `pre_heartbeat`, `post_heartbeat`) with config-driven rules in `radar.yaml` and plugin `hook` capability. Supports blocking, observing, filtering, and transforming at tool, agent, memory, and heartbeat boundaries. Default safety rules (injection blocking, memory anti-poisoning) applied when no user rules configured. (106 tests in `test_hooks.py`)
 - [ ] **Plugin event hooks** — Plugins can register for events like `on_conversation_start`, `on_tool_error` to participate in the system lifecycle without being explicitly called by the LLM. (Note: `on_heartbeat` is now covered by the `pre_heartbeat`/`post_heartbeat` hook points.)
 - [ ] **Prompt variable caching** — optional TTL-based caching for expensive prompt variable functions (e.g., API calls), with cache-bust on demand
 

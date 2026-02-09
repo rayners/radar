@@ -605,6 +605,51 @@ class TestConfigDrivenHooks:
         count = load_config_hooks()
         assert count == 0
 
+    def test_load_default_safety_rules_when_no_user_rules(self, monkeypatch):
+        """When hooks enabled but no rules configured, default safety rules are applied."""
+        from radar.config.schema import Config, HooksConfig
+
+        mock_config = Config()
+        mock_config.hooks = HooksConfig(enabled=True, rules=[])
+
+        monkeypatch.setattr("radar.config.get_config", lambda: mock_config)
+
+        from radar.hooks_builtin import DEFAULT_SAFETY_RULES, load_config_hooks
+        count = load_config_hooks()
+        assert count == len(DEFAULT_SAFETY_RULES)
+        assert count >= 2  # At least injection blocking + memory anti-poisoning
+
+        hooks = list_hooks()
+        names = [h["name"] for h in hooks]
+        assert "block_injection_phrases" in names
+        assert "anti_memory_poisoning" in names
+
+    def test_user_rules_override_defaults(self, monkeypatch):
+        """When user configures rules, defaults are NOT applied."""
+        from radar.config.schema import Config, HooksConfig
+
+        mock_config = Config()
+        mock_config.hooks = HooksConfig(
+            enabled=True,
+            rules=[
+                {
+                    "name": "my_rule",
+                    "hook_point": "pre_tool_call",
+                    "type": "block_tool",
+                    "tools": ["exec_command"],
+                },
+            ],
+        )
+
+        monkeypatch.setattr("radar.config.get_config", lambda: mock_config)
+
+        from radar.hooks_builtin import load_config_hooks
+        count = load_config_hooks()
+        assert count == 1
+
+        hooks = list_hooks()
+        assert hooks[0]["name"] == "my_rule"
+
     def test_custom_priority(self):
         from radar.hooks_builtin import _build_hook
 
