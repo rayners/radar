@@ -1,8 +1,10 @@
 # Multi-stage build for Radar
 # Build args:
 #   LOCAL_EMBEDDINGS=true  - Include sentence-transformers (~500MB larger)
+#   RSS_READER=true        - Include feedparser for RSS/Atom feed reader
 
 ARG LOCAL_EMBEDDINGS=false
+ARG RSS_READER=false
 
 # =============================================================================
 # Stage 1: Builder - Build the wheel from source
@@ -27,6 +29,7 @@ RUN python -m build --wheel --outdir /build/dist
 FROM python:3.11-slim AS runtime
 
 ARG LOCAL_EMBEDDINGS
+ARG RSS_READER
 
 # Install runtime dependencies
 # - curl: healthcheck
@@ -67,6 +70,11 @@ RUN pip install --no-cache-dir --user khal vdirsyncer
 # Conditionally install local embeddings support
 RUN if [ "$LOCAL_EMBEDDINGS" = "true" ]; then \
         pip install --no-cache-dir --user sentence-transformers>=2.2; \
+    fi
+
+# Conditionally install RSS/Atom feed reader support
+RUN if [ "$RSS_READER" = "true" ]; then \
+        pip install --no-cache-dir --user "feedparser>=6.0"; \
     fi
 
 # Ensure user's pip bin is in PATH
