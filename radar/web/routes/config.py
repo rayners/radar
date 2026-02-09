@@ -14,6 +14,27 @@ _NUMERIC_FIELDS = {
     "max_tool_iterations",
 }
 
+_SENSITIVE_KEYS = {"auth_token", "api_key", "api_key_env", "token", "secret"}
+
+
+def _redact_sensitive_yaml(yaml_text: str) -> str:
+    """Redact sensitive values in YAML text for display."""
+    import re
+
+    lines = yaml_text.split("\n")
+    redacted = []
+    for line in lines:
+        # Match YAML key: value lines where the key is sensitive
+        match = re.match(r"^(\s*)([\w_]+)\s*:\s*(.+)$", line)
+        if match:
+            indent, key, value = match.groups()
+            if key.lower() in _SENSITIVE_KEYS and value.strip() and value.strip() not in ('""', "''", '~', 'null', ''):
+                redacted.append(f"{indent}{key}: ***")
+                continue
+        redacted.append(line)
+    return "\n".join(redacted)
+
+
 _VALID_LLM_PROVIDERS = {"ollama", "openai"}
 _VALID_EMBEDDING_PROVIDERS = {"ollama", "openai", "local", "none"}
 
@@ -114,9 +135,9 @@ async def config(request: Request):
     }
     context["config_path"] = str(config_path) if config_path else "Not found"
 
-    # Load raw YAML for display
+    # Load raw YAML for display, redacting sensitive values
     if config_path and config_path.exists():
-        context["config_yaml"] = config_path.read_text()
+        context["config_yaml"] = _redact_sensitive_yaml(config_path.read_text())
     else:
         context["config_yaml"] = "# No configuration file found"
 

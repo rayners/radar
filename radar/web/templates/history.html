@@ -6,7 +6,7 @@
 <div class="card">
     <div class="card__header">
         <span class="card__title">Conversation History</span>
-        <div class="flex gap-md">
+        <div class="flex gap-md history-controls">
             <input type="text" class="input" name="search" placeholder="Search conversations..."
                    style="width: 200px; padding: 4px 8px; font-size: 0.8rem;"
                    hx-get="/api/history"
@@ -14,7 +14,7 @@
                    hx-swap="innerHTML"
                    hx-trigger="input changed delay:300ms, search"
                    hx-include="[name='filter']">
-            <select class="input" style="width: auto; padding: 4px 8px; font-size: 0.8rem;"
+            <select class="input input--select"
                     hx-get="/api/history"
                     hx-target="#history-table tbody"
                     hx-swap="innerHTML"
@@ -27,7 +27,8 @@
         </div>
     </div>
     <div class="card__body" style="padding: 0;">
-        <table class="table" id="history-table">
+        <!-- Desktop table view -->
+        <table class="table history-table" id="history-table">
             <thead>
                 <tr>
                     <th style="width: 180px;">Time</th>
@@ -75,6 +76,39 @@
                 {% endfor %}
             </tbody>
         </table>
+
+        <!-- Mobile card view -->
+        <div class="history-cards">
+            {% for conv in conversations | default([]) %}
+            <div class="history-card" id="history-card-{{ conv.id }}">
+                <div class="history-card__summary">{{ conv.summary | truncate(100) }}</div>
+                <div class="history-card__meta">
+                    <span class="history-card__time">{{ conv.timestamp }}</span>
+                    <span class="activity-log__type activity-log__type--{{ conv.type }}">{{ conv.type }}</span>
+                    {% if conv.tool_count %}
+                    <span class="text-muted">{{ conv.tool_count }} tools</span>
+                    {% endif %}
+                </div>
+                <div class="history-card__actions">
+                    <a href="/chat?continue={{ conv.id }}" class="btn btn--ghost history-card__btn">
+                        Continue
+                    </a>
+                    {% if conv.type != 'heartbeat' %}
+                    <button class="btn btn--ghost history-card__btn history-card__btn--delete"
+                            hx-delete="/api/conversations/{{ conv.id }}"
+                            hx-target="#history-card-{{ conv.id }}" hx-swap="outerHTML"
+                            hx-confirm="Delete this conversation?">
+                        Delete
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <div class="text-muted" style="text-align: center; padding: var(--space-xl);">
+                No conversations yet
+            </div>
+            {% endfor %}
+        </div>
     </div>
     {% if has_more %}
     <div class="card__footer" style="text-align: center;">

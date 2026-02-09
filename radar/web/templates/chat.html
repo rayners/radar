@@ -82,9 +82,12 @@
             {% endif %}
         </div>
         {% else %}
-        <div class="text-muted" style="text-align: center; padding: var(--space-2xl);">
-            <p style="font-size: 1.1rem;">Ready to assist.</p>
-            <p style="margin-top: var(--space-sm);">Type a message below to start a conversation.</p>
+        <div class="chat__empty-state">
+            <div class="chat__empty-icon">
+                <div class="radar-icon" style="width: 48px; height: 48px;"></div>
+            </div>
+            <p class="chat__empty-title">What can I help with?</p>
+            <p class="chat__empty-hint text-muted">Ask a question, run a tool, or just chat.</p>
         </div>
         {% endfor %}
     </div>
@@ -97,13 +100,13 @@
               hx-indicator="#chat-indicator">
             <input type="hidden" name="conversation_id" id="conversation-id" value="{{ conversation_id or '' }}">
             <input type="hidden" name="personality" id="personality-hidden" value="{{ active_personality }}">
-            <div class="flex gap-md">
+            <div class="chat__input-row">
                 <textarea name="message"
                           id="chat-input"
                           class="input"
-                          placeholder="Type your message... (Shift+Enter for newline)"
+                          placeholder="Type a message..."
                           rows="2"></textarea>
-                <button type="submit" class="btn btn--primary" style="align-self: flex-end;">
+                <button type="submit" class="btn btn--primary">
                     <span class="htmx-indicator" id="chat-indicator">...</span>
                     <span>Send</span>
                 </button>
@@ -131,9 +134,9 @@
     justify-content: center;
     width: 28px;
     height: 28px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--surface);
+    border: 1px solid var(--border-default);
+    border-radius: 2px;
+    background: var(--bg-secondary);
     color: var(--text-muted);
     cursor: pointer;
     transition: all 0.15s;
@@ -141,17 +144,17 @@
     font-weight: 600;
 }
 .feedback-btn:hover {
-    border-color: var(--phosphor);
+    border-color: var(--phosphor-bright);
 }
 .feedback-btn--positive:hover {
     background: rgba(0, 255, 136, 0.1);
-    color: var(--phosphor);
-    border-color: var(--phosphor);
+    color: var(--phosphor-bright);
+    border-color: var(--phosphor-bright);
 }
 .feedback-btn--negative:hover {
     background: rgba(255, 100, 100, 0.1);
-    color: var(--error);
-    border-color: var(--error);
+    color: var(--status-error);
+    border-color: var(--status-error);
 }
 .feedback-icon {
     font-family: var(--font-mono);
@@ -162,8 +165,8 @@
     gap: var(--space-xs);
     font-size: 0.75rem;
     padding: 4px 8px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-elevated);
+    border-radius: 2px;
+    background: var(--bg-elevated);
 }
 /* Markdown rendering styles */
 .message__content p { margin: 0; }
@@ -171,14 +174,14 @@
 .message__content ul, .message__content ol { margin: 0.2em 0; padding-left: 1.2em; }
 .message__content li { margin: 0; }
 .message__content code {
-    background: var(--surface-elevated);
+    background: var(--bg-elevated);
     padding: 0.05em 0.2em;
     border-radius: 2px;
     font-family: var(--font-mono);
     font-size: 0.85em;
 }
 .message__content pre {
-    background: var(--surface-elevated);
+    background: var(--bg-elevated);
     padding: var(--space-xs);
     border-radius: 2px;
     overflow-x: auto;
@@ -189,7 +192,7 @@
     padding: 0;
 }
 .message__content blockquote {
-    border-left: 2px solid var(--phosphor);
+    border-left: 2px solid var(--phosphor-bright);
     margin: 0.25em 0;
     padding-left: var(--space-xs);
     color: var(--text-muted);

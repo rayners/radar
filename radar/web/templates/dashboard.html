@@ -4,6 +4,32 @@
 
 {% block content %}
 <div class="dashboard-grid">
+    <!-- Quick Ask (hero position) -->
+    <div class="card dashboard-grid__full">
+        <div class="card__header">
+            <span class="card__title">Quick Ask</span>
+        </div>
+        <div class="card__body">
+            <form hx-post="/api/ask"
+                  hx-target="#quick-response"
+                  hx-swap="innerHTML"
+                  hx-indicator="#ask-indicator">
+                <div class="flex gap-md">
+                    <input type="text"
+                           name="message"
+                           class="input"
+                           placeholder="Ask Radar something..."
+                           autocomplete="off">
+                    <button type="submit" class="btn btn--primary">
+                        <span class="htmx-indicator" id="ask-indicator">...</span>
+                        <span>Ask</span>
+                    </button>
+                </div>
+            </form>
+            <div id="quick-response" class="mt-md"></div>
+        </div>
+    </div>
+
     <!-- Heartbeat Status -->
     <div class="card">
         <div class="card__header">
@@ -23,41 +49,31 @@
         </div>
     </div>
 
-    <!-- Quick Stats -->
-    <div class="card">
+    <!-- Consolidated Stats -->
+    <div class="card dashboard-grid__wide">
         <div class="card__header">
             <span class="card__title">Today</span>
         </div>
         <div class="card__body flex gap-md">
             <div class="stat" style="flex: 1;">
-                <div class="stat__value">{{ conversations_today | default('12') }}</div>
+                <div class="stat__value">{{ conversations_today | default('0') }}</div>
                 <div class="stat__label">Conversations</div>
             </div>
             <div class="stat" style="flex: 1;">
-                <div class="stat__value">{{ tool_calls_today | default('47') }}</div>
+                <div class="stat__value stat__value--amber">{{ tool_calls_today | default('0') }}</div>
                 <div class="stat__label">Tool Calls</div>
             </div>
+            {% if ntfy_configured %}
+            <div class="stat" style="flex: 1;">
+                <div class="stat__value stat__value--dim">{{ notifications_sent | default('0') }}</div>
+                <div class="stat__label">Notifications</div>
+            </div>
+            {% endif %}
         </div>
     </div>
 
-    <!-- Model Status -->
-    <div class="card">
-        <div class="card__header">
-            <span class="card__title">Model</span>
-        </div>
-        <div class="card__body">
-            <div class="stat">
-                <div class="stat__value" style="font-size: 1.2rem;">{{ model | default('llama3.2') }}</div>
-                <div class="stat__label">Active Model</div>
-            </div>
-            <div class="mt-md text-muted" style="font-size: 0.8rem; text-align: center;">
-                {{ llm_provider | default('ollama') }} @ {{ llm_url | default('localhost:11434') }}
-            </div>
-        </div>
-    </div>
-
-    <!-- Recent Activity -->
-    <div class="card dashboard-grid__wide">
+    <!-- Recent Activity (full width) -->
+    <div class="card dashboard-grid__full">
         <div class="card__header">
             <span class="card__title">Recent Activity</span>
             <button class="btn btn--ghost" style="padding: 4px 8px; font-size: 0.7rem;"
@@ -105,25 +121,20 @@
     </div>
     {% endif %}
 
-    <!-- Notifications -->
+    <!-- Notifications (only if not configured, as a setup prompt) -->
+    {% if not ntfy_configured %}
     <div class="card">
         <div class="card__header">
             <span class="card__title">Notifications</span>
         </div>
         <div class="card__body">
-            {% if ntfy_configured %}
-            <div class="stat">
-                <div class="stat__value">{{ notifications_sent | default('3') }}</div>
-                <div class="stat__label">Sent Today</div>
-            </div>
-            {% else %}
             <div class="text-muted" style="font-size: 0.85rem; text-align: center; padding: var(--space-md);">
                 <p>ntfy topic not configured</p>
-                <a href="/config" class="text-phosphor">Configure →</a>
+                <a href="/config" class="text-phosphor">Configure &rarr;</a>
             </div>
-            {% endif %}
         </div>
     </div>
+    {% endif %}
 
     <!-- Plugin Widgets -->
     {% for widget in widgets | default([]) %}
@@ -145,31 +156,5 @@
         </div>
     </div>
     {% endfor %}
-
-    <!-- Quick Chat -->
-    <div class="card dashboard-grid__full">
-        <div class="card__header">
-            <span class="card__title">Quick Ask</span>
-        </div>
-        <div class="card__body">
-            <form hx-post="/api/ask"
-                  hx-target="#quick-response"
-                  hx-swap="innerHTML"
-                  hx-indicator="#ask-indicator">
-                <div class="flex gap-md">
-                    <input type="text"
-                           name="message"
-                           class="input"
-                           placeholder="Ask Radar something..."
-                           autocomplete="off">
-                    <button type="submit" class="btn btn--primary">
-                        <span class="htmx-indicator" id="ask-indicator">...</span>
-                        <span>Ask</span>
-                    </button>
-                </div>
-            </form>
-            <div id="quick-response" class="mt-md"></div>
-        </div>
-    </div>
 </div>
 {% endblock %}

@@ -515,6 +515,43 @@ class TestMemoryRoutes:
 # ===== Config Routes =====
 
 
+class TestConfigRedaction:
+    """Tests for _redact_sensitive_yaml."""
+
+    def test_redacts_auth_token(self):
+        from radar.web.routes.config import _redact_sensitive_yaml
+
+        yaml_text = "web:\n  host: 0.0.0.0\n  auth_token: my-secret-value\n  port: 8420\n"
+        result = _redact_sensitive_yaml(yaml_text)
+        assert "my-secret-value" not in result
+        assert "auth_token: ***" in result
+        assert "host: 0.0.0.0" in result
+        assert "port: 8420" in result
+
+    def test_redacts_api_key(self):
+        from radar.web.routes.config import _redact_sensitive_yaml
+
+        yaml_text = "llm:\n  api_key: sk-abc123\n  model: gpt-4o\n"
+        result = _redact_sensitive_yaml(yaml_text)
+        assert "sk-abc123" not in result
+        assert "api_key: ***" in result
+        assert "model: gpt-4o" in result
+
+    def test_preserves_empty_values(self):
+        from radar.web.routes.config import _redact_sensitive_yaml
+
+        yaml_text = 'web:\n  auth_token: ""\n  port: 8420\n'
+        result = _redact_sensitive_yaml(yaml_text)
+        assert 'auth_token: ""' in result
+
+    def test_preserves_non_sensitive_fields(self):
+        from radar.web.routes.config import _redact_sensitive_yaml
+
+        yaml_text = "llm:\n  provider: ollama\n  model: qwen3:latest\n  base_url: http://localhost:11434\n"
+        result = _redact_sensitive_yaml(yaml_text)
+        assert result == yaml_text
+
+
 class TestConfigRoutes:
     """Tests for config.py routes."""
 
@@ -522,6 +559,16 @@ class TestConfigRoutes:
     def test_config_page(self, mock_path, client):
         resp = client.get("/config")
         assert resp.status_code == 200
+
+    @patch("radar.config.get_config_path")
+    def test_config_page_redacts_sensitive_values(self, mock_path, tmp_path, client):
+        config_file = tmp_path / "radar.yaml"
+        config_file.write_text("web:\n  auth_token: super-secret\n  port: 8420\n")
+        mock_path.return_value = config_file
+        resp = client.get("/config")
+        assert resp.status_code == 200
+        assert "super-secret" not in resp.text
+        assert "***" in resp.text
 
     def test_api_config_test_connection_error(self, client):
         resp = client.get("/api/config/test")
