@@ -101,6 +101,7 @@ class HeartbeatConfig:
     interval_minutes: int = 15
     quiet_hours_start: str = "23:00"
     quiet_hours_end: str = "07:00"
+    personality: str = ""  # Optional personality override for heartbeats
 
 
 @dataclass

@@ -140,15 +140,16 @@ def _heartbeat_tick() -> None:
     except Exception:
         pass  # Don't let hook failures prevent heartbeats
 
-    # Process due scheduled tasks
+    # Process due scheduled tasks (defer mark_task_executed until after agent.run succeeds)
+    due_task_ids = []
     try:
-        from radar.scheduled_tasks import get_due_tasks, mark_task_executed
+        from radar.scheduled_tasks import get_due_tasks
         for task in get_due_tasks():
             add_event("scheduled_task", {
                 "description": f"Scheduled task: {task['name']}",
                 "action": task["message"],
             })
-            mark_task_executed(task["id"])
+            due_task_ids.append(task["id"])
     except Exception as e:
         _log_heartbeat("Scheduled task processing error", error=str(e))
 
@@ -242,17 +243,28 @@ def _heartbeat_tick() -> None:
     message = _build_heartbeat_message(events)
 
     # Run agent with heartbeat message
+    cfg = get_config()
+    hb_personality = cfg.heartbeat.personality or None
     success = True
     error_msg = None
     try:
         from radar.agent import run
         _log_heartbeat("Heartbeat started", event_count=len(events))
-        run(message, conversation_id=_get_heartbeat_conversation_id())
+        run(message, conversation_id=_get_heartbeat_conversation_id(), personality=hb_personality)
         _log_heartbeat("Heartbeat completed", event_count=len(events))
+        # Mark scheduled tasks as executed only after successful heartbeat
+        if due_task_ids:
+            from radar.scheduled_tasks import mark_task_executed
+            for task_id in due_task_ids:
+                try:
+                    mark_task_executed(task_id)
+                except Exception as e:
+                    _log_heartbeat(f"Failed to mark task {task_id} executed", error=str(e))
     except Exception as e:
         success = False
         error_msg = str(e)
         # Log error but don't crash scheduler
+        # Scheduled tasks NOT marked — they will retry on next heartbeat
         import sys
         print(f"Heartbeat error: {e}", file=sys.stderr)
         _log_heartbeat("Heartbeat failed", error=str(e))

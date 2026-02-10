@@ -178,10 +178,14 @@ class TestHeartbeatTick:
     @pytest.fixture
     def _mock_tick_deps(self):
         """Patch all external dependencies of _heartbeat_tick."""
+        cfg = _make_config()
+        cfg.heartbeat.personality = ""
+        cfg.documents.enabled = True
         with (
             patch.object(mod, "_is_quiet_hours", return_value=False) as m_quiet,
             patch.object(mod, "_log_heartbeat") as m_log,
             patch.object(mod, "_check_config_reload") as m_reload,
+            patch.object(mod, "get_config", return_value=cfg) as m_cfg,
             patch.object(mod, "_get_heartbeat_conversation_id", return_value="conv-1"),
             patch("radar.scheduled_tasks.get_due_tasks", return_value=[]) as m_due,
             patch("radar.scheduled_tasks.mark_task_executed") as m_mark,
@@ -189,8 +193,10 @@ class TestHeartbeatTick:
             patch("radar.summaries.check_summary_due", return_value=None) as m_summary,
             patch("radar.documents.ensure_summaries_collection") as m_ensure_summ,
             patch("radar.documents.list_collections", return_value=[]) as m_list_coll,
+            patch("radar.conversation_search.index_conversations", return_value={}) as m_conv_idx,
             patch("radar.hooks.run_pre_heartbeat_hooks", return_value=MagicMock(blocked=False)) as m_pre_hook,
             patch("radar.hooks.run_post_heartbeat_hooks") as m_post_hook,
+            patch("radar.hooks.run_heartbeat_collect_hooks", return_value=[]) as m_collect_hook,
             patch("radar.tools.calendar._get_reminders", return_value="") as m_rem,
             patch("radar.agent.run") as m_run,
         ):
@@ -198,6 +204,7 @@ class TestHeartbeatTick:
                 "quiet": m_quiet,
                 "log": m_log,
                 "reload": m_reload,
+                "config": cfg,
                 "due": m_due,
                 "mark": m_mark,
                 "monitors": m_monitors,
@@ -260,18 +267,36 @@ class TestHeartbeatTick:
         mod._heartbeat_tick()
         assert len(mod._event_queue) == 0
 
-    def test_tick_calls_agent_run(self, _mock_tick_deps):
+    def test_tick_calls_agent_run_with_personality(self, _mock_tick_deps):
         mocks = _mock_tick_deps
+        mocks["config"].heartbeat.personality = "heartbeat"
         mod._heartbeat_tick()
         mocks["run"].assert_called_once()
         _, kwargs = mocks["run"].call_args
         assert kwargs["conversation_id"] == "conv-1"
+        assert kwargs["personality"] == "heartbeat"
+
+    def test_tick_passes_none_personality_when_empty(self, _mock_tick_deps):
+        mocks = _mock_tick_deps
+        mocks["config"].heartbeat.personality = ""
+        mod._heartbeat_tick()
+        _, kwargs = mocks["run"].call_args
+        assert kwargs["personality"] is None
 
     def test_tick_handles_agent_exception(self, _mock_tick_deps):
         mocks = _mock_tick_deps
         mocks["run"].side_effect = RuntimeError("LLM down")
         mod._heartbeat_tick()  # Should not raise
         assert mod._last_heartbeat is not None
+
+    def test_tick_does_not_mark_tasks_on_agent_failure(self, _mock_tick_deps):
+        """When agent.run fails, scheduled tasks should NOT be marked as executed."""
+        mocks = _mock_tick_deps
+        task = {"id": 42, "name": "weather", "message": "Check weather"}
+        mocks["due"].return_value = [task]
+        mocks["run"].side_effect = RuntimeError("LLM down")
+        mod._heartbeat_tick()
+        mocks["mark"].assert_not_called()
 
     def test_tick_sets_last_heartbeat(self, _mock_tick_deps):
         assert mod._last_heartbeat is None
